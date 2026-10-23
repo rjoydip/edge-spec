@@ -28,6 +28,8 @@ features:
 | ------------------------------- | -------------------------------------------------------------------------------- |
 | [Architecture](/architecture)   | How the pieces fit, what happens during a run, where the security boundaries are |
 | [API](/api)                     | Every route, header, payload and SSE event                                       |
+| [CLI](/cli)                     | Scan, generate, run and open PRs from a terminal                                 |
+| [MCP server](/mcp)              | Expose EdgeSpec tools to Claude Desktop, Cursor and other agents                 |
 | [Configuration](/configuration) | Browser settings, providers, pipeline knobs, sandbox runner, deployment secrets  |
 | [UI](/ui)                       | Header, tabs, pipeline states, settings, theme and layout rules                  |
 
@@ -60,6 +62,14 @@ it to start there), pick a provider in **Settings**, then press the run icon
 in the **Pipeline** tab. For a private repository or to open a pull request,
 add a GitHub token in Settings.
 
+CLI and MCP clients use the same Worker API:
+
+```bash
+bun --silent run cli -- scan owner/repo --limit 20
+bun --silent run cli -- --help
+bun run mcp -- --help
+```
+
 Checks:
 
 ```bash
@@ -71,12 +81,16 @@ bun run deploy -- --dry-run
 ## Repository map
 
 ```text
-packages/core/src/  pure pipeline logic (scanner, AI, GitHub, validation)
-apps/worker/src/    Hono routes, bindings, durable Workflow
-apps/web/src/       React dashboard
-apps/docs/          this documentation site
-packages/core/test/ all unit tests
+packages/core/src/   pure pipeline logic (scanner, AI, GitHub, validation)
+packages/client/src/ Worker API client shared by the CLI and MCP server
+apps/worker/src/     Hono routes, bindings, durable Workflow
+apps/web/src/        React dashboard
+apps/cli/src/        terminal client
+apps/mcp/src/        stdio MCP server
+apps/docs/           this documentation site
 ```
+
+Tests live in each workspace's `test/` directory.
 
 ## Limits at a glance
 

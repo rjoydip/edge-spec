@@ -11,6 +11,8 @@
   "scripts": {
     "dev": "bun run --filter @edge-spec/web dev",
     "dev:worker": "bun run --filter @edge-spec/worker dev",
+    "cli": "bun apps/cli/src/index.ts",
+    "mcp": "bun apps/mcp/src/index.ts",
     "docs:dev": "bun run --filter @edge-spec/docs dev",
     "docs:build": "bun run --filter @edge-spec/docs build",
     "docs:preview": "bun run --filter @edge-spec/docs preview",

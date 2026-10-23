@@ -3,8 +3,9 @@
 ## Topology
 
 ```text
-Browser
+Browser / CLI / MCP client
   │  React dashboard (localStorage: settings + keys)
+  │  edge-spec CLI or local stdio MCP server (keys from env)
   │  fetch + SSE, credentials as headers
   ▼
 Cloudflare Worker (Hono)
@@ -62,6 +63,9 @@ the app code does not invalidate the cached vendor files.
 | `apps/worker/src/index.ts`      | Hono routes, header parsing, SSE framing                                       | Translates HTTP to core calls                            |
 | `apps/worker/src/workflow.ts`   | Durable webhook automation                                                     | Deployment credentials only                              |
 | `apps/web/src/`                 | Dashboard                                                                      | `App.tsx` owns run state; components are presentational  |
+| `packages/client/src/`          | Worker API client, SSE parsing, env defaults                                   | No pipeline logic; CLI and MCP use it                    |
+| `apps/cli/src/`                 | `scan`, `generate`, `run`, `catalog` commands                                  | Secrets from env, never flags                            |
+| `apps/mcp/src/`                 | Stdio MCP tools over the shared client                                         | PR tool requires `confirm: true`                         |
 
 ## Interactive run (`POST /api/run`)
 
@@ -159,16 +163,17 @@ keywords → low; otherwise medium, or high above 20 exports.
 
 ## Security boundaries
 
-| Boundary           | Control                                                                                                                        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| Repository input   | `parseRepoInput` accepts a folder start path in the header; the API gets `owner/name` only, via `parseRepo`, with no traversal |
-| Branch selector    | Values come from GitHub's branch list; `parseRef` still rejects `..`, leading `/`, unsafe characters                           |
-| Provider selection | Catalog allowlist; unknown providers and models are rejected                                                                   |
-| Base URL           | Only the custom provider (`private` id) accepts one; known providers cannot be redirected, preventing key exfiltration         |
-| Workflow params    | Never contain user keys                                                                                                        |
-| Webhook            | HMAC SHA-256 verification when a secret is configured                                                                          |
-| Code execution     | Generated code is never executed on the Worker; only an external sandbox may run it                                            |
-| Generated content  | Always treated as a draft; PR body says so                                                                                     |
+| Boundary            | Control                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Repository input    | `parseRepoInput` accepts a folder start path in the header; the API gets `owner/name` only, via `parseRepo`, with no traversal |
+| Branch selector     | Values come from GitHub's branch list; `parseRef` still rejects `..`, leading `/`, unsafe characters                           |
+| Provider selection  | Catalog allowlist; unknown providers and models are rejected                                                                   |
+| Base URL            | Only the custom provider (`private` id) accepts one; known providers cannot be redirected, preventing key exfiltration         |
+| Workflow params     | Never contain user keys                                                                                                        |
+| CLI/MCP credentials | Environment only; no key flags or tool arguments                                                                               |
+| Webhook             | HMAC SHA-256 verification when a secret is configured                                                                          |
+| Code execution      | Generated code is never executed on the Worker; only an external sandbox may run it                                            |
+| Generated content   | Always treated as a draft; PR body says so                                                                                     |
 
 Keys are held in browser `localStorage` only; the Worker forwards them and
 does not log or persist them. This is still a bearer-token model: a compromised
@@ -194,5 +199,8 @@ browser or deployment can read them. See [Configuration](configuration.md).
 - **Async generator pipeline**: the interactive path is one implementation over
   SSE. The durable Workflow calls the same core scan/generate/validate functions
   inside its steps, so behaviour stays close without persisting user keys.
+- **CLI and MCP are API clients**: they reuse the Worker's scan/generate/run/PR
+  routes instead of duplicating the pipeline, so the dashboard, terminal, and
+  agents all see the same validation and sandbox behavior.
 - **Radix primitives (shadcn-style)**: accessible dialog, select, tabs, switch
   and slider without hand-rolling focus management or keyboard behaviour.

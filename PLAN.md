@@ -51,15 +51,18 @@ same core functions.
 ## 3. Architecture
 
 ```
-browser ──▶ /api/run (SSE) ─┐
-browser ──▶ /api/*          ─┼─▶ core ─▶ GitHub REST
-GitHub  ──▶ /webhook ──▶ Workflow ─┘      └─▶ AI provider (user key or AI binding)
+browser / CLI / MCP ──▶ /api/run (SSE) ─┐
+browser / CLI / MCP ──▶ /api/*          ─┼─▶ core ─▶ GitHub REST
+GitHub              ──▶ /webhook ──▶ Workflow ─┘      └─▶ AI provider (user key or AI binding)
 ```
 
 - `packages/core/src/*` — pure logic, unit-tested without network.
+- `packages/client/src/*` — Worker API client shared by the CLI and MCP server.
 - `apps/worker/src/index.ts` — Hono routes, header parsing, SSE.
 - `apps/worker/src/workflow.ts` — durable webhook path (deployment-owned credentials).
 - `apps/web/src/*` — dashboard; talks only to `/api/*`.
+- `apps/cli/src/*` — terminal commands.
+- `apps/mcp/src/*` — stdio MCP server.
 
 ---
 
@@ -94,25 +97,36 @@ edge-spec/
 │   │       ├── cloudflare.d.ts
 │   │       ├── index.ts
 │   │       └── workflow.ts
+│   ├── cli/
+│   │   ├── package.json
+│   │   └── src/{index.ts,args.ts}
+│   ├── mcp/
+│   │   ├── package.json
+│   │   └── src/{index.ts,server.ts}
 │   └── docs/                 # VitePress documentation site
 │       ├── index.md
 │       ├── architecture.md
 │       ├── api.md
+│       ├── cli.md
+│       ├── mcp.md
 │       ├── configuration.md
 │       ├── ui.md
 │       ├── public/favicon.svg
 │       └── .vitepress/{config.ts,theme/}
 └── packages/
-    └── core/
-        ├── src/
-        │   ├── types.ts      # Gap, RunEvent, shared payloads
-        │   ├── catalog.ts    # providers, models, defaults, validation
-        │   ├── github.ts     # tree / content / branch / commit / PR
-        │   ├── scanner.ts    # gap detection + export extraction
-        │   ├── ai.ts         # prompt, provider dispatch, code extraction
-        │   ├── validate.ts   # sandbox contract + static check
-        │   └── pipeline.ts   # async generator used by SSE and routes
-        └── test/             # every unit test lives here
+    ├── core/
+    │   ├── src/
+    │   │   ├── types.ts      # Gap, RunEvent, shared payloads
+    │   │   ├── catalog.ts    # providers, models, defaults, validation
+    │   │   ├── github.ts     # tree / content / branch / commit / PR
+    │   │   ├── scanner.ts    # gap detection + export extraction
+    │   │   ├── ai.ts         # prompt, provider dispatch, code extraction
+    │   │   ├── validate.ts   # sandbox contract + static check
+    │   │   └── pipeline.ts   # async generator used by SSE and routes
+    │   └── test/             # core unit tests
+    └── client/
+        ├── src/{client.ts,env.ts,run.ts,index.ts}
+        └── test/
 ```
 
 Both Vite builds write to the root `dist/` (`dist/web` and `dist/worker`), which
@@ -298,14 +312,15 @@ never receives user API keys.
 4. **UI** — header, tabs, pipeline DAG + terminal, gaps, diff, PRs, settings.
 5. **Verification** — `bun test`, `bun check`, `vite build`, manual dev run.
 6. **Delivery** — README, AGENTS.md, VitePress docs site, CI + deploy workflows.
+7. **Interfaces** — CLI and stdio MCP server over the shared API client.
 
 ### Status
 
-All six phases are implemented. Unit tests live in `packages/core/test` (not
-beside the sources) and are included in `tsconfig.base.json` and `bun run check`.
-The dashboard
-was smoke-tested against `wrangler dev`: health, catalog, asset serving, input
-validation, a real repository scan, and the SSE error/result contract.
+All seven phases are implemented. Tests live in each workspace's `test/`
+directory (never beside the sources) and are included in `bun run check`. The
+dashboard was smoke-tested against `wrangler dev`: health, catalog, asset
+serving, input validation, a real repository scan, and the SSE error/result
+contract.
 
 Deliberately skipped for now:
 

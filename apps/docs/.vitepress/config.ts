@@ -26,6 +26,8 @@ export default defineConfig({
     nav: [
       { text: "Architecture", link: "/architecture" },
       { text: "API", link: "/api" },
+      { text: "CLI", link: "/cli" },
+      { text: "MCP", link: "/mcp" },
       { text: "Configuration", link: "/configuration" },
       { text: "UI", link: "/ui" },
     ],
@@ -38,6 +40,8 @@ export default defineConfig({
         text: "Guide",
         items: [
           { text: "Architecture", link: "/architecture" },
+          { text: "CLI", link: "/cli" },
+          { text: "MCP server", link: "/mcp" },
           { text: "Configuration", link: "/configuration" },
           { text: "UI guide", link: "/ui" },
         ],

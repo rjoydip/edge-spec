@@ -6,7 +6,8 @@ Repository conventions for EdgeSpec. Read this before changing code.
 
 A single Cloudflare Worker that serves a React dashboard and a test-generation
 API. It scans a user-supplied GitHub repository, generates a `bun:test` file
-with a user-chosen AI provider, validates it, and opens a PR.
+with a user-chosen AI provider, validates it, and opens a PR. The CLI and MCP
+server are separate API clients in the same workspace.
 
 Stack: TypeScript, Hono, React 19, Tailwind v4, Vite, Wrangler, Bun.
 
@@ -16,9 +17,11 @@ Stack: TypeScript, Hono, React 19, Tailwind v4, Vite, Wrangler, Bun.
 bun install
 bun run dev:worker     # API on http://127.0.0.1:8787
 bun run dev            # dashboard on http://127.0.0.1:5173 (proxies /api)
+bun --silent run cli -- --help  # terminal client
+bun run mcp -- --help  # stdio MCP server
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
 bun run docs:build     # static site in apps/docs/.vitepress/dist
-bun test               # discovers packages/core/test
+bun test               # discovers every workspace's test/ directory
 bun run typecheck      # bun check in every workspace
 bun run build
 bun run check          # format:check + lint + typecheck + test
@@ -34,17 +37,28 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 ## Layout
 
 - `packages/core/src/` — pure logic. No Hono, no React, no browser globals.
+- `packages/client/src/` — HTTP client for the Worker API, shared by the CLI and
+  MCP server. It may import core types but must not call core pipeline code.
 - `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
   durable `workflow.ts`.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
-- `packages/core/test/` — **all** unit tests. Do not colocate `*.test.ts` under `src/`.
+- `apps/cli/src/` — `scan`, `generate`, `run`, and `catalog` commands.
+- `apps/mcp/src/` — stdio MCP server wrapping the shared client.
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `PLAN.md` — product requirements and review feedback.
 
+Tests live in each workspace's `test/` directory. Do not colocate `*.test.ts`
+under `src/`.
+
 Bun workspaces live under `apps/*` and `packages/*`. `packages/core` is imported as
-`@edge-spec/core/<module>`; the web and worker apps are `@edge-spec/web` and
-`@edge-spec/worker`. Vite outputs both bundles to the root `dist/`, which is what
-`wrangler.toml` uploads.
+`@edge-spec/core/<module>`; `packages/client` as `@edge-spec/client`; the apps are
+`@edge-spec/web`, `@edge-spec/worker`, `@edge-spec/cli`, `@edge-spec/mcp`, and
+`@edge-spec/docs`. Vite outputs the web and worker bundles to the root `dist/`,
+which is what `wrangler.toml` uploads.
+
+The CLI and MCP server are **API clients**. Do not make them call
+`packages/core/src/pipeline.ts` directly; that would fork the behavior from the
+dashboard and the deployment's Workers AI/sandbox.
 
 ## Invariants
 
@@ -67,6 +81,8 @@ Bun workspaces live under `apps/*` and `packages/*`. `packages/core` is imported
 8. **Header stays aligned.** Controls are `h-9` or icon-sized, one
    `items-center` row. Do not put engine names ("Cloudflare Workflows v2") back
    into the chrome.
+9. **CLI and MCP secrets are environment-only.** Never add key flags or tool
+   arguments; keys travel in request headers, exactly like the dashboard.
 
 ## Adding a provider or model
 

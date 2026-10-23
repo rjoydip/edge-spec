@@ -32,19 +32,36 @@ bun run build          # dist/web + dist/worker
 bun run deploy -- --dry-run
 ```
 
+## CLI and MCP
+
+Both are thin clients of the Worker API, so start the local Worker or set
+`EDGESPEC_URL`.
+
+```bash
+bun --silent run cli -- scan honojs/hono --limit 20
+bun --silent run cli -- catalog
+bun run mcp -- --help
+```
+
+See [`apps/docs/cli.md`](apps/docs/cli.md) and [`apps/docs/mcp.md`](apps/docs/mcp.md)
+for commands, environment variables, and MCP client configuration.
+
 ## Repository map
 
 The repository is a Bun workspace monorepo:
 
 ```text
-apps/web/       React dashboard
-apps/worker/    Hono routes, bindings, durable Workflow
-apps/docs/      this documentation site
-packages/core/  pure pipeline logic (scanner, AI, GitHub, validation)
+apps/web/        React dashboard
+apps/worker/     Hono routes, bindings, durable Workflow
+apps/cli/        terminal client
+apps/mcp/        stdio MCP server
+apps/docs/       this documentation site
+packages/core/   pure pipeline logic (scanner, AI, GitHub, validation)
+packages/client/ HTTP client shared by the CLI and MCP server
 ```
 
-`packages/core` is consumed as `@edge-spec/core/<module>`. Vite bundles both apps
-into the root `dist/` for Wrangler.
+`packages/core` is consumed as `@edge-spec/core/<module>`. Vite bundles both
+deployable apps into the root `dist/` for Wrangler.
 
 ## Configuration
 
