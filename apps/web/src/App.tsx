@@ -385,10 +385,20 @@ export function App() {
 
   const run = async () => {
     if (running) return;
+    if (project.localPath) {
+      setTab("gaps");
+      showToast({
+        title: "Local project",
+        description:
+          "The pipeline opens a pull request, so it needs GitHub. Use Scan and Missing tests here.",
+        variant: "warning",
+      });
+      return;
+    }
     if (!project.repo) {
       showToast({
         title: "Repository required",
-        description: "Enter owner/name or a folder path in the header.",
+        description: "Enter owner/name or a local folder path in the header.",
         variant: "warning",
       });
       return;
@@ -438,10 +448,10 @@ export function App() {
 
   const scan = async () => {
     if (scanning) return;
-    if (!project.repo) {
+    if (!project.repo && !project.localPath) {
       showToast({
-        title: "Repository required",
-        description: "Enter owner/name or a folder path in the header.",
+        title: "Project required",
+        description: "Enter owner/name or a local folder path in the header.",
         variant: "warning",
       });
       return;
@@ -494,7 +504,7 @@ export function App() {
 
   /** The logo clears the workspace: repository, scan, tests and run. */
   const resetAll = () => {
-    setProject({ repo: "", ref: "", folder: "" });
+    setProject({ repo: "", ref: "", folder: "", localPath: "" });
     setGaps([]);
     setOverview(undefined);
     setGenerated([]);
@@ -709,6 +719,14 @@ export function App() {
   /** One pull request that carries every listed test. */
   const openPullForAll = async (items: GeneratedTest[]) => {
     if (prBusyPath || items.length === 0) return;
+    if (project.localPath) {
+      showToast({
+        title: "Pull request needs GitHub",
+        description: "Local projects are tested in place; publish the generated test yourself.",
+        variant: "warning",
+      });
+      return;
+    }
     setPrBusyPath("batch");
     try {
       const result = await openPullWithFiles(
@@ -767,6 +785,8 @@ export function App() {
   const modelName =
     providerById(settings.provider)?.models.find((model) => model.id === settings.model)?.name ??
     settings.model;
+  const projectLabel =
+    project.localPath || (project.folder ? `${project.repo}/${project.folder}` : project.repo);
 
   return (
     <div className="no-scrollbar relative min-h-dvh overflow-x-hidden">
@@ -803,7 +823,8 @@ export function App() {
               {TABS.filter(
                 (item) =>
                   (item.id !== "review" || generated.some((entry) => entry.validation.ok)) &&
-                  (item.id !== "pulls" || SHOW_PULLS_TAB),
+                  (item.id !== "pulls" || SHOW_PULLS_TAB) &&
+                  (item.id !== "gaps" || gaps.length > 0),
               ).map((item) => {
                 const Icon = item.icon;
                 const active = tab === item.id;
@@ -853,7 +874,7 @@ export function App() {
               })}
             </TabsList>
 
-            {!project.repo && (
+            {!projectLabel && (
               <div className="ml-auto hidden shrink-0 items-center gap-1.5 px-2 text-[11px] text-zinc-500 sm:flex">
                 <AlertCircle className="size-3.5 text-amber-400" />
                 no repository
@@ -862,7 +883,7 @@ export function App() {
           </div>
 
           <TabsContent value="pipeline">
-            <Pipeline steps={steps} logs={logs} running={running} onRun={run} onStop={stop} />
+            <Pipeline steps={steps} logs={logs} running={running} onRun={run} onStop={stop} scanned={!!overview} />
           </TabsContent>
 
           <TabsContent value="overview">
@@ -870,7 +891,7 @@ export function App() {
               overview={overview}
               gaps={gaps}
               generatedPaths={generatedPaths}
-              repo={project.repo}
+              repo={projectLabel}
               providerId={settings.provider}
               providerName={providerById(settings.provider)?.name ?? settings.provider}
               modelName={modelName}
@@ -908,7 +929,7 @@ export function App() {
                   onGenerate={requestGenerate}
                   onSetChecked={setChecked}
                   errors={fileErrors}
-                  repo={project.repo}
+                  repo={projectLabel}
                   folder={project.folder}
                   onClearFolder={() => setProject({ folder: "" })}
                 />

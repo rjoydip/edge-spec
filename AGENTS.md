@@ -41,6 +41,10 @@ Run `bun run check` before claiming a change works. For a UI change, also run
   MCP server. It may import core types but must not call core pipeline code.
 - `packages/ui/src/` — shared React primitives and `theme.css` brand tokens. The
   dashboard imports the components; the VitePress site imports only the tokens.
+- `examples/` — scenario apps for local test generation: framework examples
+  (`hono/`, `express/`, `elysia/`), `pure-node/`, `openapi/`, and dependency-free
+  fixtures in `src/`. Reference tests stay in each `tests/` folder;
+  `complete-app/` deliberately has sibling tests.
 - `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
   durable `workflow.ts`.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
@@ -49,14 +53,18 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `PLAN.md` — product requirements and review feedback.
 
-Tests live in each workspace's `test/` directory. Do not colocate `*.test.ts`
-under `src/`.
+Tests live in each workspace's `test/` directory. The exception is `examples/`:
+reference tests live in `examples/tests/` and `examples/*/tests/` so
+EdgeSpec still sees the incomplete examples as gaps. `examples/complete-app/`
+deliberately keeps its test beside the source. Do not colocate `*.test.ts` under
+`src/` elsewhere.
 
-Bun workspaces live under `apps/*` and `packages/*`. `packages/core` is imported as
-`@edge-spec/core/<module>`; `packages/client` as `@edge-spec/client`; `packages/ui`
-as `@edge-spec/ui` (and `@edge-spec/ui/theme.css`); the apps are `@edge-spec/web`,
-`@edge-spec/worker`, `@edge-spec/cli`, `@edge-spec/mcp`, and `@edge-spec/docs`. Vite outputs the web and worker bundles to the root `dist/`,
-which is what `wrangler.toml` uploads.
+Bun workspaces live under `apps/*`, `packages/*`, and `examples/`. `packages/core`
+is imported as `@edge-spec/core/<module>`; `packages/client` as
+`@edge-spec/client`; `packages/ui` as `@edge-spec/ui` (and
+`@edge-spec/ui/theme.css`); the apps are `@edge-spec/web`, `@edge-spec/worker`,
+`@edge-spec/cli`, `@edge-spec/mcp`, and `@edge-spec/docs`. Vite outputs the web
+and worker bundles to the root `dist/`, which is what `wrangler.toml` uploads.
 
 The CLI and MCP server are **API clients**. Do not make them call
 `packages/core/src/pipeline.ts` directly; that would fork the behavior from the

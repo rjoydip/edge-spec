@@ -58,9 +58,50 @@ export function riskOf(path: string, exportCount = 0): Risk {
   return exportCount > 20 ? "high" : "medium";
 }
 
+const TEST_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+
+/** Candidate test file paths for a source file, across common runtimes/frameworks. */
+export function testCandidates(path: string): string[] {
+  const lastSlash = path.lastIndexOf("/");
+  const dir = lastSlash >= 0 ? path.slice(0, lastSlash + 1) : "";
+  const file = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
+  const dot = file.lastIndexOf(".");
+  const base = dot >= 0 ? file.slice(0, dot) : file;
+  const ext = dot >= 0 ? file.slice(dot) : ".ts";
+  const exts = [ext, ...TEST_EXTENSIONS.filter((candidate) => candidate !== ext)];
+
+  const names: string[] = [];
+  for (const candidate of exts) {
+    names.push(`${base}.test${candidate}`);
+    names.push(`${base}.spec${candidate}`);
+  }
+
+  const candidates = new Set<string>();
+  // Sibling test file.
+  for (const name of names) candidates.add(`${dir}${name}`);
+
+  // Test directories beside the source.
+  for (const testDir of ["test/", "tests/", "__tests__/"]) {
+    for (const name of names) candidates.add(`${dir}${testDir}${name}`);
+  }
+
+  // Root-level or mirrored test directories.
+  const relativeWithoutExt = path.replace(/\.[^.]+$/, "");
+  for (const testDir of ["test/", "tests/", "__tests__/"]) {
+    for (const name of names) {
+      candidates.add(`${testDir}${name}`);
+    }
+    // Mirrored path: tests/src/foo.test.ts
+    candidates.add(`${testDir}${relativeWithoutExt}.test${ext}`);
+    candidates.add(`${testDir}${relativeWithoutExt}.spec${ext}`);
+  }
+
+  return [...candidates];
+}
+
 /**
- * `paths` is every blob in the repository. A source file is a gap when its
- * expected sibling test path is absent.
+ * `paths` is every blob in the repository. A source file is a gap when none of
+ * its conventional test file locations are present.
  */
 export function findGaps(paths: readonly string[], limit = 50): Gap[] {
   const present = new Set(paths);
@@ -68,9 +109,10 @@ export function findGaps(paths: readonly string[], limit = 50): Gap[] {
 
   for (const path of present) {
     if (!isSourceFile(path)) continue;
-    const testPath = expectedTestPath(path);
-    if (present.has(testPath)) continue;
+    const candidates = testCandidates(path);
+    if (candidates.some((candidate) => present.has(candidate))) continue;
 
+    const testPath = expectedTestPath(path);
     const risk = riskOf(path);
     const testName = testPath.slice(testPath.lastIndexOf("/") + 1);
     gaps.push({

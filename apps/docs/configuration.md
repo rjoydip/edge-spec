@@ -19,12 +19,19 @@ optional folder path — `owner/name/src/app` or a GitHub tree URL — starts th
 dashboard in that folder, but the scan and the pipeline still cover the whole
 repository. The branch dropdown is replaced by a read-only chip in that mode; a
 tree URL, or clearing the folder, chooses the branch. Both the repository and
-branch are required for every run, and there is no server-side default.
+branch are required for a pipeline run, and there is no server-side default.
+
+On localhost the input also accepts a filesystem path: `C:\code\app`,
+`/home/me/app`, `~/app` or `./app`. The Vite dev server serves the read-only
+scan and file reads from that folder; nothing leaves the machine. Local
+projects support scan and per-file generation. The pipeline and pull request
+still need a GitHub repository.
 
 | Value      | Default   | Effect                                                                |
 | ---------- | --------- | --------------------------------------------------------------------- |
-| Repository | _(empty)_ | `owner/name`; required for every run                                  |
+| Repository | _(empty)_ | `owner/name`; required for the pipeline and pull request              |
 | Folder     | _(none)_  | Start folder; only changes the order, never the scan scope            |
+| Local path | _(none)_  | Localhost only; scan and generate from a folder on this machine       |
 | Branch     | default   | Ref used for tree, file reads, and as the PR base; a tree URL sets it |
 
 ## Browser settings
@@ -49,15 +56,15 @@ Open **Settings** in the header for everything except the repository.
 
 ### Storage keys
 
-| Key                     | Purpose                               |
-| ----------------------- | ------------------------------------- |
-| `edgespec:project`      | Repository, branch and start folder   |
-| `edgespec:settings`     | JSON of the non-secret settings above |
-| `edgespec:github-token` | GitHub token                          |
-| `edgespec:ai-key`       | Provider key                          |
-| `edgespec:sandbox-key`  | Key for your own test runner          |
-| `edgespec:theme`        | `dark` or `light`                     |
-| `edgespec:accent`       | Accent base hex                       |
+| Key                     | Purpose                                         |
+| ----------------------- | ----------------------------------------------- |
+| `edgespec:project`      | Repository, branch, start folder and local path |
+| `edgespec:settings`     | JSON of the non-secret settings above           |
+| `edgespec:github-token` | GitHub token                                    |
+| `edgespec:ai-key`       | Provider key                                    |
+| `edgespec:sandbox-key`  | Key for your own test runner                    |
+| `edgespec:theme`        | `dark` or `light`                               |
+| `edgespec:accent`       | Accent base hex                                 |
 
 Settings save on **Save settings** (appearance applies immediately). **Forget
 saved keys** clears both secrets. Corrupt or unavailable `localStorage` falls

@@ -54,6 +54,9 @@ export function fetchBranches(repo: string): Promise<Branches> {
 }
 
 export function scanRepo(project: Project = getProject()): Promise<ScanResult> {
+  if (project.localPath) {
+    return apiJson<ScanResult>(`/local-api/scan?path=${encodeURIComponent(project.localPath)}`);
+  }
   return apiJson<ScanResult>("/api/scan", {
     method: "POST",
     body: JSON.stringify({
@@ -63,11 +66,19 @@ export function scanRepo(project: Project = getProject()): Promise<ScanResult> {
   });
 }
 
+/** Reads one source file through the local Vite API. */
+async function localSource(project: Project, path: string): Promise<string> {
+  const result = await apiJson<{ source: string }>(
+    `/local-api/file?root=${encodeURIComponent(project.localPath)}&path=${encodeURIComponent(path)}`,
+  );
+  return result.source;
+}
+
 export function fetchPulls(repo: string): Promise<{ pulls: PullSummary[] }> {
   return apiJson<{ pulls: PullSummary[] }>(`/api/pulls?repo=${encodeURIComponent(repo)}`);
 }
 
-export function regenerate(
+export async function regenerate(
   project: Project,
   settings: Settings,
   path: string,
@@ -79,6 +90,24 @@ export function regenerate(
   attempts: number;
   rateLimit?: RateLimitInfo;
 }> {
+  const body: Record<string, unknown> = {
+    path,
+    provider: settings.provider,
+    model: settings.model,
+    accountId: settings.accountId,
+    coverageTarget: settings.coverageTarget,
+    strictTypes: settings.strictTypes,
+    maxRetries: settings.maxRetries,
+    maxAiRetries: settings.maxAiRetries,
+    ...(previous ? { previous } : {}),
+  };
+  if (project.localPath) {
+    body.source = await localSource(project, path);
+  } else {
+    body.repo = project.repo;
+    body.ref = project.ref;
+  }
+
   return apiJson<{
     generation: Generation;
     validation: Validation;
@@ -87,19 +116,7 @@ export function regenerate(
   }>("/api/generate", {
     method: "POST",
     ...(signal ? { signal } : {}),
-    body: JSON.stringify({
-      repo: project.repo,
-      ref: project.ref,
-      path,
-      provider: settings.provider,
-      model: settings.model,
-      accountId: settings.accountId,
-      coverageTarget: settings.coverageTarget,
-      strictTypes: settings.strictTypes,
-      maxRetries: settings.maxRetries,
-      maxAiRetries: settings.maxAiRetries,
-      ...(previous ? { previous } : {}),
-    }),
+    body: JSON.stringify(body),
   });
 }
 

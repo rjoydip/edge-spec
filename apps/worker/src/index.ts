@@ -84,6 +84,12 @@ function githubFor(c: AppContext): GitHub {
   return new GitHub(c.req.header(TOKEN_HEADER)?.trim() || undefined);
 }
 
+/** Source text is only accepted from the local dashboard's Vite proxy. */
+function isLocalRequest(c: AppContext): boolean {
+  const host = c.req.header("host") ?? "";
+  return /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(host);
+}
+
 function aiConfigFor(c: AppContext, body: Record<string, unknown>): AiConfig {
   const choice = resolveAi({
     provider: str(body.provider),
@@ -325,8 +331,12 @@ app.post("/api/run", async (c) => {
 app.post("/api/generate", async (c) => {
   try {
     const body = await readJson(c);
-    const repo = repoOf(body);
-    const ref = parseRef(str(body.ref));
+    const inlineSource = typeof body.source === "string" ? body.source : undefined;
+    if (inlineSource !== undefined && !isLocalRequest(c)) {
+      throw new HttpError(403, "Local source input is only available on a local Worker.");
+    }
+    const repo = inlineSource === undefined ? repoOf(body) : undefined;
+    const ref = repo ? parseRef(str(body.ref)) : "local";
     const path = str(body.path);
     if (!path) throw new HttpError(400, "path is required.");
     const config = pipelineConfig(body);
@@ -334,13 +344,17 @@ app.post("/api/generate", async (c) => {
     const sandbox = sandboxFor(c);
 
     const github = githubFor(c);
-    const source = await github.file(repo, path, ref);
+    let source = inlineSource;
+    if (source === undefined) {
+      if (!repo) throw new HttpError(400, "Enter a repository as owner/name.");
+      source = await github.file(repo, path, ref);
+    }
     const testPath = path.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/i, (ext) => `.test${ext}`);
 
     // The repository's own rules, so a corrected test is measured against the
     // same checks as a pipeline run. Without a runner they cannot execute.
     let checks: Awaited<ReturnType<typeof readRepositoryChecks>> | undefined;
-    if (sandbox) {
+    if (sandbox && repo) {
       const tree = await github.tree(repo, ref);
       const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
       checks = await readRepositoryChecks(github, repo, ref, blobs);
@@ -540,6 +554,19 @@ app.get("/api/runs/:id", async (c) => {
   } catch (err) {
     return fail(err);
   }
+});
+
+// Local filesystem access is a development convenience, only on localhost.
+app.get("/local-api/scan", (c) => {
+  if (!isLocalRequest(c))
+    return c.json({ error: "Local access is only available on localhost." }, 403);
+  return c.json({ error: "Local folder access requires the Vite dev server (bun run dev)." }, 400);
+});
+
+app.get("/local-api/file", (c) => {
+  if (!isLocalRequest(c))
+    return c.json({ error: "Local access is only available on localhost." }, 403);
+  return c.json({ error: "Local file access requires the Vite dev server (bun run dev)." }, 400);
 });
 
 // Unknown API paths must return JSON, not the SPA's index.html.

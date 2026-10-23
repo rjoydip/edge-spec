@@ -60,7 +60,9 @@ bun run dev            # Vite dashboard on http://127.0.0.1:5173
 Open the dashboard, enter `owner/name` in the header (or a folder path inside
 it to start there), pick a provider in **Settings**, then press the run icon
 in the **Pipeline** tab. For a private repository or to open a pull request,
-add a GitHub token in Settings.
+add a GitHub token in Settings. On localhost you can also enter a local folder
+path such as `./examples/hono`; the dev server scans it read-only, so you can
+generate and validate tests without a GitHub repository.
 
 CLI and MCP clients use the same Worker API:
 
@@ -94,13 +96,13 @@ Tests live in each workspace's `test/` directory.
 
 ## Limits at a glance
 
-| Limit                         | Value                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------ |
-| Repository input              | `owner/name`, folder path, GitHub URL or clone URL; validated before use |
-| Scan results in the dashboard | 25 gaps, first 8 enriched with exported symbols                          |
-| Pipeline target               | first gap only, per run                                                  |
-| Self-correction retries       | 0–5, default 2                                                           |
-| Coverage target               | 0–100, default 90 (advisory to the model)                                |
-| Provider / sandbox timeout    | 120 seconds per call                                                     |
-| Generated test size           | up to 4096 output tokens                                                 |
-| Pull request list             | 20 most recent, all states                                               |
+| Limit                         | Value                                                               |
+| ----------------------------- | ------------------------------------------------------------------- |
+| Repository input              | `owner/name`, GitHub URL, folder path, or localhost filesystem path |
+| Scan results in the dashboard | 25 gaps, first 8 enriched with exported symbols                     |
+| Pipeline target               | first gap only, per run                                             |
+| Self-correction retries       | 0–5, default 2                                                      |
+| Coverage target               | 0–100, default 90 (advisory to the model)                           |
+| Provider / sandbox timeout    | 120 seconds per call                                                |
+| Generated test size           | up to 4096 output tokens                                            |
+| Pull request list             | 20 most recent, all states                                          |

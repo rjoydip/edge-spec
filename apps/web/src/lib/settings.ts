@@ -51,12 +51,15 @@ export interface Project {
   ref: string;
   /** Start folder inside the repository; the scan still covers the whole repo. */
   folder: string;
+  /** A local folder path. Only usable while the dashboard runs on localhost. */
+  localPath: string;
 }
 
 export const DEFAULT_PROJECT: Project = {
   repo: "",
   ref: "",
   folder: "",
+  localPath: "",
 };
 
 const SETTINGS_KEY = "edgespec:settings";
@@ -169,6 +172,7 @@ function loadProject(): Project {
         repo: typeof parsed.repo === "string" ? parsed.repo : "",
         ref: typeof parsed.ref === "string" ? parsed.ref : "",
         folder: typeof parsed.folder === "string" ? parsed.folder : "",
+        localPath: typeof parsed.localPath === "string" ? parsed.localPath : "",
       };
     }
     // Migrate the old combined settings blob.
@@ -179,6 +183,7 @@ function loadProject(): Project {
         repo: typeof legacy.repo === "string" ? legacy.repo : "",
         ref: typeof legacy.ref === "string" ? legacy.ref : "",
         folder: "",
+        localPath: "",
       };
     }
   } catch {

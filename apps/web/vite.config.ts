@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { localApi } from "./vite.local";
 
 // Dashboard build. Wrangler serves dist/web as static assets, so the app is a
 // plain SPA hitting the same-origin /api. In dev Vite proxies /api to the
@@ -10,7 +11,7 @@ const apiTarget = process.env.EDGE_SPEC_API_URL ?? "http://127.0.0.1:8787";
 
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
-  plugins: [react(), tailwindcss()],
+  plugins: [localApi(), react(), tailwindcss()],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },

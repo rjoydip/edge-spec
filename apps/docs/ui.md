@@ -41,10 +41,13 @@ its border and glow. The tab is a `tab-live` class and the node a
   The mark is a button: it clears the repository, the scan, the generated tests
   and the run log, and says so.
 - Repository: `owner/name`, a GitHub URL, or a folder path inside one such as
-  `owner/name/src/app` or `.../tree/main/src/app`. Validated live. An invalid
-  value gets a red border; it is committed on blur or Enter, never on every
-  keystroke. A folder path only sets the starting point: the scan still covers
-  the whole repository, and the folder's files are shown first.
+  `owner/name/src/app` or `.../tree/main/src/app`. On localhost it also accepts
+  a filesystem path such as `C:\code\app`, `/home/me/app`, `~/app` or `./app`.
+  Validated live. An invalid value gets a red border; it is committed on blur
+  or Enter, never on every keystroke. A folder path only sets the starting
+  point: the scan still covers the whole repository, and the folder's files are
+  shown first. A local path is scanned read-only by the Vite dev server; the
+  pipeline and pull request still need a GitHub repository.
 - Branch: a dropdown fetched from GitHub once a repository is committed. It is
   not shown while the input is empty or being edited, and a folder path replaces
   it with a read-only branch chip. The branch control collapses smoothly while

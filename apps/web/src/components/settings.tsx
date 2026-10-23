@@ -179,10 +179,10 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
 
       <Section
         id="runner"
-        title="Test runner"
-        hint="A runner executes the generated suite, so the result is a real pass or fail instead of a static check. Without one, EdgeSpec can only check the test statically."
+        title="Sandbox"
+        hint="A sandbox executes the generated suite, so the result is a real pass or fail instead of a static check. Without one, EdgeSpec can only check the test statically."
       >
-        <Field label="Runner URL">
+        <Field label="Sandbox URL">
           <Input
             value={draft.sandboxUrl}
             onChange={(event) => patch({ sandboxUrl: event.target.value })}
@@ -191,7 +191,7 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
             className="font-mono"
           />
         </Field>
-        <Field label="Runner API key (optional)">
+        <Field label="Sandbox API key (optional)">
           <div className="flex gap-2">
             <Input
               type="password"

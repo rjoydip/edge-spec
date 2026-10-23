@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { fetchBranches } from "@/api";
 import { providerById, parseRepoInput } from "@edge-spec/core/catalog";
+import { isLocalPathInput } from "@/lib/local-path";
 import {
   Badge,
   Button,
@@ -58,8 +59,9 @@ function compactNumber(value: number): string {
   return String(value);
 }
 
-/** The header input shows the repository and, when set, the start folder. */
+/** The header input shows a local path, or the repository and start folder. */
 function projectInput(project: ProjectValue): string {
+  if (project.localPath) return project.localPath;
   return project.folder ? `${project.repo}/${project.folder}` : project.repo;
 }
 
@@ -122,7 +124,10 @@ export function Header({
     };
   }, [project.repo]);
 
-  const invalid = repo.trim().length > 0 && !parseRepoInput(repo);
+  const localDraft = isLocalPathInput(repo);
+  const local = Boolean(project.localPath);
+  const isLocalDev = import.meta.env.DEV;
+  const invalid = repo.trim().length > 0 && !(localDraft ? isLocalDev : parseRepoInput(repo));
   // The branch belongs to the saved repository. While the input is being
   // edited, it is neither trustworthy nor useful, so it collapses away.
   const editing = repo.trim() !== projectInput(project);
@@ -141,7 +146,12 @@ export function Header({
   const commit = () => {
     const next = repo.trim();
     if (!next) {
-      setProject({ repo: "", ref: "", folder: "" });
+      setProject({ repo: "", ref: "", folder: "", localPath: "" });
+      return;
+    }
+    if (isLocalPathInput(next)) {
+      if (!import.meta.env.DEV) return;
+      setProject({ repo: "", ref: "", folder: "", localPath: next });
       return;
     }
     const parsed = parseRepoInput(next);
@@ -158,6 +168,7 @@ export function Header({
       repo: name,
       ref: parsed.ref ?? (sameRepo ? project.ref : ""),
       folder,
+      localPath: "",
     });
   };
 
@@ -190,7 +201,7 @@ export function Header({
 
         <div className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 lg:order-none lg:basis-auto">
           <div className="relative min-w-0 flex-1 lg:max-w-md">
-            {project.folder ? (
+            {project.folder || local ? (
               <FolderGit2 className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-zinc-500" />
             ) : (
               <GitBranch className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-zinc-500" />
@@ -200,14 +211,21 @@ export function Header({
               onChange={(event) => setRepo(event.target.value)}
               onBlur={commit}
               onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                  window.setTimeout(() => onScan(), 0);
+                }
               }}
-              placeholder="owner/repository[/folder]"
-              aria-label="GitHub repository or folder path"
+              placeholder={import.meta.env.DEV ? "owner/repo or ./local/path" : "owner/repo"}
+              aria-label="GitHub repository or local folder path"
               title={
-                project.folder
-                  ? `Whole repository, starting in ${project.folder}`
-                  : "GitHub repository"
+                local
+                  ? `Local folder: ${project.localPath}`
+                  : project.folder
+                    ? `Whole repository, starting in ${project.folder}`
+                    : import.meta.env.DEV
+                      ? "GitHub repository, or a local folder path"
+                      : "GitHub repository"
               }
               aria-invalid={invalid}
               spellCheck={false}
@@ -288,7 +306,7 @@ export function Header({
               variant="default"
               size="icon"
               onClick={onScan}
-              disabled={running || scanning || !project.repo}
+              disabled={running || scanning || (!project.repo && !local)}
               title={scanning ? "Scanning…" : "Scan"}
               aria-label="Scan"
             >

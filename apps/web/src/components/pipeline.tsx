@@ -90,9 +90,10 @@ interface PipelineProps {
   running: boolean;
   onRun: () => void;
   onStop: () => void;
+  scanned?: boolean;
 }
 
-export function Pipeline({ steps, logs, running, onRun, onStop }: PipelineProps) {
+export function Pipeline({ steps, logs, running, onRun, onStop, scanned = false }: PipelineProps) {
   const [selected, setSelected] = useState<StepId | undefined>(undefined);
   const selectedNode = selected ? NODES.find((node) => node.id === selected) : undefined;
   const visibleLogs = selected ? logs.filter((entry) => entry.step === selected) : logs;
@@ -116,20 +117,22 @@ export function Pipeline({ steps, logs, running, onRun, onStop }: PipelineProps)
               Each phase streams live; nothing is persisted on the server.
             </p>
           </div>
-          <Button
-            size="sm"
-            variant={running ? "danger" : "default"}
-            onClick={running ? onStop : onRun}
-            className="w-8 px-0"
-            title={running ? "Stop the run" : "Run pipeline"}
-            aria-label={running ? "Stop the run" : "Run pipeline"}
-          >
-            {running ? (
-              <Square className="size-3.5 fill-current" />
-            ) : (
-              <Play className="size-3.5 fill-current" />
-            )}
-          </Button>
+          {(scanned || running) && (
+            <Button
+              size="sm"
+              variant={running ? "danger" : "default"}
+              onClick={running ? onStop : onRun}
+              className="w-8 px-0"
+              title={running ? "Stop the run" : "Run pipeline"}
+              aria-label={running ? "Stop the run" : "Run pipeline"}
+            >
+              {running ? (
+                <Square className="size-3.5 fill-current" />
+              ) : (
+                <Play className="size-3.5 fill-current" />
+              )}
+            </Button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
