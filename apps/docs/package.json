@@ -1,0 +1,16 @@
+{
+  "name": "@edge-spec/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev . --port 5174",
+    "build": "vitepress build .",
+    "preview": "vitepress preview . --port 5174",
+    "typecheck": "bun check"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "vitepress": "^1.6.4"
+  }
+}

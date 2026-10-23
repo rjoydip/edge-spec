@@ -6,13 +6,13 @@ the dashboard.
 
 ## Documentation
 
-- [`docs/`](docs/index.md) — documentation site (VitePress); run `bun run docs:dev`.
+- [`apps/docs/`](apps/docs/index.md) — documentation site (VitePress); run `bun run docs:dev`.
 - [`PLAN.md`](PLAN.md) — requirements and design decisions.
 - [`AGENTS.md`](AGENTS.md) — repository conventions.
 
 ```bash
 bun run docs:dev      # http://127.0.0.1:5174
-bun run docs:build    # static site in docs/.vitepress/dist
+bun run docs:build    # static site in apps/docs/.vitepress/dist
 bun run docs:preview  # serve the build locally
 ```
 
@@ -29,8 +29,22 @@ Build and check:
 ```bash
 bun run check          # format, lint, types, tests
 bun run build          # dist/web + dist/worker
-bunx wrangler deploy --dry-run
+bun run deploy -- --dry-run
 ```
+
+## Repository map
+
+The repository is a Bun workspace monorepo:
+
+```text
+apps/web/       React dashboard
+apps/worker/    Hono routes, bindings, durable Workflow
+apps/docs/      this documentation site
+packages/core/  pure pipeline logic (scanner, AI, GitHub, validation)
+```
+
+`packages/core` is consumed as `@edge-spec/core/<module>`. Vite bundles both apps
+into the root `dist/` for Wrangler.
 
 ## Configuration
 

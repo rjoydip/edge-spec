@@ -17,26 +17,34 @@ bun install
 bun run dev:worker     # API on http://127.0.0.1:8787
 bun run dev            # dashboard on http://127.0.0.1:5173 (proxies /api)
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
-bun run docs:build     # static site in docs/.vitepress/dist
-bun test               # discovers /test
-bun run typecheck
+bun run docs:build     # static site in apps/docs/.vitepress/dist
+bun test               # discovers packages/core/test
+bun run typecheck      # bun check in every workspace
 bun run build
 bun run check          # format:check + lint + typecheck + test
-bunx wrangler deploy --dry-run
+bun run deploy -- --dry-run
 ```
+
+Formatting is Bun-native (`bun fmt`); typechecking is Bun-native (`bun check`).
+Oxlint stays because Bun has no built-in linter. Do not reintroduce oxfmt.
 
 Run `bun run check` before claiming a change works. For a UI change, also run
 `bun run build` (Tailwind class typos only fail at build time).
 
 ## Layout
 
-- `src/core/` — pure logic. No Hono, no React, no browser globals.
-- `src/worker/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
+- `packages/core/src/` — pure logic. No Hono, no React, no browser globals.
+- `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
   durable `workflow.ts`.
-- `src/web/` — dashboard. `App.tsx` owns run state; components are presentational.
-- `test/` — **all** unit tests. Do not colocate `*.test.ts` under `src/`.
-- `docs/` — VitePress documentation site (markdown in `docs`, `.vitepress` = config/theme).
+- `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
+- `packages/core/test/` — **all** unit tests. Do not colocate `*.test.ts` under `src/`.
+- `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `PLAN.md` — product requirements and review feedback.
+
+Bun workspaces live under `apps/*` and `packages/*`. `packages/core` is imported as
+`@edge-spec/core/<module>`; the web and worker apps are `@edge-spec/web` and
+`@edge-spec/worker`. Vite outputs both bundles to the root `dist/`, which is what
+`wrangler.toml` uploads.
 
 ## Invariants
 
@@ -62,7 +70,7 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 
 ## Adding a provider or model
 
-Edit `src/core/catalog.ts` only:
+Edit `packages/core/src/catalog.ts` only:
 
 - Add a `Provider` with `protocol` (`workers-ai`, `openai`, `anthropic`,
   `google`) and `models`.
@@ -70,14 +78,14 @@ Edit `src/core/catalog.ts` only:
   private/OpenAI-compatible path and requires a base URL.
 - Known providers' base URLs cannot be overridden by a request; that protects
   the user's key from being redirected.
-- Add a test in `test/catalog.test.ts` if the rule changes.
+- Add a test in `packages/core/test/catalog.test.ts` if the rule changes.
 
 ## Gotchas
 
 - In Workers, call `fetch` as a standalone function. `this.fetchImpl(...)` throws
   `Illegal invocation`; `github.ts` captures it in a local first.
 - `import ... from "cloudflare:workers"` must stay external in
-  `config/vite.worker.ts`; it is declared in `src/worker/cloudflare.d.ts`.
+  `apps/worker/vite.config.ts`; it is declared in `apps/worker/src/cloudflare.d.ts`.
 - GitHub ignores unauthenticated access to private repos and rate-limits
   anonymous tree reads.
 - `design.sample.ts` is a reference mockup, not app code. It is excluded from

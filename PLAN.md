@@ -56,10 +56,10 @@ browser ──▶ /api/*          ─┼─▶ core ─▶ GitHub REST
 GitHub  ──▶ /webhook ──▶ Workflow ─┘      └─▶ AI provider (user key or AI binding)
 ```
 
-- `src/core/*` — pure logic, unit-tested without network.
-- `src/worker/index.ts` — Hono routes, header parsing, SSE.
-- `src/worker/workflow.ts` — durable webhook path (deployment-owned credentials).
-- `src/web/*` — dashboard; talks only to `/api/*`.
+- `packages/core/src/*` — pure logic, unit-tested without network.
+- `apps/worker/src/index.ts` — Hono routes, header parsing, SSE.
+- `apps/worker/src/workflow.ts` — durable webhook path (deployment-owned credentials).
+- `apps/web/src/*` — dashboard; talks only to `/api/*`.
 
 ---
 
@@ -70,58 +70,53 @@ edge-spec/
 ├── PLAN.md
 ├── README.md
 ├── AGENTS.md                 # repo conventions for humans and agents
-├── package.json
-├── tsconfig.json
+├── package.json              # Bun workspaces and root scripts
+├── bunfig.toml               # Bun formatter settings
+├── tsconfig.base.json
 ├── wrangler.toml
-├── vite.config.ts
-├── config/vite.worker.ts
 ├── .github/workflows/{ci.yml,deploy.yml}
-├── docs/                     # VitePress documentation site
-│   ├── index.md              # home page
-│   ├── architecture.md       # modules, flows, data model
-│   ├── api.md                # routes, headers, SSE events
-│   ├── configuration.md      # settings, providers, secrets, deploy
-│   ├── ui.md                 # header, tabs, theme, settings
-│   ├── public/favicon.svg
-│   └── .vitepress/{config.ts,theme/}
-├── test/                     # every unit test lives here
-│   ├── ai.test.ts
-│   ├── catalog.test.ts
-│   ├── github.test.ts
-│   ├── pipeline.test.ts
-│   ├── scanner.test.ts
-│   └── validate.test.ts
-└── src/
-    ├── core/
-    │   ├── types.ts          # Gap, RunEvent, shared payloads
-    │   ├── catalog.ts        # providers, models, defaults, validation
-    │   ├── github.ts         # tree / content / branch / commit / PR
-    │   ├── scanner.ts        # gap detection + export extraction
-    │   ├── ai.ts             # prompt, provider dispatch, code extraction
-    │   ├── validate.ts       # sandbox contract + static check
-    │   └── pipeline.ts       # async generator used by SSE and routes
-    ├── worker/
-    │   ├── env.ts            # binding types
-    │   ├── cloudflare.d.ts   # minimal Workers module declaration
-    │   ├── index.ts          # Hono app + TestGenerationWorkflow export
-    │   └── workflow.ts
-    └── web/
-        ├── index.html
-        ├── main.tsx
-        ├── App.tsx
-        ├── api.ts
-        ├── tailwind.css
-        ├── lib/{theme.ts,settings.ts,utils.ts}
-        └── components/
-            ├── header.tsx
-            ├── settings.tsx
-            ├── pipeline.tsx
-            ├── gaps.tsx
-            ├── diff.tsx
-            ├── pulls.tsx
-            ├── terminal.tsx
-            └── ui/{button,badge,dialog,input,select,slider,switch,tabs,provider-icon}.tsx
+├── apps/
+│   ├── web/
+│   │   ├── index.html
+│   │   ├── vite.config.ts
+│   │   ├── public/favicon.svg
+│   │   └── src/
+│   │       ├── main.tsx
+│   │       ├── App.tsx
+│   │       ├── api.ts
+│   │       ├── tailwind.css
+│   │       ├── lib/{theme.ts,settings.ts,utils.ts}
+│   │       └── components/
+│   ├── worker/
+│   │   ├── vite.config.ts
+│   │   └── src/
+│   │       ├── env.ts
+│   │       ├── cloudflare.d.ts
+│   │       ├── index.ts
+│   │       └── workflow.ts
+│   └── docs/                 # VitePress documentation site
+│       ├── index.md
+│       ├── architecture.md
+│       ├── api.md
+│       ├── configuration.md
+│       ├── ui.md
+│       ├── public/favicon.svg
+│       └── .vitepress/{config.ts,theme/}
+└── packages/
+    └── core/
+        ├── src/
+        │   ├── types.ts      # Gap, RunEvent, shared payloads
+        │   ├── catalog.ts    # providers, models, defaults, validation
+        │   ├── github.ts     # tree / content / branch / commit / PR
+        │   ├── scanner.ts    # gap detection + export extraction
+        │   ├── ai.ts         # prompt, provider dispatch, code extraction
+        │   ├── validate.ts   # sandbox contract + static check
+        │   └── pipeline.ts   # async generator used by SSE and routes
+        └── test/             # every unit test lives here
 ```
+
+Both Vite builds write to the root `dist/` (`dist/web` and `dist/worker`), which
+Wrangler uploads.
 
 ---
 
@@ -301,13 +296,14 @@ never receives user API keys.
 2. **Core** — catalog, GitHub client, scanner, AI dispatch, validation, tests.
 3. **Worker** — Hono routes, SSE pipeline, Workflow.
 4. **UI** — header, tabs, pipeline DAG + terminal, gaps, diff, PRs, settings.
-5. **Verification** — `bun test`, `tsc --noEmit`, `vite build`, manual dev run.
+5. **Verification** — `bun test`, `bun check`, `vite build`, manual dev run.
 6. **Delivery** — README, AGENTS.md, VitePress docs site, CI + deploy workflows.
 
 ### Status
 
-All six phases are implemented. Unit tests live in `/test` (not beside the
-sources) and are included in `tsconfig.json` and `bun run check`. The dashboard
+All six phases are implemented. Unit tests live in `packages/core/test` (not
+beside the sources) and are included in `tsconfig.base.json` and `bun run check`.
+The dashboard
 was smoke-tested against `wrangler dev`: health, catalog, asset serving, input
 validation, a real repository scan, and the SSE error/result contract.
 
@@ -331,7 +327,7 @@ bun run build
 bun run check            # format + lint + types + tests
 bun run docs:build       # static docs site
 bun run docs:dev         # http://127.0.0.1:5174
-bunx wrangler dev        # http://127.0.0.1:8787
+bun run dev:worker       # http://127.0.0.1:8787
 bun run dev              # http://127.0.0.1:5173 (proxies /api)
 ```
 
@@ -346,7 +342,7 @@ Deploy manually:
 
 ```bash
 bunx wrangler login
-bunx wrangler deploy
+bun run deploy
 ```
 
 Optional secrets for the webhook/automation path:
