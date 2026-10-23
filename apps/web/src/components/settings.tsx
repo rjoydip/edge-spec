@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { AlertCircle, Check, KeyRound, Moon, Sun } from "lucide-react";
 import { PROVIDERS, providerById } from "@edge-spec/core/catalog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { ProviderIcon } from "@/components/ui/provider-icon";
 import {
+  Badge,
+  Button,
+  Dialog,
+  Input,
+  ProviderIcon,
   Select,
   SelectContent,
   SelectGroup,
@@ -15,13 +15,13 @@ import {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
+  Slider,
+  Switch,
+  cn,
+} from "@edge-spec/ui";
 import { isLocalHost } from "@/lib/env";
 import { clearSecrets, setSecrets, setSettings, type Secrets, type Settings } from "@/lib/settings";
 import { ACCENTS, setAccent, setMode, useAppearance } from "@/lib/theme";
-import { cn } from "@/lib/utils";
 
 interface SettingsDialogProps {
   open: boolean;

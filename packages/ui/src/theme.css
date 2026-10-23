@@ -1,0 +1,25 @@
+/*
+ * Shared brand tokens for the dashboard and the docs site.
+ *
+ * These are raw values, not mode-specific aliases: the dashboard defaults to
+ * dark, while VitePress defaults to light and adds `.dark`. Each app maps these
+ * into its own theme system.
+ */
+:root {
+  --edge-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --edge-font-mono: "JetBrains Mono", ui-monospace, "Fira Code", Menlo, monospace;
+
+  --edge-brand-300: #a5b4fc;
+  --edge-brand-400: #818cf8;
+  --edge-brand-500: #6366f1;
+  --edge-brand-600: #4f46e5;
+  --edge-brand-700: #4338ca;
+  --edge-brand-800: #3730a3;
+
+  --edge-brand-soft-light: rgb(79 70 229 / 0.14);
+  --edge-brand-soft-dark: rgb(99 102 241 / 0.16);
+
+  --edge-brand-gradient-end: #22d3ee;
+  --edge-brand-gradient-start-light: #3730a3;
+  --edge-brand-gradient-end-light: #0e7490;
+}

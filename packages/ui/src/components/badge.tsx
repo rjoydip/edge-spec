@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "../lib/utils";
 
 const VARIANTS = {
   neutral: "border-zinc-800 bg-zinc-900/70 text-zinc-400",

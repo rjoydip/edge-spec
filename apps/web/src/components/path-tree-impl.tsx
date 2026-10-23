@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useRef } from "react";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { cn } from "@/lib/utils";
+import { cn } from "@edge-spec/ui";
 import { ancestorsOf, type PathTreeProps } from "./path-tree";
 
 /**

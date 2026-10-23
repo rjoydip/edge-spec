@@ -11,10 +11,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { StepId } from "@edge-spec/core/types";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge, Button, cn } from "@edge-spec/ui";
 import { TerminalPanel, type LogEntry } from "@/components/terminal";
-import { cn } from "@/lib/utils";
 
 export type StepStatus = "idle" | "running" | "done" | "failed";
 export type Steps = Record<StepId, { status: StepStatus; note?: string }>;

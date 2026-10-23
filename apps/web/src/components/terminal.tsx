@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronUp, Search, Terminal, X } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { Input, cn } from "@edge-spec/ui";
 import type { StepId } from "@edge-spec/core/types";
 
 export type LogLevel = "info" | "ai" | "warn" | "success" | "error";

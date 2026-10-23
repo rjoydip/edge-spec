@@ -9,7 +9,7 @@ import { tsx } from "@vortexlabs/kirari/languages/tsx";
 import { typescript } from "@vortexlabs/kirari/languages/typescript";
 // The highlighter theme travels with the highlighter.
 import "@vortexlabs/kirari/theme.css";
-import { cn } from "@/lib/utils";
+import { cn } from "@edge-spec/ui";
 
 function languageFor(path: string) {
   const ext = path.slice(path.lastIndexOf(".")).toLowerCase();

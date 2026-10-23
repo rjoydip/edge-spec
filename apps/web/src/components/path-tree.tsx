@@ -8,7 +8,7 @@
  * needs it, so the implementation is loaded on demand.
  */
 import { lazy, Suspense, type ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@edge-spec/ui";
 
 const Tree = lazy(() => import("./path-tree-impl"));
 

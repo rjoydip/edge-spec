@@ -14,12 +14,9 @@ import {
   TreePine,
 } from "lucide-react";
 import type { GeneratedTest } from "@edge-spec/core/types";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge, Button, ViewTabs, cn } from "@edge-spec/ui";
 import { PathTree } from "@/components/path-tree";
 import { ValidationDialog } from "@/components/preview";
-import { ViewTabs } from "@/components/ui/view-tabs";
-import { cn } from "@/lib/utils";
 
 // The highlighter is heavy; it arrives only when a test is opened.
 const CodeView = lazy(() => import("./code-view"));

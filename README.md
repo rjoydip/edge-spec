@@ -58,10 +58,12 @@ apps/mcp/        stdio MCP server
 apps/docs/       this documentation site
 packages/core/   pure pipeline logic (scanner, AI, GitHub, validation)
 packages/client/ HTTP client shared by the CLI and MCP server
+packages/ui/     shared React primitives and theme tokens
 ```
 
-`packages/core` is consumed as `@edge-spec/core/<module>`. Vite bundles both
-deployable apps into the root `dist/` for Wrangler.
+`packages/core` is consumed as `@edge-spec/core/<module>` and the UI primitives
+as `@edge-spec/ui`. Vite bundles both deployable apps into the root `dist/` for
+Wrangler.
 
 ## Configuration
 

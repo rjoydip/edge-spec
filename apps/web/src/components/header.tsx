@@ -11,17 +11,18 @@ import {
 } from "lucide-react";
 import { fetchBranches } from "@/api";
 import { providerById, parseRepoInput } from "@edge-spec/core/catalog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ProviderIcon } from "@/components/ui/provider-icon";
 import {
+  Badge,
+  Button,
+  Input,
+  ProviderIcon,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+  cn,
+} from "@edge-spec/ui";
 import {
   setProject,
   type Project as ProjectValue,
@@ -31,7 +32,6 @@ import {
 import type { RateLimitInfo } from "@edge-spec/core/types";
 import { isLocalHost } from "@/lib/env";
 import { toggleMode, useAppearance } from "@/lib/theme";
-import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   project: ProjectValue;

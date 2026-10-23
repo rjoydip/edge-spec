@@ -15,10 +15,7 @@ import {
   X,
 } from "lucide-react";
 import type { Gap } from "@edge-spec/core/types";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
+import { Badge, Button, Switch, cn } from "@edge-spec/ui";
 
 const RISK = {
   high: { variant: "danger" as const, label: "H" },

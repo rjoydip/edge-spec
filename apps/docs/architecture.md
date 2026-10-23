@@ -63,6 +63,7 @@ the app code does not invalidate the cached vendor files.
 | `apps/worker/src/index.ts`      | Hono routes, header parsing, SSE framing                                       | Translates HTTP to core calls                            |
 | `apps/worker/src/workflow.ts`   | Durable webhook automation                                                     | Deployment credentials only                              |
 | `apps/web/src/`                 | Dashboard                                                                      | `App.tsx` owns run state; components are presentational  |
+| `packages/ui/src/`              | React primitives and brand tokens                                              | Dashboard imports components; docs imports `theme.css`   |
 | `packages/client/src/`          | Worker API client, SSE parsing, env defaults                                   | No pipeline logic; CLI and MCP use it                    |
 | `apps/cli/src/`                 | `scan`, `generate`, `run`, `catalog` commands                                  | Secrets from env, never flags                            |
 | `apps/mcp/src/`                 | Stdio MCP tools over the shared client                                         | PR tool requires `confirm: true`                         |

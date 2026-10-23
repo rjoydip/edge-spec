@@ -5,6 +5,9 @@ dialog. Overview is the first tab: it is what a run needs, and every other tab
 is a detail of it. Everything reads from a token-based dark/light theme with a
 user-selectable accent.
 
+The reusable primitives live in `packages/ui`; this site consumes the same brand
+tokens through `@edge-spec/ui/theme.css`.
+
 ## Page anatomy
 
 ```text

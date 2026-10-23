@@ -43,11 +43,8 @@ import { Pulls } from "@/components/pulls";
 import { Review } from "@/components/review";
 import { SettingsDialog, type SettingsSection } from "@/components/settings";
 import type { LogEntry, LogLevel } from "@/components/terminal";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@edge-spec/ui";
 import { setProject, setSettings, useProject, useSecrets, useSettings } from "@/lib/settings";
-import { cn } from "@/lib/utils";
 
 /** The provider refused the request because the quota is gone. */
 function isQuotaError(message: string): boolean {

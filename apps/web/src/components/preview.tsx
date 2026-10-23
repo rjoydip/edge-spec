@@ -21,11 +21,8 @@ import {
 } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import type { Gap, Generation, Validation } from "@edge-spec/core/types";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { Badge, Button, Dialog, cn } from "@edge-spec/ui";
 import { CHECK_TONES } from "@/lib/check-tones";
-import { cn } from "@/lib/utils";
 
 // The highlighter and its grammars are heavy, and only a generated test needs
 // them, so they arrive on demand.

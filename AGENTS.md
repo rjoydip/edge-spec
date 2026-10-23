@@ -39,6 +39,8 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 - `packages/core/src/` — pure logic. No Hono, no React, no browser globals.
 - `packages/client/src/` — HTTP client for the Worker API, shared by the CLI and
   MCP server. It may import core types but must not call core pipeline code.
+- `packages/ui/src/` — shared React primitives and `theme.css` brand tokens. The
+  dashboard imports the components; the VitePress site imports only the tokens.
 - `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
   durable `workflow.ts`.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
@@ -51,9 +53,9 @@ Tests live in each workspace's `test/` directory. Do not colocate `*.test.ts`
 under `src/`.
 
 Bun workspaces live under `apps/*` and `packages/*`. `packages/core` is imported as
-`@edge-spec/core/<module>`; `packages/client` as `@edge-spec/client`; the apps are
-`@edge-spec/web`, `@edge-spec/worker`, `@edge-spec/cli`, `@edge-spec/mcp`, and
-`@edge-spec/docs`. Vite outputs the web and worker bundles to the root `dist/`,
+`@edge-spec/core/<module>`; `packages/client` as `@edge-spec/client`; `packages/ui`
+as `@edge-spec/ui` (and `@edge-spec/ui/theme.css`); the apps are `@edge-spec/web`,
+`@edge-spec/worker`, `@edge-spec/cli`, `@edge-spec/mcp`, and `@edge-spec/docs`. Vite outputs the web and worker bundles to the root `dist/`,
 which is what `wrangler.toml` uploads.
 
 The CLI and MCP server are **API clients**. Do not make them call
@@ -83,6 +85,9 @@ dashboard and the deployment's Workers AI/sandbox.
    into the chrome.
 9. **CLI and MCP secrets are environment-only.** Never add key flags or tool
    arguments; keys travel in request headers, exactly like the dashboard.
+10. **UI primitives live in `packages/ui`.** The dashboard imports the React
+    components; the VitePress site consumes only `theme.css`. Do not copy
+    primitives back into `apps/web`.
 
 ## Adding a provider or model
 

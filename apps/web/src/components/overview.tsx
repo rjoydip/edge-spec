@@ -19,13 +19,9 @@ import {
   Zap,
 } from "lucide-react";
 import type { ApiArtifact, Gap, RepositoryOverview, Risk } from "@edge-spec/core/types";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { Badge, Button, Dialog, ProviderIcon, cn } from "@edge-spec/ui";
 import { PathTree } from "@/components/path-tree";
-import { ProviderIcon } from "@/components/ui/provider-icon";
 import { CHECK_TONES } from "@/lib/check-tones";
-import { cn } from "@/lib/utils";
 import type { Verification } from "@/components/pipeline";
 
 const RISK = {

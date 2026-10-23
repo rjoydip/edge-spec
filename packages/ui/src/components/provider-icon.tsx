@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { Bot } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "../lib/utils";
 
 interface IconProps {
   className?: string;

@@ -8,16 +8,16 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { PullSummary } from "@edge-spec/core/github";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
+  Badge,
+  Button,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+  cn,
+} from "@edge-spec/ui";
 
 type PullFilter = "all" | "open" | "closed";
 
