@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#09090b" />
+    <meta
+      name="description"
+      content="EdgeSpec finds untested code, generates tests with the model you choose, and opens a pull request."
+    />
+    <title>EdgeSpec</title>
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Applied before first paint so the stored theme and accent never flash.
+      (function () {
+        try {
+          var root = document.documentElement;
+          var light = localStorage.getItem("edgespec:theme") === "light";
+          root.classList.toggle("light", light);
+          root.classList.toggle("dark", !light);
+          root.style.colorScheme = light ? "light" : "dark";
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", light ? "#fafafa" : "#09090b");
+          var accent = localStorage.getItem("edgespec:accent");
+          if (accent) root.style.setProperty("--accent-base", accent);
+        } catch (error) {
+          /* private mode: fall back to the dark default already on <html> */
+        }
+      })();
+    </script>
+  </head>
+  <body class="no-scrollbar">
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

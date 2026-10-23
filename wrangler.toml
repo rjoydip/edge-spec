@@ -1,0 +1,25 @@
+name = "edge-spec"
+# Built by config/vite.worker.ts; wrangler only uploads the bundled output.
+main = "dist/worker/index.js"
+compatibility_date = "2025-07-18"
+compatibility_flags = ["nodejs_compat"]
+
+# Dashboard SPA, built by `bun run build:web`.
+# Assets-first routing: requests that match a file are served statically;
+# everything else (/api/*, /webhook) falls through to the Worker.
+[assets]
+directory = "dist/web"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Workers AI is the only provider that needs no user key.
+[ai]
+binding = "AI"
+remote = true
+
+# Durable path for GitHub webhooks. The interactive dashboard path is a
+# streamed /api/run and never stores user credentials.
+[[workflows]]
+name = "test-generation-workflow"
+binding = "TEST_GENERATION_WORKFLOW"
+class_name = "TestGenerationWorkflow"

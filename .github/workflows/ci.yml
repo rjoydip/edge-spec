@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# No Cloudflare credentials needed: this only checks formatting, lint, types,
+# tests, and that both bundles build.
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Format, lint, types, tests
+        run: bun run check
+
+      - name: Build dashboard and Worker bundles
+        run: bun run build
+
+      - name: Build documentation site
+        run: bun run docs:build
