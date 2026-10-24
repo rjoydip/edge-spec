@@ -118,7 +118,7 @@ function printCatalog(catalog: Catalog): void {
   process.stdout.write(
     `\nDefaults: ${catalog.defaults.ai.provider} / ${catalog.defaults.ai.model}\n`,
   );
-  process.stdout.write(`Sandbox runner: ${catalog.sandbox ? "configured" : "not configured"}\n`);
+  process.stdout.write(`Sandbox: ${catalog.sandbox ? "configured" : "not configured"}\n`);
 }
 
 function printEvent(event: RunEvent): void {

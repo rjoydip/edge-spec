@@ -15,6 +15,7 @@ import {
   extractExports,
   findGaps,
   packageFacts,
+  parseOpenApiSpec,
   riskOf,
 } from "@edge-spec/core/scanner";
 import type { Gap, ScanResult } from "@edge-spec/core/types";
@@ -138,6 +139,23 @@ export function scanLocalProject(root: string): ScanResult {
   const overview = describeRepository(blobs);
   const packageJson = readIfPresent(root, "package.json");
   if (packageJson) Object.assign(overview, packageFacts(packageJson));
+
+  const openApiSpecs = [];
+  const openApiPaths = blobs.filter((path) =>
+    /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i.test(path),
+  );
+  for (const artifactPath of openApiPaths.slice(0, 4)) {
+    const content = readIfPresent(root, artifactPath);
+    if (content === undefined) continue;
+    const spec = parseOpenApiSpec(content, artifactPath);
+    if (spec) openApiSpecs.push(spec);
+  }
+  if (openApiSpecs.length > 0) {
+    overview.openApiSpecs = openApiSpecs;
+    overview.openApiSpec = openApiSpecs[0];
+    overview.openApi = openApiSpecs[0];
+    overview.openapi = openApiSpecs[0];
+  }
 
   const files: Record<string, string> = {};
   for (const path of SUPPORT_FILES) {

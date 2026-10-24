@@ -38,6 +38,26 @@ export interface ApiArtifact {
   path: string;
 }
 
+/** One operation in an OpenAPI document. */
+export interface OpenApiEndpoint {
+  method: string;
+  path: string;
+  summary?: string;
+  description?: string;
+  operationId?: string;
+}
+
+/** A parsed OpenAPI document, ready to render. */
+export interface OpenApiSpec {
+  path: string;
+  title?: string;
+  version?: string;
+  description?: string;
+  endpoints: OpenApiEndpoint[];
+  /** Raw source of the spec, for the raw view and download. */
+  content?: string;
+}
+
 /** Facts read from the repository tree, not invented. */
 export interface RepositoryOverview {
   /** Languages by file count, biggest first. */
@@ -61,6 +81,12 @@ export interface RepositoryOverview {
   formatter?: string;
   /** OpenAPI specs and Postman/Bruno collections found in the tree. */
   apiArtifacts?: ApiArtifact[];
+  /** Parsed OpenAPI documents found in the tree. */
+  openApiSpecs?: OpenApiSpec[];
+  /** The first parsed OpenAPI document, for convenience. */
+  openApiSpec?: OpenApiSpec;
+  openApi?: OpenApiSpec;
+  openapi?: OpenApiSpec;
 }
 
 export interface Generation {

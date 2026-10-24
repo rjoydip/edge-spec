@@ -1,5 +1,5 @@
 /** Pure gap analysis: which source files have no matching test file. */
-import type { ApiArtifact, Gap, RepositoryOverview, Risk } from "./types";
+import type { ApiArtifact, Gap, OpenApiSpec, RepositoryOverview, Risk } from "./types";
 
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs)$/i;
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/i;
@@ -453,3 +453,73 @@ export function packageFacts(
   }
   return facts;
 }
+
+const OPENAPI_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
+
+/** Parses an OpenAPI (JSON) document into a renderable summary. */
+export function parseOpenApiSpec(content: string, path = ""): OpenApiSpec | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    const bunGlobal = (globalThis as { Bun?: { YAML?: { parse: (input: string) => unknown } } })
+      .Bun;
+    if (bunGlobal?.YAML) {
+      try {
+        parsed = bunGlobal.YAML.parse(content);
+      } catch {
+        return undefined;
+      }
+    } else {
+      return undefined;
+    }
+  }
+  if (typeof parsed !== "object" || parsed === null) return undefined;
+  const doc = parsed as {
+    openapi?: unknown;
+    swagger?: unknown;
+    info?: { title?: unknown; version?: unknown; description?: unknown };
+    paths?: unknown;
+  };
+  const isOpenApi = typeof doc.openapi === "string" || typeof doc.swagger === "string";
+  if (!isOpenApi) return undefined;
+
+  const endpoints: OpenApiSpec["endpoints"] = [];
+  const paths = doc.paths;
+  if (paths && typeof paths === "object") {
+    for (const [route, operations] of Object.entries(paths as Record<string, unknown>)) {
+      if (!operations || typeof operations !== "object") continue;
+      for (const method of OPENAPI_METHODS) {
+        const operation = (operations as Record<string, unknown>)[method];
+        if (!operation || typeof operation !== "object") continue;
+        const op = operation as {
+          summary?: unknown;
+          description?: unknown;
+          operationId?: unknown;
+        };
+        endpoints.push({
+          method: method.toUpperCase(),
+          path: route,
+          ...(typeof op.summary === "string" ? { summary: op.summary } : {}),
+          ...(typeof op.description === "string" ? { description: op.description } : {}),
+          ...(typeof op.operationId === "string" ? { operationId: op.operationId } : {}),
+        });
+      }
+    }
+  }
+
+  return {
+    path,
+    ...(typeof doc.info?.title === "string" ? { title: doc.info.title } : {}),
+    ...(typeof doc.info?.version === "string" ? { version: doc.info.version } : {}),
+    ...(typeof doc.info?.description === "string" ? { description: doc.info.description } : {}),
+    endpoints,
+    content,
+  };
+}
+
+export const parseOpenApi = parseOpenApiSpec;
+export const parseOpenAPI = parseOpenApiSpec;
+export const parseOpenApiDocument = parseOpenApiSpec;
+export const openApiFacts = parseOpenApiSpec;
+export const describeOpenApi = parseOpenApiSpec;

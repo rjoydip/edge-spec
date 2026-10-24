@@ -99,9 +99,9 @@ export function Pipeline({ steps, logs, running, onRun, onStop, scanned = false 
   const visibleLogs = selected ? logs.filter((entry) => entry.step === selected) : logs;
 
   return (
-    <div className="space-y-5">
-      <div className="glass-panel relative overflow-hidden rounded-2xl p-5">
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-3">
+      <div className="glass-panel relative overflow-hidden rounded-2xl p-3">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-zinc-100">
               <RefreshCw className="size-4 text-indigo-400" />
@@ -113,7 +113,7 @@ export function Pipeline({ steps, logs, running, onRun, onStop, scanned = false 
                 </Badge>
               )}
             </h2>
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-0.5 text-[11px] text-zinc-500">
               Each phase streams live; nothing is persisted on the server.
             </p>
           </div>
@@ -227,7 +227,7 @@ export function Pipeline({ steps, logs, running, onRun, onStop, scanned = false 
 
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
         <ShieldAlert className="size-3.5" />
-        The repository, the model and the runner come from the header and the Overview tab.
+        The repository, the model and the sandbox come from the header and the Overview tab.
         <RefreshCw className="ml-auto size-3.5" />
         Settings apply to the next run.
       </div>

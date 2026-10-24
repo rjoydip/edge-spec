@@ -3,53 +3,34 @@
  * how the results are checked, and which files are still untested. Everything
  * here is read from the tree, never invented.
  */
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
+const RawSpecView = lazy(() => import("./raw-spec-view"));
 import {
   Box,
+  Package,
   Braces,
+  Download,
   Cpu,
   FileCode2,
-  FolderTree,
   Gauge,
   Layers,
-  Send,
   ShieldAlert,
   ShieldCheck,
   Terminal,
+  Tag,
   Zap,
 } from "lucide-react";
-import type { ApiArtifact, Gap, RepositoryOverview, Risk } from "@edge-spec/core/types";
+import type { Gap, OpenApiSpec, RepositoryOverview, Risk } from "@edge-spec/core/types";
 import { Badge, Button, Dialog, ProviderIcon, cn } from "@edge-spec/ui";
 import { PathTree } from "@/components/path-tree";
+import { LanguageIcon } from "@/components/language-icon";
 import { CHECK_TONES } from "@/lib/check-tones";
-import type { Verification } from "@/components/pipeline";
+import type { LucideIcon } from "lucide-react";
 
 const RISK = {
   high: { label: "H", color: "#fb7185", title: "High risk" },
   medium: { label: "M", color: "#fbbf24", title: "Medium risk" },
   low: { label: "L", color: "#a1a1aa", title: "Low risk" },
-};
-
-/** API descriptions and request collections each keep their own colour. */
-const API_TONES: Record<
-  ApiArtifact["kind"],
-  { label: string; icon: typeof Braces; className: string }
-> = {
-  openapi: {
-    label: "OpenAPI",
-    icon: Braces,
-    className: "border-sky-500/30 bg-sky-500/10 text-sky-300",
-  },
-  postman: {
-    label: "Postman",
-    icon: Send,
-    className: "border-orange-500/30 bg-orange-500/10 text-orange-300",
-  },
-  bruno: {
-    label: "Bruno",
-    icon: FolderTree,
-    className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-  },
 };
 
 interface OverviewProps {
@@ -62,7 +43,6 @@ interface OverviewProps {
   modelName: string;
   baseUrl?: string;
   accountId?: string;
-  verification: Verification;
   hasRunner: boolean;
   /** The last refusal from the provider, e.g. an exhausted allocation. */
   providerError?: string;
@@ -72,45 +52,24 @@ interface OverviewProps {
   onChangeProvider: () => void;
 }
 
-/** A tool keeps its own colour, so the stack of badges is readable. */
-const TOOL_TONES: Record<string, string> = {
-  "Next.js": "border-sky-500/30 bg-sky-500/10 text-sky-300",
-  Nuxt: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-  SvelteKit: "border-orange-500/30 bg-orange-500/10 text-orange-300",
-  Astro: "border-purple-500/30 bg-purple-500/10 text-purple-300",
-  Remix: "border-cyan-500/30 bg-cyan-500/10 text-cyan-300",
-  Angular: "border-red-500/30 bg-red-500/10 text-red-300",
-  Vite: "border-violet-500/30 bg-violet-500/10 text-violet-300",
-  webpack: "border-sky-500/30 bg-sky-500/10 text-sky-300",
-  Rollup: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-  esbuild: "border-yellow-500/30 bg-yellow-500/10 text-yellow-300",
-  TypeScript: "border-blue-500/30 bg-blue-500/10 text-blue-300",
-  Tailwind: "border-teal-500/30 bg-teal-500/10 text-teal-300",
-  Bun: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-  Deno: "border-zinc-500/40 bg-zinc-500/10 text-zinc-300",
-  "Cloudflare Workers": "border-orange-500/30 bg-orange-500/10 text-orange-300",
-  Docker: "border-blue-500/30 bg-blue-500/10 text-blue-300",
-  "Docker Compose": "border-indigo-500/30 bg-indigo-500/10 text-indigo-300",
-};
-
-function ToolChip({ tool }: { tool: string }) {
+function Fact({
+  label,
+  value,
+  icon: Icon,
+  iconClassName = "text-indigo-400",
+}: {
+  label: string;
+  value: string;
+  icon?: LucideIcon;
+  iconClassName?: string;
+}) {
   return (
-    <span
-      className={cn(
-        "inline-flex w-fit items-center gap-1 rounded border px-2 py-0.5 font-mono text-[10px] font-medium whitespace-nowrap",
-        TOOL_TONES[tool] ?? "border-indigo-500/30 bg-indigo-500/10 text-indigo-300",
-      )}
-    >
-      {tool}
-    </span>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2">
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-2 py-1.5">
       <p className="text-[10px] tracking-wide text-zinc-500 uppercase">{label}</p>
-      <p className="mt-0.5 truncate font-mono text-xs text-zinc-200">{value}</p>
+      <p className="mt-0.5 flex items-center gap-1.5 truncate font-mono text-xs text-zinc-200">
+        {Icon && <Icon className={cn("size-3.5 shrink-0", iconClassName)} />}
+        {value}
+      </p>
     </div>
   );
 }
@@ -125,7 +84,6 @@ export function Overview({
   modelName,
   baseUrl,
   accountId,
-  verification,
   hasRunner,
   providerError,
   onOpenGap,
@@ -134,6 +92,7 @@ export function Overview({
 }: OverviewProps) {
   const [riskFilter, setRiskFilter] = useState<Risk | undefined>(undefined);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [openApiRaw, setOpenApiRaw] = useState(false);
   const counts = { high: 0, medium: 0, low: 0 };
   for (const gap of gaps) counts[gap.risk] += 1;
   // A risk level filters the file tree in the modal.
@@ -142,23 +101,25 @@ export function Overview({
   const languages = overview?.languages ?? [];
   const languageTotal = languages.reduce((sum, language) => sum + language.count, 0);
   const checks = overview?.checks ?? [];
-  const artifacts = overview?.apiArtifacts ?? [];
+  const openApiSpecs = (overview?.openApiSpecs ??
+    [overview?.openApiSpec, overview?.openApi, overview?.openapi].filter(Boolean)) as OpenApiSpec[];
 
-  const verificationLabel =
-    verification === "verified"
-      ? "bun test"
-      : verification === "static"
-        ? "static only"
-        : verification === "failed"
-          ? "failed"
-          : hasRunner
-            ? "runner ready"
-            : "static only";
+  const downloadSpec = (spec: OpenApiSpec) => {
+    const blob = new Blob([spec.content ?? ""], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = spec.path.split("/").pop() ?? "openapi";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <section className="glass-panel rounded-2xl p-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <section className="glass-panel rounded-2xl p-3">
           <h2 className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
             <Box className="size-4 text-indigo-400" />
             Repository
@@ -173,69 +134,51 @@ export function Overview({
           ) : (
             <>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <Fact label="Package manager" value={overview.packageManager ?? "unknown"} />
+                <Fact
+                  label="Package manager"
+                  value={overview.packageManager ?? "unknown"}
+                  icon={Package}
+                />
                 <Fact
                   label="Runtime"
+                  icon={Package}
+                  iconClassName="text-emerald-400"
                   value={
                     overview.runtime
                       ? `${overview.runtime}${overview.runtimeVersion ? ` ${overview.runtimeVersion}` : ""}`
                       : "unknown"
                   }
                 />
-                <Fact label="Package" value={overview.packageName ?? "unknown"} />
-                <Fact label="Version" value={overview.packageVersion ?? "unknown"} />
-                <Fact label="Files" value={String(overview.totalFiles)} />
+                <Fact
+                  label="Package"
+                  value={overview.packageName ?? "unknown"}
+                  icon={Box}
+                  iconClassName="text-violet-400"
+                />
+                <Fact
+                  label="Version"
+                  value={overview.packageVersion ?? "0.0.0"}
+                  icon={Tag}
+                  iconClassName="text-amber-400"
+                />
+                <Fact
+                  label="Files"
+                  value={String(overview.totalFiles ?? 0)}
+                  icon={FileCode2}
+                  iconClassName="text-rose-400"
+                />
                 <Fact
                   label="Sources / tests"
-                  value={`${overview.sourceFiles} / ${overview.testFiles}`}
+                  icon={FileCode2}
+                  iconClassName="text-cyan-400"
+                  value={`${overview.sourceFiles ?? 0} / ${overview.testFiles ?? 0}`}
                 />
               </div>
-
-              <div className="mt-3">
-                <p className="text-[10px] tracking-wide text-zinc-500 uppercase">
-                  API specs & collections
-                </p>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {artifacts.length === 0 ? (
-                    <span className="text-[11px] text-zinc-500">
-                      None found (OpenAPI, Postman, Bruno).
-                    </span>
-                  ) : (
-                    (Object.keys(API_TONES) as ApiArtifact["kind"][]).map((kind) => {
-                      const found = artifacts.filter((artifact) => artifact.kind === kind);
-                      if (found.length === 0) return null;
-                      const tone = API_TONES[kind];
-                      const Icon = tone.icon;
-                      return (
-                        <span
-                          key={kind}
-                          title={found.map((artifact) => artifact.path).join("\n")}
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded border px-2 py-0.5 font-mono text-[10px]",
-                            tone.className,
-                          )}
-                        >
-                          <Icon className="size-3" />
-                          {tone.label} · {found.length}
-                        </span>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {overview.frameworks.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {overview.frameworks.map((tool) => (
-                    <ToolChip key={tool} tool={tool} />
-                  ))}
-                </div>
-              )}
             </>
           )}
         </section>
 
-        <section className="glass-panel rounded-2xl p-4">
+        <section className="glass-panel flex min-h-full flex-col rounded-2xl p-4">
           <h2 className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
             <Cpu className="size-4 text-indigo-400" />
             Model
@@ -259,35 +202,33 @@ export function Overview({
           </Button>
         </section>
 
-        <section className="glass-panel rounded-2xl p-4">
+        <section className="glass-panel flex min-h-full flex-col rounded-2xl p-4">
           <h2 className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
             <Zap className="size-4 text-indigo-400" />
             Validation
           </h2>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge variant={verification === "failed" ? "danger" : "accent"}>
-              {verificationLabel}
-            </Badge>
             <Badge variant={hasRunner ? "success" : "warning"}>
-              {hasRunner ? "runner configured" : "static check only"}
+              {hasRunner ? <ShieldCheck className="size-3" /> : <ShieldAlert className="size-3" />}
+              {hasRunner ? "sandbox configured" : "static only"}
             </Badge>
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
             {hasRunner
               ? "The suite is executed, so a pass is a real pass."
-              : "Without a runner EdgeSpec can only check the test statically. Add one in Settings to execute the suite."}
+              : "Without a sandbox EdgeSpec can only check the test statically. Add one in Settings to execute the suite."}
           </p>
           <Button variant="ghost" size="xs" className="mt-2" onClick={onOpenSettings}>
-            {hasRunner ? "Manage the runner" : "Add a runner"}
+            {hasRunner ? "Manage the sandbox" : "Add a sandbox"}
           </Button>
         </section>
 
-        <section className="glass-panel rounded-2xl p-4">
+        <section className="glass-panel flex min-h-full flex-col rounded-2xl p-4">
           <h2 className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
             <ShieldCheck className="size-4 text-indigo-400" />
             CI checks
           </h2>
-          <p className="mt-1 text-[11px] text-zinc-500">
+          <p className="mt-3 text-[11px] text-zinc-500">
             A generated test has to satisfy these before a pull request is opened.
           </p>
           {checks.length > 0 ? (
@@ -329,7 +270,7 @@ export function Overview({
           )}
         </section>
 
-        <section className="glass-panel rounded-2xl p-4">
+        <section className="glass-panel rounded-2xl p-3">
           <h2 className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
             <Layers className="size-4 text-indigo-400" />
             Languages
@@ -341,7 +282,10 @@ export function Overview({
               {languages.map((language) => (
                 <li key={language.name}>
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-zinc-300">{language.name}</span>
+                    <span className="flex items-center gap-1.5 text-zinc-300">
+                      <LanguageIcon language={language.name} className="size-3.5 shrink-0" />
+                      {language.name}
+                    </span>
                     <span className="font-mono text-zinc-500">
                       {language.count}
                       {languageTotal > 0 && (
@@ -365,7 +309,7 @@ export function Overview({
           )}
         </section>
 
-        <section className="glass-panel rounded-2xl p-4">
+        <section className="glass-panel rounded-2xl p-3">
           <h2 className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
             <Gauge className="size-4 text-indigo-400" />
             Risk & untested files
@@ -374,15 +318,35 @@ export function Overview({
             A path heuristic, not a measurement. No coverage percentage is claimed.
           </p>
           <div className="mt-3 grid grid-cols-3 gap-2">
-            {(["high", "medium", "low"] as const).map((risk) => (
-              <div
-                key={risk}
-                className="rounded-xl border border-zinc-800 bg-zinc-950/40 px-3 py-2"
-              >
-                <p className="text-[10px] tracking-wide text-zinc-500 uppercase">{risk}</p>
-                <p className="mt-0.5 font-mono text-lg font-bold text-zinc-100">{counts[risk]}</p>
-              </div>
-            ))}
+            {(["high", "medium", "low"] as const).map((risk) => {
+              const RiskIcon =
+                risk === "high" ? ShieldAlert : risk === "medium" ? ShieldAlert : ShieldCheck;
+              const label =
+                risk === "high" ? "HIGH (H)" : risk === "medium" ? "MEDIUM (M)" : "LOW (L)";
+              const tone =
+                risk === "high"
+                  ? "text-rose-400"
+                  : risk === "medium"
+                    ? "text-amber-400"
+                    : "text-zinc-400";
+              return (
+                <div
+                  key={risk}
+                  className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950/40 px-2 py-1.5 text-center"
+                >
+                  <p
+                    className={cn(
+                      "flex items-center justify-center gap-1 text-[10px] tracking-wide uppercase",
+                      tone,
+                    )}
+                  >
+                    <RiskIcon className="size-3" />
+                    {label}
+                  </p>
+                  <p className="mt-0.5 font-mono text-lg font-bold text-zinc-100">{counts[risk]}</p>
+                </div>
+              );
+            })}
           </div>
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-zinc-800 pt-3">
             <p className="flex min-w-0 items-center gap-2 text-[11px] text-zinc-500">
@@ -411,6 +375,134 @@ export function Overview({
               : "Pick a file to see it in Missing tests."}
           </p>
         </section>
+
+        {openApiSpecs.length > 0 && (
+          <section className="glass-panel rounded-2xl p-3 md:col-span-2 xl:col-span-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
+                <Braces className="size-4 text-indigo-400" />
+                OpenAPI spec
+              </h2>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setOpenApiRaw(false)}
+                  aria-pressed={!openApiRaw}
+                  title="Rendered view"
+                  className={cn(
+                    "rounded border p-1 transition",
+                    !openApiRaw
+                      ? "border-indigo-500/40 bg-indigo-500/15 text-indigo-300"
+                      : "border-zinc-800 bg-zinc-950 text-zinc-500 hover:text-zinc-300",
+                  )}
+                >
+                  <Braces className="size-3.5 text-sky-300" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpenApiRaw(true)}
+                  aria-pressed={openApiRaw}
+                  title="Raw view"
+                  className={cn(
+                    "border-zinc-800 bg-zinc-950 text-zinc-500 hover:text-zinc-300",
+                    openApiRaw && "border-indigo-500/40 bg-indigo-500/15 text-indigo-300",
+                  )}
+                >
+                  <FileCode2 className="size-3.5 text-amber-300" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadSpec(openApiSpecs[0]!)}
+                  title="Download raw spec"
+                  className="inline-flex items-center justify-center rounded border border-emerald-500/40 bg-emerald-500/10 p-1 text-emerald-300 transition hover:bg-emerald-500/20"
+                >
+                  <Download className="size-3.5" />
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 space-y-4">
+              {openApiSpecs.map((spec, index) => (
+                <div
+                  key={`${spec.path}-${index}`}
+                  className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-xs text-zinc-200">{spec.title ?? spec.path}</p>
+                    {spec.version && (
+                      <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 font-mono text-[10px] text-sky-300">
+                        {spec.version}
+                      </span>
+                    )}
+                    <span className="font-mono text-[10px] text-zinc-500">{spec.path}</span>
+                  </div>
+                  {spec.description && (
+                    <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">
+                      {spec.description}
+                    </p>
+                  )}
+                  {openApiRaw ? (
+                    <div className="mt-3 h-64 overflow-hidden rounded-lg border border-zinc-800">
+                      <Suspense
+                        fallback={
+                          <div className="flex h-full items-center justify-center font-mono text-[11px] text-zinc-500">
+                            loading…
+                          </div>
+                        }
+                      >
+                        <RawSpecView
+                          path={spec.path}
+                          code={spec.content ?? ""}
+                          className="h-full"
+                        />
+                      </Suspense>
+                    </div>
+                  ) : spec.endpoints.length > 0 ? (
+                    <ul className="mt-3 divide-y divide-zinc-800/70">
+                      {spec.endpoints.map((endpoint, endpointIndex) => (
+                        <li
+                          key={`${endpoint.method}-${endpoint.path}-${endpointIndex}`}
+                          className="flex flex-wrap items-center gap-2 py-2 text-[11px]"
+                        >
+                          <span
+                            className={cn(
+                              "w-14 shrink-0 rounded border px-1.5 py-0.5 text-center font-mono text-[10px] font-semibold",
+                              endpoint.method === "GET"
+                                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                                : endpoint.method === "POST"
+                                  ? "border-sky-500/40 bg-sky-500/10 text-sky-300"
+                                  : endpoint.method === "PUT"
+                                    ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                                    : endpoint.method === "DELETE"
+                                      ? "border-rose-500/40 bg-rose-500/10 text-rose-300"
+                                      : endpoint.method === "PATCH"
+                                        ? "border-violet-500/40 bg-violet-500/10 text-violet-300"
+                                        : "border-zinc-700 bg-zinc-900 text-zinc-200",
+                            )}
+                          >
+                            {endpoint.method}
+                          </span>
+                          <span className="font-mono text-zinc-300">{endpoint.path}</span>
+                          {(endpoint.summary || endpoint.description) && (
+                            <span className="text-zinc-500">
+                              — {endpoint.summary ?? endpoint.description}
+                            </span>
+                          )}
+                          {endpoint.operationId && (
+                            <span className="ml-auto font-mono text-[10px] text-zinc-600">
+                              {endpoint.operationId}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-[11px] text-zinc-500">No operations declared.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
       <Dialog

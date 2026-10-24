@@ -607,7 +607,7 @@ function CheckList({ validation }: { validation?: Validation }) {
                   {state === "passed"
                     ? "check succeeded"
                     : state === "skipped"
-                      ? "tool not available in the runner"
+                      ? "tool not available in the sandbox"
                       : "check failed"}
                 </span>
               </div>

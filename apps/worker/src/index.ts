@@ -21,6 +21,7 @@ import {
   extractExports,
   findGaps,
   packageFacts,
+  parseOpenApiSpec,
   riskOf,
 } from "@edge-spec/core/scanner";
 import {
@@ -232,6 +233,29 @@ app.post("/api/scan", async (c) => {
       Object.assign(overview, packageFacts(await github.file(repo, "package.json", ref)));
     } catch {
       // No package.json at the root.
+    }
+
+    // Parse any OpenAPI specs so the dashboard can render them.
+    try {
+      const openApiSpecs = [];
+      const OPENAPI_LIKE = /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i;
+      for (const artifactPath of blobs.filter((path) => OPENAPI_LIKE.test(path)).slice(0, 4)) {
+        try {
+          const content = await github.file(repo, artifactPath, ref);
+          const spec = parseOpenApiSpec(content, artifactPath);
+          if (spec) openApiSpecs.push(spec);
+        } catch {
+          // A spec we cannot read is a spec we cannot render.
+        }
+      }
+      if (openApiSpecs.length > 0) {
+        overview.openApiSpecs = openApiSpecs;
+        overview.openApiSpec = openApiSpecs[0];
+        overview.openApi = openApiSpecs[0];
+        overview.openapi = openApiSpecs[0];
+      }
+    } catch {
+      // Best effort.
     }
 
     // The commands the repository's CI runs, so the dashboard can show them

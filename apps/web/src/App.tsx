@@ -128,6 +128,7 @@ export function App() {
   /** Whether the preview shows the test or what the file is missing. */
   const [previewMode, setPreviewMode] = useState<"code" | "meta">("code");
   const [verification, setVerification] = useState<Verification>("none");
+  void verification;
   const [generated, setGenerated] = useState<GeneratedTest[]>([]);
   /** Gaps picked for a bulk generation. */
   const [checkedPaths, setCheckedPaths] = useState<string[]>([]);
@@ -883,7 +884,14 @@ export function App() {
           </div>
 
           <TabsContent value="pipeline">
-            <Pipeline steps={steps} logs={logs} running={running} onRun={run} onStop={stop} scanned={!!overview} />
+            <Pipeline
+              steps={steps}
+              logs={logs}
+              running={running}
+              onRun={run}
+              onStop={stop}
+              scanned={!!overview}
+            />
           </TabsContent>
 
           <TabsContent value="overview">
@@ -897,7 +905,6 @@ export function App() {
               modelName={modelName}
               {...(settings.baseUrl.trim() ? { baseUrl: settings.baseUrl.trim() } : {})}
               {...(settings.accountId.trim() ? { accountId: settings.accountId.trim() } : {})}
-              verification={verification}
               hasRunner={hasRunner}
               {...(providerError ? { providerError } : {})}
               onOpenGap={(gap) => {

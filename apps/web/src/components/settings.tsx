@@ -186,7 +186,7 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
           <Input
             value={draft.sandboxUrl}
             onChange={(event) => patch({ sandboxUrl: event.target.value })}
-            placeholder="https://runner.example.com"
+            placeholder="https://sandbox.example.com"
             spellCheck={false}
             className="font-mono"
           />
@@ -198,7 +198,7 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
               autoComplete="off"
               value={keys.sandboxKey}
               onChange={(event) => setKeys({ ...keys, sandboxKey: event.target.value })}
-              placeholder="runner key"
+              placeholder="sandbox key"
               className="font-mono"
             />
             <Button variant="outline" onClick={() => setKeys({ ...keys, sandboxKey: "" })}>
@@ -207,7 +207,7 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
           </div>
         </Field>
         <p className="text-[11px] leading-relaxed text-zinc-500">
-          The Worker calls the runner, so it must be reachable from the internet.{" "}
+          The Worker calls the sandbox, so it must be reachable from the internet.{" "}
           <code className="font-mono text-zinc-400">http://localhost</code> only works with a Worker
           running on your own machine.
         </p>

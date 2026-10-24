@@ -237,7 +237,7 @@ Options:
   --max-ai-retries <n>       AI call retries, 0-5
   --max-files <n>            Files in one run, 1-50
   --no-strict-types          Disable strict TypeScript checks
-  --sandbox-url <url>        Test runner URL
+  --sandbox-url <url>        Sandbox URL
   --folder <path>            Prioritize this folder when scanning
   --limit <n>                Limit scan results, 1-100
   --out <file>               Write generated code to a file
@@ -250,7 +250,7 @@ Secrets are read from the environment, never from flags:
   GITHUB_TOKEN                 GitHub token (or EDGESPEC_GITHUB_TOKEN)
   EDGESPEC_AI_KEY              Provider key; provider-specific keys also work
   EDGESPEC_AI_BASE_URL         Base URL for the private provider
-  EDGESPEC_SANDBOX_URL         Test runner URL
+  EDGESPEC_SANDBOX_URL         Sandbox URL
   EDGESPEC_SANDBOX_KEY         Test runner key
   EDGESPEC_DEPLOYMENT_AI=1     Use the deployment's Workers AI binding
 `;

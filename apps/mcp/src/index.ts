@@ -19,7 +19,7 @@ Environment:
   EDGESPEC_AI_KEY              Provider key; provider-specific keys also work
   EDGESPEC_AI_BASE_URL         Base URL for the private provider
   CLOUDFLARE_ACCOUNT_ID        Workers AI BYOK account id
-  EDGESPEC_SANDBOX_URL         Test runner URL
+  EDGESPEC_SANDBOX_URL         Sandbox URL
   EDGESPEC_SANDBOX_KEY         Test runner key
   EDGESPEC_DEPLOYMENT_AI=1     Use the deployment's Workers AI binding
 

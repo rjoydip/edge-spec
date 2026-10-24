@@ -204,7 +204,6 @@ export function Gaps({
             {generating && (
               <Button size="xs" variant="danger" onClick={onStop}>
                 <Square className="size-3.5 fill-current" />
-                Stop
               </Button>
             )}
             {checked.length > 1 && !pipelineRunning && (
