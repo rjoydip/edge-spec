@@ -1,0 +1,21 @@
+{
+  "name": "@edge-spec/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config ../../wrangler.toml --port 8787",
+    "build": "vite build",
+    "deploy": "wrangler deploy --config ../../wrangler.toml",
+    "typecheck": "bun check"
+  },
+  "dependencies": {
+    "@edge-spec/core": "workspace:*",
+    "hono": "^4.9.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "vite": "^7.1.7",
+    "wrangler": "^4"
+  }
+}

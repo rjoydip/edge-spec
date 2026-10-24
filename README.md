@@ -6,13 +6,13 @@ the dashboard.
 
 ## Documentation
 
-- [`docs/`](docs/index.md) — documentation site (VitePress); run `bun run docs:dev`.
+- [`apps/docs/`](apps/docs/index.md) — documentation site (VitePress); run `bun run docs:dev`.
 - [`PLAN.md`](PLAN.md) — requirements and design decisions.
 - [`AGENTS.md`](AGENTS.md) — repository conventions.
 
 ```bash
 bun run docs:dev      # http://127.0.0.1:5174
-bun run docs:build    # static site in docs/.vitepress/dist
+bun run docs:build    # static site in apps/docs/.vitepress/dist
 bun run docs:preview  # serve the build locally
 ```
 
@@ -29,8 +29,42 @@ Build and check:
 ```bash
 bun run check          # format, lint, types, tests
 bun run build          # dist/web + dist/worker
-bunx wrangler deploy --dry-run
+bun run deploy -- --dry-run
 ```
+
+## CLI and MCP
+
+Both are thin clients of the Worker API, so start the local Worker or set
+`EDGESPEC_URL`.
+
+```bash
+bun --silent run cli -- scan honojs/hono --limit 20
+bun --silent run cli -- catalog
+bun run mcp -- --help
+```
+
+See [`apps/docs/cli.md`](apps/docs/cli.md) and [`apps/docs/mcp.md`](apps/docs/mcp.md)
+for commands, environment variables, and MCP client configuration.
+
+## Repository map
+
+The repository is a Bun workspace monorepo:
+
+```text
+apps/web/        React dashboard
+apps/worker/     Hono routes, bindings, durable Workflow
+apps/cli/        terminal client
+apps/mcp/        stdio MCP server
+apps/docs/       this documentation site
+packages/core/   pure pipeline logic (scanner, AI, GitHub, validation)
+packages/client/ HTTP client shared by the CLI and MCP server
+packages/ui/     shared React primitives and theme tokens
+examples/        local test-generation fixtures and reference tests
+```
+
+`packages/core` is consumed as `@edge-spec/core/<module>` and the UI primitives
+as `@edge-spec/ui`. Vite bundles both deployable apps into the root `dist/` for
+Wrangler. Run `bun test examples` to check the examples locally.
 
 ## Configuration
 
@@ -41,6 +75,10 @@ in the dashboard's **Settings**, stored in your browser:
   to start there while the whole repository is still scanned. The branch
   dropdown appears once a repository is committed; add your GitHub token in
   Settings (needed for private repositories and for opening PRs).
+- **Local project** — while the dashboard runs on localhost, the same input
+  accepts a filesystem path (`C:\code\app`, `/home/me/app`, `~/app` or
+  `./app`). Vite reads that folder read-only, so scan and per-file generation
+  work without GitHub. The pipeline and pull request still need a repository.
 - **AI provider** — Cloudflare Workers AI uses the deployment binding, or your
   own account ID + API token for BYOK. OpenAI, Anthropic, Gemini, Groq, DeepSeek,
   Mistral and OpenRouter use your key. **Private / self-hosted** accepts any

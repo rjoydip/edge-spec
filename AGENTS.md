@@ -6,7 +6,8 @@ Repository conventions for EdgeSpec. Read this before changing code.
 
 A single Cloudflare Worker that serves a React dashboard and a test-generation
 API. It scans a user-supplied GitHub repository, generates a `bun:test` file
-with a user-chosen AI provider, validates it, and opens a PR.
+with a user-chosen AI provider, validates it, and opens a PR. The CLI and MCP
+server are separate API clients in the same workspace.
 
 Stack: TypeScript, Hono, React 19, Tailwind v4, Vite, Wrangler, Bun.
 
@@ -16,27 +17,58 @@ Stack: TypeScript, Hono, React 19, Tailwind v4, Vite, Wrangler, Bun.
 bun install
 bun run dev:worker     # API on http://127.0.0.1:8787
 bun run dev            # dashboard on http://127.0.0.1:5173 (proxies /api)
+bun --silent run cli -- --help  # terminal client
+bun run mcp -- --help  # stdio MCP server
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
-bun run docs:build     # static site in docs/.vitepress/dist
-bun test               # discovers /test
-bun run typecheck
+bun run docs:build     # static site in apps/docs/.vitepress/dist
+bun test               # discovers every workspace's test/ directory
+bun run typecheck      # bun check in every workspace
 bun run build
 bun run check          # format:check + lint + typecheck + test
-bunx wrangler deploy --dry-run
+bun run deploy -- --dry-run
 ```
+
+Formatting is Bun-native (`bun fmt`); typechecking is Bun-native (`bun check`).
+Oxlint stays because Bun has no built-in linter. Do not reintroduce oxfmt.
 
 Run `bun run check` before claiming a change works. For a UI change, also run
 `bun run build` (Tailwind class typos only fail at build time).
 
 ## Layout
 
-- `src/core/` — pure logic. No Hono, no React, no browser globals.
-- `src/worker/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
+- `packages/core/src/` — pure logic. No Hono, no React, no browser globals.
+- `packages/client/src/` — HTTP client for the Worker API, shared by the CLI and
+  MCP server. It may import core types but must not call core pipeline code.
+- `packages/ui/src/` — shared React primitives and `theme.css` brand tokens. The
+  dashboard imports the components; the VitePress site imports only the tokens.
+- `examples/` — scenario apps for local test generation: framework examples
+  (`hono/`, `express/`, `elysia/`), `pure-node/`, `openapi/`, and dependency-free
+  fixtures in `src/`. Reference tests stay in each `tests/` folder;
+  `complete-app/` deliberately has sibling tests.
+- `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
   durable `workflow.ts`.
-- `src/web/` — dashboard. `App.tsx` owns run state; components are presentational.
-- `test/` — **all** unit tests. Do not colocate `*.test.ts` under `src/`.
-- `docs/` — VitePress documentation site (markdown in `docs`, `.vitepress` = config/theme).
+- `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
+- `apps/cli/src/` — `scan`, `generate`, `run`, and `catalog` commands.
+- `apps/mcp/src/` — stdio MCP server wrapping the shared client.
+- `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `PLAN.md` — product requirements and review feedback.
+
+Tests live in each workspace's `test/` directory. The exception is `examples/`:
+reference tests live in `examples/tests/` and `examples/*/tests/` so
+EdgeSpec still sees the incomplete examples as gaps. `examples/complete-app/`
+deliberately keeps its test beside the source. Do not colocate `*.test.ts` under
+`src/` elsewhere.
+
+Bun workspaces live under `apps/*`, `packages/*`, and `examples/`. `packages/core`
+is imported as `@edge-spec/core/<module>`; `packages/client` as
+`@edge-spec/client`; `packages/ui` as `@edge-spec/ui` (and
+`@edge-spec/ui/theme.css`); the apps are `@edge-spec/web`, `@edge-spec/worker`,
+`@edge-spec/cli`, `@edge-spec/mcp`, and `@edge-spec/docs`. Vite outputs the web
+and worker bundles to the root `dist/`, which is what `wrangler.toml` uploads.
+
+The CLI and MCP server are **API clients**. Do not make them call
+`packages/core/src/pipeline.ts` directly; that would fork the behavior from the
+dashboard and the deployment's Workers AI/sandbox.
 
 ## Invariants
 
@@ -59,10 +91,15 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 8. **Header stays aligned.** Controls are `h-9` or icon-sized, one
    `items-center` row. Do not put engine names ("Cloudflare Workflows v2") back
    into the chrome.
+9. **CLI and MCP secrets are environment-only.** Never add key flags or tool
+   arguments; keys travel in request headers, exactly like the dashboard.
+10. **UI primitives live in `packages/ui`.** The dashboard imports the React
+    components; the VitePress site consumes only `theme.css`. Do not copy
+    primitives back into `apps/web`.
 
 ## Adding a provider or model
 
-Edit `src/core/catalog.ts` only:
+Edit `packages/core/src/catalog.ts` only:
 
 - Add a `Provider` with `protocol` (`workers-ai`, `openai`, `anthropic`,
   `google`) and `models`.
@@ -70,14 +107,14 @@ Edit `src/core/catalog.ts` only:
   private/OpenAI-compatible path and requires a base URL.
 - Known providers' base URLs cannot be overridden by a request; that protects
   the user's key from being redirected.
-- Add a test in `test/catalog.test.ts` if the rule changes.
+- Add a test in `packages/core/test/catalog.test.ts` if the rule changes.
 
 ## Gotchas
 
 - In Workers, call `fetch` as a standalone function. `this.fetchImpl(...)` throws
   `Illegal invocation`; `github.ts` captures it in a local first.
 - `import ... from "cloudflare:workers"` must stay external in
-  `config/vite.worker.ts`; it is declared in `src/worker/cloudflare.d.ts`.
+  `apps/worker/vite.config.ts`; it is declared in `apps/worker/src/cloudflare.d.ts`.
 - GitHub ignores unauthenticated access to private repos and rate-limits
   anonymous tree reads.
 - `design.sample.ts` is a reference mockup, not app code. It is excluded from

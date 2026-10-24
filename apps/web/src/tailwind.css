@@ -1,0 +1,531 @@
+@import "tailwindcss";
+@source "../../../packages/ui/src";
+
+/*
+ * EdgeSpec design tokens.
+ *
+ * 1. The UI is built on the zinc ramp. Tailwind v4 compiles `bg-zinc-900` to
+ *    `var(--color-zinc-900)`, so light mode is a remap of that ramp instead of a
+ *    second set of component styles.
+ * 2. The accent is one `--accent-base` hex mixed with `color-mix()`. The swatches
+ *    in Settings rewrite that variable and every `indigo-*` utility follows.
+ */
+
+:root {
+  --accent-base: var(--edge-brand-600);
+
+  --accent-200: color-mix(in oklab, var(--accent-base) 70%, white);
+  --accent-300: color-mix(in oklab, var(--accent-base) 58%, white);
+  --accent-400: color-mix(in oklab, var(--accent-base) 80%, white);
+  --accent-500: var(--accent-base);
+  --accent-600: color-mix(in oklab, var(--accent-base) 88%, black);
+  --accent-700: color-mix(in oklab, var(--accent-base) 72%, black);
+  --accent-900: color-mix(in oklab, var(--accent-base) 40%, black);
+
+  --color-indigo-200: var(--accent-200);
+  --color-indigo-300: var(--accent-300);
+  --color-indigo-400: var(--accent-400);
+  --color-indigo-500: var(--accent-500);
+  --color-indigo-600: var(--accent-600);
+  --color-indigo-700: var(--accent-700);
+  --color-indigo-950: var(--accent-900);
+
+  --brand-from: var(--accent-600);
+  --brand-to: var(--accent-400);
+
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --card: #111113;
+  --card-foreground: var(--foreground);
+  --popover: #111113;
+  --popover-foreground: var(--foreground);
+  --primary: var(--accent-600);
+  --primary-foreground: #ffffff;
+  --secondary: #18181b;
+  --secondary-foreground: var(--foreground);
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+  --accent: color-mix(in oklab, var(--accent-base) 22%, #09090b);
+  --accent-foreground: var(--foreground);
+  --destructive: #f43f5e;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: var(--accent-500);
+  --radius: 0.75rem;
+
+  --glass-bg: rgb(17 17 19 / 0.66);
+  --glass-border: rgb(255 255 255 / 0.07);
+  --glass-shadow: rgb(0 0 0 / 0.5);
+  --page-glow: color-mix(in oklab, var(--accent-base) 8%, transparent);
+  --aurora-opacity: 0.22;
+
+  color-scheme: dark;
+}
+
+html.light {
+  --background: #fafafa;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+  --secondary: #f4f4f5;
+  --secondary-foreground: var(--foreground);
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --accent: color-mix(in oklab, var(--accent-base) 8%, white);
+  --accent-foreground: var(--foreground);
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+
+  --color-zinc-950: #ffffff;
+  --color-zinc-900: #f4f4f5;
+  --color-zinc-800: #e4e4e7;
+  --color-zinc-700: #d4d4d8;
+  --color-zinc-600: #a1a1aa;
+  --color-zinc-500: #71717a;
+  --color-zinc-400: #52525b;
+  --color-zinc-300: #3f3f46;
+  --color-zinc-200: #27272a;
+  --color-zinc-100: #18181b;
+  --color-zinc-50: #09090b;
+
+  --color-indigo-200: var(--accent-700);
+  --color-indigo-300: var(--accent-700);
+  --color-indigo-400: var(--accent-600);
+  --color-indigo-500: var(--accent-500);
+  --color-indigo-600: var(--accent-600);
+  --color-indigo-700: var(--accent-700);
+
+  --color-emerald-400: #047857;
+  --color-emerald-300: #059669;
+  --color-amber-400: #b45309;
+  --color-amber-300: #b45309;
+  --color-rose-400: #be123c;
+  --color-rose-500: #e11d48;
+  --color-sky-400: #0369a1;
+  --color-sky-300: #0284c7;
+  --color-violet-400: #6d28d9;
+  --color-violet-300: #7c3aed;
+
+  --glass-bg: rgb(255 255 255 / 0.78);
+  --glass-border: rgb(9 9 11 / 0.08);
+  --glass-shadow: rgb(9 9 11 / 0.12);
+  --page-glow: color-mix(in oklab, var(--accent-base) 6%, transparent);
+  --aurora-opacity: 0.12;
+
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--edge-font-sans);
+  --font-mono: var(--edge-font-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+  /* Requirement: the page scrolls, but it never shows a vertical scrollbar. */
+  html {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  html::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  body {
+    margin: 0;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--accent-base) 30%, transparent);
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 9999px;
+  }
+}
+
+@layer components {
+  /* Kirari reads these variables; the pre keeps its own translucent background. */
+  .code-highlight {
+    --kirari-background: transparent;
+    --kirari-text: #d4d4d8;
+    --kirari-keyword: var(--accent-300);
+    --kirari-variable: #e4e4e7;
+    --kirari-property: #7dd3fc;
+    --kirari-function: #93c5fd;
+    --kirari-string: #86efac;
+    --kirari-number: #fcd34d;
+    --kirari-boolean: #fcd34d;
+    --kirari-null: #fcd34d;
+    --kirari-comment: #71717a;
+    --kirari-operator: #f0abfc;
+    --kirari-punctuation: #a1a1aa;
+    --kirari-type: #67e8f9;
+    --kirari-regex: #fdba74;
+    --kirari-inserted: #86efac;
+    --kirari-deleted: #fda4af;
+    --kirari-heading: #93c5fd;
+    --kirari-tag: #f0abfc;
+    --kirari-attribute: #7dd3fc;
+    --kirari-entity: #fcd34d;
+  }
+  html.light .code-highlight {
+    --kirari-text: #3f3f46;
+    --kirari-keyword: var(--accent-700);
+    --kirari-variable: #27272a;
+    --kirari-property: #0e7490;
+    --kirari-function: #1d4ed8;
+    --kirari-string: #047857;
+    --kirari-number: #b45309;
+    --kirari-boolean: #b45309;
+    --kirari-null: #b45309;
+    --kirari-comment: #71717a;
+    --kirari-operator: #be185d;
+    --kirari-punctuation: #52525b;
+    --kirari-type: #0e7490;
+    --kirari-regex: #c2410c;
+    --kirari-inserted: #047857;
+    --kirari-deleted: #be123c;
+    --kirari-heading: #1d4ed8;
+    --kirari-tag: #be185d;
+    --kirari-attribute: #0e7490;
+    --kirari-entity: #b45309;
+  }
+
+  /*
+   * The file view reads these variables; the tree keeps its own layout and
+   * inherits the dashboard's theme and accent instead of carrying a palette.
+   */
+  .file-tree {
+    --trees-bg-override: transparent;
+    --trees-bg-muted-override: var(--color-zinc-800);
+    --trees-fg-override: var(--color-zinc-200);
+    --trees-fg-muted-override: var(--color-zinc-500);
+    --trees-border-color-override: var(--color-zinc-800);
+    --trees-accent-override: var(--accent-500);
+    --trees-border-radius-override: 0.5rem;
+    --trees-input-bg-override: var(--color-zinc-900);
+    --trees-font-family-override: var(--font-sans);
+    --trees-font-size-override: 12px;
+  }
+
+  .glass-panel {
+    background-color: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 20px 50px -30px var(--glass-shadow);
+    backdrop-filter: blur(18px);
+  }
+
+  /* Requirement: the page scrolls, but no scrollbar is shown anywhere. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* Accent-driven backdrop: the palette in Settings recolours the whole page. */
+  .app-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    background:
+      radial-gradient(60rem 42rem at 12% -12%, var(--page-glow), transparent 68%),
+      radial-gradient(48rem 34rem at 98% 6%, var(--page-glow), transparent 68%),
+      radial-gradient(56rem 38rem at 50% 112%, var(--page-glow), transparent 70%);
+  }
+
+  .app-aurora {
+    position: absolute;
+    border-radius: 9999px;
+    background: var(--accent-base);
+    filter: blur(110px);
+    opacity: var(--aurora-opacity);
+    animation: aurora-drift 24s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  .app-aurora-a {
+    top: -12rem;
+    left: -6rem;
+    width: 36rem;
+    height: 36rem;
+  }
+
+  .app-aurora-b {
+    top: 18%;
+    right: -10rem;
+    width: 32rem;
+    height: 32rem;
+    animation-delay: -8s;
+  }
+
+  .app-aurora-c {
+    bottom: -16rem;
+    left: 35%;
+    width: 34rem;
+    height: 34rem;
+    animation-delay: -16s;
+  }
+
+  .brand-mark {
+    transition:
+      transform 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+
+  .brand-mark:hover {
+    transform: translateY(-1px) rotate(-2deg) scale(1.04);
+    box-shadow: 0 12px 30px -10px color-mix(in oklab, var(--accent-base) 65%, transparent);
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes aurora-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(3rem, 2rem, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-2rem, 4rem, 0) scale(0.96);
+  }
+}
+
+.app-reveal {
+  animation: rise-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.pipeline-node {
+  animation: rise-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.status-live > span:first-child {
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+/* The node that is working right now blinks, so a run is never silent. */
+.pipeline-node.pipeline-node-active {
+  animation:
+    rise-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards,
+    node-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes node-blink {
+  0%,
+  100% {
+    border-color: color-mix(in oklab, var(--accent-500) 55%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent-500) 0%, transparent);
+  }
+  50% {
+    border-color: color-mix(in oklab, var(--accent-500) 100%, transparent);
+    box-shadow: 0 0 20px 0 color-mix(in oklab, var(--accent-500) 32%, transparent);
+  }
+}
+
+/* The pipeline tab pulses while a run is in flight. */
+.tab-live {
+  animation: tab-blink 1.4s ease-in-out infinite;
+}
+
+@keyframes tab-blink {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: color-mix(in oklab, var(--accent-500) 18%, transparent);
+  }
+}
+
+@keyframes status-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.toast-in {
+  animation: toast-in 0.22s ease-out;
+}
+
+/* Radix Select + Dialog (shadcn primitives) enter/exit motion. */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pop-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.98);
+  }
+}
+
+.select-content {
+  transform-origin: var(--radix-select-content-transform-origin);
+}
+.select-content[data-state="open"] {
+  animation: pop-in 0.14s ease-out;
+}
+.select-content[data-state="closed"] {
+  animation: pop-out 0.1s ease-in;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes dialog-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+}
+
+.dialog-content {
+  transform: translate(-50%, -50%);
+}
+
+.dialog-overlay[data-state="open"] {
+  animation: fade-in 0.2s ease-out;
+}
+.dialog-overlay[data-state="closed"] {
+  animation: fade-out 0.15s ease-in;
+}
+.dialog-content[data-state="open"] {
+  animation: dialog-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dialog-content[data-state="closed"] {
+  animation: dialog-out 0.16s ease-in;
+}
+
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tab-panel[data-state="active"] {
+  animation: tab-in 0.24s ease-out;
+}
+
+@media (max-width: 640px) {
+  .app-aurora {
+    filter: blur(80px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

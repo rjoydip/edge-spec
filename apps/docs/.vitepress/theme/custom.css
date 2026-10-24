@@ -1,0 +1,49 @@
+/* VitePress theme mapping. The raw brand values live in @edge-spec/ui. */
+
+:root {
+  --vp-font-family-base: var(--edge-font-sans);
+  --vp-font-family-mono: var(--edge-font-mono);
+
+  --vp-c-brand-1: var(--edge-brand-600);
+  --vp-c-brand-2: var(--edge-brand-700);
+  --vp-c-brand-3: var(--edge-brand-800);
+  --vp-c-brand-soft: var(--edge-brand-soft-light);
+}
+
+.dark {
+  --vp-c-brand-1: var(--edge-brand-300);
+  --vp-c-brand-2: var(--edge-brand-400);
+  --vp-c-brand-3: var(--edge-brand-500);
+  --vp-c-brand-soft: var(--edge-brand-soft-dark);
+}
+
+/* The dashboard's gradient brand mark, applied to the home hero name. */
+.VPHero .name {
+  background: linear-gradient(120deg, var(--vp-c-brand-1), var(--edge-brand-gradient-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html:not(.dark) .VPHero .name {
+  background: linear-gradient(
+    120deg,
+    var(--edge-brand-gradient-start-light),
+    var(--edge-brand-gradient-end-light)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.VPHero .text {
+  max-width: 42rem;
+}
+
+/* Keep the same rounded, glassy feel as the app. */
+.VPFeature {
+  border-radius: 14px;
+}
+
+.vp-doc h2 {
+  border-top-color: var(--vp-c-divider);
+}

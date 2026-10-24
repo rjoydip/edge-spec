@@ -5,7 +5,7 @@ on:
   pull_request:
 
 # No Cloudflare credentials needed: this only checks formatting, lint, types,
-# tests, and that both bundles build.
+# tests, and that the workspace bundles and docs build.
 jobs:
   check:
     runs-on: ubuntu-latest

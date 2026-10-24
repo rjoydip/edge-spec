@@ -1,8 +1,9 @@
 node_modules/
 dist/
 .wrangler/
-docs/.vitepress/dist/
-docs/.vitepress/cache/
+apps/docs/.vitepress/dist/
+apps/docs/.vitepress/cache/
 .dev.vars
 *.log
 .DS_Store
+design.sample.ts

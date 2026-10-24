@@ -1,15 +1,18 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc"],
-  "categories": {
-    "correctness": "error"
-  },
+  "categories": { "correctness": "error" },
   "rules": {
     "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "typescript/no-explicit-any": "error"
   },
-  "ignorePatterns": ["dist", "node_modules", "**/*.tsbuildinfo", "design.sample.ts"],
-  "env": {
-    "builtin": true
-  }
+  "ignorePatterns": [
+    "dist",
+    "node_modules",
+    "**/*.tsbuildinfo",
+    "apps/docs/.vitepress/dist",
+    "apps/docs/.vitepress/cache",
+    "design.sample.ts"
+  ],
+  "env": { "builtin": true }
 }
