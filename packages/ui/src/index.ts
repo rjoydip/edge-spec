@@ -8,5 +8,6 @@ export * from "./components/select";
 export * from "./components/slider";
 export * from "./components/switch";
 export * from "./components/tabs";
+export * from "./components/textarea";
 export * from "./components/view-tabs";
 export { cn } from "./lib/utils";

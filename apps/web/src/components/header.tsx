@@ -1,16 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
+  Boxes,
+  Cloud,
+  Container,
   FolderGit2,
   GitBranch,
   KeyRound,
+  Layers,
   Moon,
   RefreshCw,
   Settings,
+  ShieldCheck,
   Sun,
+  Triangle,
+  Wrench,
+  Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { fetchBranches } from "@/api";
 import { providerById, parseRepoInput } from "@edge-spec/core/catalog";
+import { SANDBOX_PROVIDERS, type SandboxProviderId } from "@edge-spec/core/sandbox";
 import { isLocalPathInput } from "@/lib/local-path";
 import {
   Badge,
@@ -50,6 +60,25 @@ interface HeaderProps {
   onOpenSettings: () => void;
   /** Opens Settings at the provider section. */
   onOpenProvider: () => void;
+  /** Opens Settings at the sandbox section. */
+  onOpenSandbox: () => void;
+}
+
+/** A glyph and colour per runner driver; the runner itself is chosen in Settings. */
+const SANDBOX_ICONS: Record<SandboxProviderId, { icon: LucideIcon; color: string }> = {
+  auto: { icon: Layers, color: "text-zinc-400" },
+  docker: { icon: Container, color: "text-sky-400" },
+  podman: { icon: Boxes, color: "text-purple-400" },
+  bwrap: { icon: ShieldCheck, color: "text-emerald-400" },
+  e2b: { icon: Cloud, color: "text-orange-400" },
+  vercel: { icon: Triangle, color: "text-zinc-100" },
+  daytona: { icon: Zap, color: "text-amber-400" },
+  custom: { icon: Wrench, color: "text-pink-400" },
+};
+
+function SandboxIcon({ provider }: { provider: SandboxProviderId }) {
+  const { icon: Icon, color } = SANDBOX_ICONS[provider] ?? SANDBOX_ICONS.auto;
+  return <Icon className={cn("size-4", color)} aria-hidden="true" />;
 }
 
 /** A small number that fits on a badge: 12, 1.2k, 10k. */
@@ -78,9 +107,12 @@ export function Header({
   providerError,
   onOpenSettings,
   onOpenProvider,
+  onOpenSandbox,
 }: HeaderProps) {
   const { mode } = useAppearance();
   const provider = providerById(settings.provider);
+  const sandboxLabel =
+    SANDBOX_PROVIDERS.find((entry) => entry.id === settings.sandboxProvider)?.label ?? "Sandbox";
   const [repo, setRepo] = useState(projectInput(project));
   const [branches, setBranches] = useState<string[]>([]);
   const [branchLoading, setBranchLoading] = useState(false);
@@ -361,6 +393,21 @@ export function Header({
                   {compactNumber(quota.remaining)}
                 </span>
               )}
+            </Badge>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenSandbox}
+            title={`${sandboxLabel} — open the sandbox settings`}
+            aria-label={`Sandbox: ${sandboxLabel}, open the sandbox settings`}
+            className="hidden shrink-0 rounded-xl focus-visible:ring-2 focus-visible:ring-indigo-500/40 focus-visible:outline-none sm:block"
+          >
+            <Badge
+              variant={settings.sandboxUrl.trim() ? "accent" : "neutral"}
+              className="size-9 shrink-0 items-center justify-center p-0"
+            >
+              <SandboxIcon provider={settings.sandboxProvider} />
             </Badge>
           </button>
 

@@ -1,0 +1,17 @@
+{
+  "name": "@edge-spec/sandbox",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "typecheck": "bun check",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@edge-spec/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0"
+  }
+}

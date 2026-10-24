@@ -61,8 +61,8 @@ GitHub              ──▶ /webhook ──▶ Workflow ─┘      └─▶ 
 - `apps/worker/src/index.ts` — Hono routes, header parsing, SSE.
 - `apps/worker/src/workflow.ts` — durable webhook path (deployment-owned credentials).
 - `apps/web/src/*` — dashboard; talks only to `/api/*`.
-- `apps/cli/src/*` — terminal commands.
-- `apps/mcp/src/*` — stdio MCP server.
+- `packages/cli/src/*` — terminal commands.
+- `packages/mcp/src/*` — stdio MCP server.
 
 ---
 
@@ -167,9 +167,15 @@ class_name = "TestGenerationWorkflow"
 
 ## 6. Data model
 
-- `Gap` — `path`, `testPath`, `risk` (`high|medium|low`), `exports[]`, `reason`.
-  No invented coverage percentage; a file is a gap or it is not.
-- `ScanResult` — `repo`, `ref`, `scanned`, `gaps[]`.
+- `Gap` — `path`, `testPath`, `risk` (`high|medium|low`), `exports[]`, `reason`,
+  optional `kind` (`missing|coverage|api|unsupported`), `language`, `evidence`.
+  A file with no test is `missing`; an existing test below the target is
+  `coverage`; an OpenAPI operation without a contract test is `api`; a language
+  EdgeSpec cannot generate for is `unsupported` (informational). No invented
+  coverage percentage: coverage is only a fact from a runner's LCOV report.
+- `ScanResult` — `repo`, `ref`, `scanned`, `gaps[]` (missing only, old clients),
+  plus `coverageGaps`, `apiGaps`, `unsupported`, `totals`, `truncated` and
+  `coverageStatus` (`not-run|unavailable|measured`).
 - `Generation` — `sourcePath`, `testPath`, `code`, `provider`, `model`.
 - `Validation` — `ok`, `verified`, `output`, `durationMs`.
 - `RunEvent` — `{ type: "log" | "step" | "result" | "error", ... }` streamed over SSE.
@@ -209,17 +215,18 @@ Rules:
 
 ## 8. API surface
 
-| Method | Path                | Purpose                                           |
-| :----- | :------------------ | :------------------------------------------------ |
-| `GET`  | `/api/health`       | Liveness                                          |
-| `GET`  | `/api/catalog`      | Providers, models, defaults (drives Settings)     |
-| `GET`  | `/api/branches`     | Branch names + default branch for the header      |
-| `POST` | `/api/scan`         | `{ repo, ref }` → gaps                            |
-| `POST` | `/api/run`          | SSE stream: scan → generate → validate → PR       |
-| `POST` | `/api/generate`     | Single generation (used by the diff view's Retry) |
-| `POST` | `/api/pull-request` | Open a PR for an already-generated test           |
-| `POST` | `/webhook`          | GitHub push → durable Workflow                    |
-| `GET`  | `/api/runs/:id`     | Workflow instance status (automation path)        |
+| Method | Path                | Purpose                                                     |
+| :----- | :------------------ | :---------------------------------------------------------- |
+| `GET`  | `/api/health`       | Liveness                                                    |
+| `GET`  | `/api/catalog`      | Providers, models, defaults (drives Settings)               |
+| `GET`  | `/api/branches`     | Branch names + default branch for the header                |
+| `POST` | `/api/scan`         | `{ repo, ref }` → missing/coverage/api/unsupported + totals |
+| `POST` | `/api/coverage`     | Run the suite with coverage; `coverage` gaps + status       |
+| `POST` | `/api/run`          | SSE stream: scan → generate → validate → PR (bounded pool)  |
+| `POST` | `/api/generate`     | Single generation (used by the diff view's Retry)           |
+| `POST` | `/api/pull-request` | Open a PR for an already-generated test                     |
+| `POST` | `/webhook`          | GitHub push → durable Workflow                              |
+| `GET`  | `/api/runs/:id`     | Workflow instance status (automation path)                  |
 
 Headers: `x-github-token`, `x-ai-key`, `x-ai-base-url` (private provider only).
 

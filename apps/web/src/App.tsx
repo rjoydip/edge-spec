@@ -12,12 +12,15 @@ import {
   Zap,
 } from "lucide-react";
 import type {
+  CoverageStatus,
   Gap,
   GeneratedTest,
   Generation,
   RateLimitInfo,
   RepositoryOverview,
   RunEvent,
+  ScanTotals,
+  ScanTruncation,
   StepId,
   Validation,
 } from "@edge-spec/core/types";
@@ -121,8 +124,15 @@ export function App() {
   const [gaps, setGaps] = useState<Gap[]>([]);
   const [overview, setOverview] = useState<RepositoryOverview>();
   const [selected, setSelected] = useState("");
-  /** The test being written or previewed right now. */
-  const [live, setLive] = useState<{ generation?: Generation; validation?: Validation }>({});
+  /** The test being written or previewed right now, one pair per source path. */
+  const [live, setLive] = useState<
+    Record<string, { generation?: Generation; validation?: Validation }>
+  >({});
+  /** Category totals and honesty flags from the last scan. */
+  const [scanTotals, setScanTotals] = useState<ScanTotals>();
+  const [scanTruncated, setScanTruncated] = useState<ScanTruncation>();
+  const [coverageStatus, setCoverageStatus] = useState<CoverageStatus>();
+  const [coverageReason, setCoverageReason] = useState<string>();
   /** The path shown in the preview pane. */
   const [previewPath, setPreviewPath] = useState("");
   /** Whether the preview shows the test or what the file is missing. */
@@ -218,25 +228,35 @@ export function App() {
 
   // A test joins the ready list once it has both code and a validation result.
   useEffect(() => {
-    const { generation, validation } = live;
-    if (!generation || !validation) return;
+    const pairs = Object.values(live).filter(
+      (item): item is { generation: Generation; validation: Validation } =>
+        Boolean(item.generation && item.validation),
+    );
+    if (pairs.length === 0) return;
     setGenerated((current) => {
-      const index = current.findIndex(
-        (item) => item.generation.sourcePath === generation.sourcePath,
-      );
-      const existing = current[index];
-      if (
-        existing &&
-        existing.generation.code === generation.code &&
-        existing.validation === validation
-      ) {
-        return current;
+      let next = current;
+      for (const { generation, validation } of pairs) {
+        const index = next.findIndex(
+          (item) => item.generation.sourcePath === generation.sourcePath,
+        );
+        const existing = next[index];
+        if (
+          existing &&
+          existing.generation.code === generation.code &&
+          existing.validation === validation
+        ) {
+          continue;
+        }
+        const item = { generation, validation };
+        if (index === -1) {
+          next = [...next, item];
+        } else {
+          const copy = next.slice();
+          copy[index] = item;
+          next = copy;
+        }
       }
-      const next = { generation, validation };
-      if (index === -1) return [...current, next];
-      const copy = current.slice();
-      copy[index] = next;
-      return copy;
+      return next;
     });
   }, [live]);
 
@@ -303,41 +323,56 @@ export function App() {
         case "gaps": {
           const ordered = folderFirst(event.gaps, project.folder);
           setGaps(event.gaps);
+          if (event.totals) setScanTotals(event.totals);
           if (event.overview) setOverview(event.overview);
+          if (event.coverageStatus !== undefined) setCoverageStatus(event.coverageStatus);
+          if (event.coverageReason !== undefined) setCoverageReason(event.coverageReason);
           if (ordered[0]) setSelected(ordered[0].path);
           break;
         }
-        case "generation":
-          setLive({ generation: event.generation });
-          setPreviewPath(event.generation.sourcePath);
+        case "generation": {
+          const path = event.generation.sourcePath;
+          setLive((current) => ({ ...current, [path]: { generation: event.generation } }));
+          setPreviewPath(path);
           setVerification("none");
           setPullUrls((current) => {
-            if (!(event.generation.sourcePath in current)) return current;
+            if (!(path in current)) return current;
             const next = { ...current };
-            delete next[event.generation.sourcePath];
+            delete next[path];
             return next;
           });
           break;
+        }
         case "validation": {
-          setLive((current) => ({ ...current, validation: event.validation }));
+          const path = event.sourcePath;
+          if (path) {
+            setLive((current) => ({
+              ...current,
+              [path]: { ...current[path], validation: event.validation },
+            }));
+          }
           setVerification(verificationOf(event.validation));
-          const sourcePath = live.generation?.sourcePath;
-          if (sourcePath) {
+          if (path) {
             if (event.validation.ok) {
-              setFailedGapPaths((current) => current.filter((p) => p !== sourcePath));
+              setFailedGapPaths((current) => current.filter((p) => p !== path));
             } else {
               setFailedGapPaths((current) => {
-                if (current.includes(sourcePath)) return current;
-                return [...current, sourcePath];
+                if (current.includes(path)) return current;
+                return [...current, path];
               });
             }
           }
           break;
         }
+        case "api":
+          // Contract results arrive with their own log lines; the preview
+          // already shows the generated file through the generation event.
+          break;
         case "result": {
           if (event.generation) {
-            setLive((current) => ({ ...current, generation: event.generation }));
-            setPreviewPath(event.generation.sourcePath);
+            const path = event.generation.sourcePath;
+            setLive((current) => ({ ...current, [path]: { generation: event.generation } }));
+            setPreviewPath(path);
           }
           // A run covers every gap it could: the first ready test is the one
           // that opens in the preview.
@@ -462,6 +497,10 @@ export function App() {
     try {
       const result = await scanRepo(project);
       setGaps(result.gaps);
+      if (result.totals) setScanTotals(result.totals);
+      if (result.truncated) setScanTruncated(result.truncated);
+      setCoverageStatus(result.coverageStatus ?? "not-run");
+      setCoverageReason(result.coverageReason);
       if (result.overview) setOverview(result.overview);
       const first = folderFirst(result.gaps, project.folder)[0];
       if (first) setSelected(first.path);
@@ -498,7 +537,7 @@ export function App() {
 
   /** The gaps tab previews the test of the focused gap. */
   const gapItem = generated.find((item) => item.generation.sourcePath === selected);
-  const gapLive = live.generation?.sourcePath === selected ? live : undefined;
+  const gapLive = live[selected];
   const gapGeneration = gapItem?.generation ?? gapLive?.generation;
   const gapValidation = gapItem?.validation ?? gapLive?.validation;
   const gapPullUrl = gapItem ? pullUrls[gapItem.generation.sourcePath] : undefined;
@@ -545,7 +584,10 @@ export function App() {
   const showGenerated = (item: GeneratedTest) => {
     setPreviewPath(item.generation.sourcePath);
     setPreviewMode("code");
-    setLive({ generation: item.generation, validation: item.validation });
+    setLive((current) => ({
+      ...current,
+      [item.generation.sourcePath]: { generation: item.generation, validation: item.validation },
+    }));
     setVerification(verificationOf(item.validation));
     setSelected(item.generation.sourcePath);
   };
@@ -574,7 +616,10 @@ export function App() {
         delete next[path];
         return next;
       });
-      setLive({ generation: result.generation, validation: result.validation });
+      setLive((current) => ({
+        ...current,
+        [path]: { generation: result.generation, validation: result.validation },
+      }));
       setPreviewPath(path);
       setVerification(verificationOf(result.validation));
       setPullUrls((current) => {
@@ -766,7 +811,10 @@ export function App() {
     setPreviewMode(mode);
     const existing = generated.find((item) => item.generation.sourcePath === gap.path);
     if (existing) {
-      setLive({ generation: existing.generation, validation: existing.validation });
+      setLive((current) => ({
+        ...current,
+        [gap.path]: { generation: existing.generation, validation: existing.validation },
+      }));
       setVerification(verificationOf(existing.validation));
     }
   };
@@ -810,6 +858,7 @@ export function App() {
           providerError={providerError}
           onOpenSettings={() => openSettings()}
           onOpenProvider={() => openSettings("provider")}
+          onOpenSandbox={() => openSettings("runner")}
         />
 
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="space-y-4">
@@ -928,6 +977,11 @@ export function App() {
                   parallel={settings.parallelGeneration}
                   onParallelChange={(value) => setSettings({ parallelGeneration: value })}
                   pipelineRunning={running}
+                  {...(scanTotals ? { totals: scanTotals } : {})}
+                  {...(scanTruncated ? { truncated: scanTruncated } : {})}
+                  {...(coverageStatus ? { coverageStatus } : {})}
+                  {...(coverageReason ? { coverageReason } : {})}
+                  hasRunner={hasRunner}
                   selected={selected}
                   checked={checkedPaths}
                   onSelect={(gap, mode) => selectGap(gap, mode)}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  classifyTree,
   describeRepository,
   expectedTestPath,
   extractExports,
@@ -204,6 +205,46 @@ describe("packageFacts", () => {
 
   it("says nothing when the file is not a package manifest", () => {
     expect(packageFacts("not json")).toEqual({});
+  });
+});
+
+describe("classifyTree", () => {
+  it("finds a test in an ancestor test directory, not just next to the source", () => {
+    const { missing, testsBySource } = classifyTree([
+      "packages/api/src/user.ts",
+      "packages/api/tests/user.test.ts",
+    ]);
+    expect(missing).toHaveLength(0);
+    expect(testsBySource.get("packages/api/src/user.ts")).toEqual([
+      "packages/api/tests/user.test.ts",
+    ]);
+  });
+
+  it("marks a missing test with a kind and a language", () => {
+    const { missing } = classifyTree(["src/untested.ts"]);
+    expect(missing).toHaveLength(1);
+    expect(missing[0]).toMatchObject({
+      path: "src/untested.ts",
+      kind: "missing",
+      language: "TypeScript",
+    });
+  });
+
+  it("reports a language EdgeSpec cannot generate for instead of hiding it", () => {
+    const { missing, unsupported } = classifyTree([
+      "src/app.ts",
+      "src/app.test.ts",
+      "scripts/tool.py",
+      "cmd/server.go",
+    ]);
+    expect(missing).toHaveLength(0);
+    expect(unsupported.map((gap) => gap.path)).toEqual(["cmd/server.go", "scripts/tool.py"]);
+    expect(unsupported[0]).toMatchObject({ kind: "unsupported", language: "Go" });
+  });
+
+  it("keeps a test infra file out of source discovery", () => {
+    const { missing } = classifyTree(["test/mock.ts", "src/__tests__/helper.ts"]);
+    expect(missing).toHaveLength(0);
   });
 });
 

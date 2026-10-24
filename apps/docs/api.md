@@ -8,16 +8,17 @@ All request and response bodies are JSON unless noted. SSE is used only by
 
 ### Headers
 
-| Header                           | Used by                                            | Purpose                                                                                    |
-| -------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `content-type: application/json` | all POST routes                                    | Required for JSON parsing                                                                  |
-| `x-github-token`                 | scan, branches, run, generate, pull-request, pulls | Optional GitHub token. Needed for private repos and higher rate limits                     |
-| `x-ai-key`                       | run, generate                                      | Provider key. Required by known providers; optional for Workers AI and the custom provider |
-| `x-ai-base-url`                  | run, generate                                      | Base URL for the custom provider (`private` id) only. Ignored for known providers          |
-| `x-sandbox-url`                  | run, generate                                      | A test runner you own; it executes the suite instead of a static check                     |
-| `x-sandbox-key`                  | run, generate                                      | Key for that runner                                                                        |
-| `x-deployment-ai`                | run, generate                                      | Asks for the deployment's Workers AI binding; the dashboard sends it on localhost only     |
-| `x-hub-signature-256`            | webhook                                            | HMAC SHA-256 of the raw body, when a secret is configured                                  |
+| Header                           | Used by                                            | Purpose                                                                                       |
+| -------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `content-type: application/json` | all POST routes                                    | Required for JSON parsing                                                                     |
+| `x-github-token`                 | scan, branches, run, generate, pull-request, pulls | Optional GitHub token. Needed for private repos and higher rate limits                        |
+| `x-ai-key`                       | run, generate                                      | Provider key. Required by known providers; optional for Workers AI and the custom provider    |
+| `x-ai-base-url`                  | run, generate                                      | Base URL for the custom provider (`private` id) only. Ignored for known providers             |
+| `x-sandbox-url`                  | sandbox health, run, generate                      | A test runner you own; it executes the suite instead of a static check                        |
+| `x-sandbox-key`                  | sandbox health, run, generate                      | Key for that runner                                                                           |
+| `x-sandbox-config`               | sandbox health, run, generate                      | JSON knobs for that runner: provider, setup, env, server, timeout, concurrency, coverage, cwd |
+| `x-deployment-ai`                | run, generate                                      | Asks for the deployment's Workers AI binding; the dashboard sends it on localhost only        |
+| `x-hub-signature-256`            | webhook                                            | HMAC SHA-256 of the raw body, when a secret is configured                                     |
 
 ### Errors
 
@@ -102,6 +103,40 @@ it to avoid promising an executed test.
 
 ---
 
+## `POST /api/sandbox/health`
+
+Probes a sandbox runner's `GET /health`. The Worker makes the request, so the
+browser never has to reach an arbitrary origin and the key is not exposed to it.
+
+```json
+{ "url": "https://sandbox.example.com", "config": { "timeoutMs": 180000 } }
+```
+
+`url` may be omitted when `x-sandbox-url` or `SANDBOX_RUNNER_URL` supplies one.
+The key comes from `x-sandbox-key` or `SANDBOX_API_KEY`. On a deployed Worker,
+loopback and private targets are refused; a local Worker may use
+`http://localhost`.
+
+```json
+{
+  "ok": true,
+  "version": "0.1.0",
+  "capabilities": ["v2", "coverage", "server"],
+  "provider": "docker",
+  "isolation": "container"
+}
+```
+
+`provider` is the driver the runner actually used, and `isolation` is
+`namespace`, `container`, `vm` or `none`. A runner that was asked for another
+driver answers `{ "ok": false, "error": "This runner uses docker, not podman." }`
+instead of running the suite somewhere unexpected.
+
+A runner that cannot be reached answers `{ "ok": false, "error": "…" }` with
+status `200`; only invalid input is a `4xx`.
+
+---
+
 ## `GET /api/branches?repo=owner/name`
 
 Branch names for the header picker. The default branch is returned separately so
@@ -121,10 +156,19 @@ repositories and required for private ones.
 
 ## `POST /api/scan`
 
-Lists source files without a sibling test, and describes the repository: the
+Lists the source files that need a test, and describes the repository: the
 languages, the package manager, the runtime, the versions and the frameworks
 the configuration files reveal. Every fact is read from the tree; `package.json`
 adds the name, version and engine range when it exists.
+
+The scan separates four categories:
+
+| Category      | Meaning                                                                            |
+| :------------ | :--------------------------------------------------------------------------------- |
+| `missing`     | Supported source file with no test in a sibling or ancestor test location          |
+| `coverage`    | A test exists and a runner report says lines/branches fall short (needs a sandbox) |
+| `api`         | An OpenAPI operation has no test named `METHOD /path`                              |
+| `unsupported` | A language EdgeSpec cannot generate for yet (Python, Go, Rust, …); informational   |
 
 Request:
 
@@ -153,9 +197,30 @@ Response:
       "testPath": "adapters/aws-lambda/src/index.test.ts",
       "risk": "medium",
       "exports": ["handler"],
-      "reason": "No index.test.ts next to this file."
+      "reason": "No index.test.ts found next to this file or in an ancestor test directory.",
+      "kind": "missing",
+      "language": "TypeScript"
     }
   ],
+  "coverageGaps": [],
+  "apiGaps": [
+    {
+      "path": "openapi.yaml#GET /users/{id}",
+      "testPath": "tests/api/openapi.contract.test.ts",
+      "risk": "medium",
+      "exports": [],
+      "reason": "No contract test is named \"GET /users/{id}\".",
+      "kind": "api",
+      "evidence": {
+        "specPath": "openapi.yaml",
+        "operation": { "method": "GET", "path": "/users/{id}", "operationId": "getUser" }
+      }
+    }
+  ],
+  "unsupported": [],
+  "totals": { "missing": 812, "coverage": 0, "api": 1, "unsupported": 0 },
+  "truncated": { "missing": true, "coverage": false, "api": false },
+  "coverageStatus": "not-run",
   "overview": {
     "languages": [{ "name": "TypeScript", "count": 412 }],
     "packageManager": "bun",
@@ -178,18 +243,75 @@ Response:
 
 Behaviour:
 
-- At most **25** gaps are returned.
+- `gaps` stays **missing-only** for old clients; `totals` carries every count.
+- At most **25** missing gaps are returned; `truncated.missing` says so.
+  The classifier itself has no silent 50-file cap.
 - The first **8** are enriched with exported symbols and recalculated risk.
   Enrichment failures are cosmetic; the gap is still returned.
+- `coverageStatus` is `not-run` here: the cheap scan never measures coverage.
+  Only `POST /api/coverage` does, and it reports `measured` or `unavailable`
+  with a reason. No report means "not measured", never 0 %.
 - `risk` is a path heuristic, not a coverage measurement.
 - A missing token works for public repositories, subject to GitHub's anonymous
   rate limit.
 
 ---
 
+## `POST /api/coverage`
+
+Runs the repository's own test command in a sandbox runner with coverage, and
+classifies files whose tests exist but whose lines or branches fall short of
+`coverageTarget`.
+
+Request:
+
+```json
+{ "repo": "acme/api", "ref": "main", "coverageTarget": 90 }
+```
+
+Needs `x-sandbox-url` (or `SANDBOX_RUNNER_URL`); without a runner the route
+returns `400`. Non-secret knobs travel in `x-sandbox-config`, exactly as a run
+does. The test command comes from `package.json`/CI detection; EdgeSpec never
+invents one.
+
+Response:
+
+```json
+{
+  "repo": "acme/api",
+  "ref": "main",
+  "scanned": 120,
+  "coverageGaps": [
+    {
+      "path": "src/math.ts",
+      "testPath": "src/math.test.ts",
+      "risk": "medium",
+      "exports": [],
+      "reason": "uncovered lines 12-14, 31; line rate 64% vs target 90%. Extend src/math.test.ts.",
+      "kind": "coverage",
+      "evidence": {
+        "testFiles": ["src/math.test.ts"],
+        "lineRate": 64,
+        "uncoveredLines": [12, 13, 14, 31]
+      }
+    }
+  ],
+  "totals": { "missing": 8, "coverage": 1, "api": 0, "unsupported": 0 },
+  "truncated": { "missing": false, "coverage": false, "api": false },
+  "coverageStatus": "measured"
+}
+```
+
+A file with no test stays `missing`; coverage never re-labels it. If the runner
+is unreachable, the suite fails, or no `lcov.info` comes back, the status is
+`unavailable` with `coverageReason` from the runner — never a percentage.
+
+---
+
 ## `POST /api/run`
 
-Runs the full pipeline for the **first** gap and streams progress as SSE.
+Runs the pipeline over the configured number of gaps and streams progress as
+SSE.
 
 Request:
 
@@ -202,10 +324,18 @@ Request:
   "accountId": "0123456789abcdef0123456789abcdef",
   "maxRetries": 2,
   "maxFiles": 10,
+  "concurrency": 3,
+  "mode": "unit",
   "strictTypes": true,
   "coverageTarget": 90
 }
 ```
+
+`concurrency` is the number of files in flight, clamped `1–6` (default `3`); a
+sandbox's own `concurrency` cap wins when it is lower. `mode` is `unit` (the
+default), `api`, or `both`. API mode parses OpenAPI JSON/YAML specs, generates
+deterministic contract tests (no AI), runs them against the app booted by the
+sandbox, and emits one `api` event with per-operation results.
 
 `accountId` is a 32-character Cloudflare account ID. It is only used by
 Workers AI, and only together with `x-ai-key`; otherwise the deployment's AI

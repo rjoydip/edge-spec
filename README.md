@@ -53,12 +53,13 @@ The repository is a Bun workspace monorepo:
 ```text
 apps/web/        React dashboard
 apps/worker/     Hono routes, bindings, durable Workflow
-apps/cli/        terminal client
-apps/mcp/        stdio MCP server
 apps/docs/       this documentation site
 packages/core/   pure pipeline logic (scanner, AI, GitHub, validation)
 packages/client/ HTTP client shared by the CLI and MCP server
 packages/ui/     shared React primitives and theme tokens
+packages/cli/    terminal client
+packages/mcp/    stdio MCP server
+packages/sandbox/ self-hosted sandbox runner (bwrap/Docker/Podman/hosted)
 examples/        local test-generation fixtures and reference tests
 ```
 

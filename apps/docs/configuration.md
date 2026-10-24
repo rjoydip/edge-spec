@@ -50,6 +50,7 @@ Open **Settings** in the header for everything except the repository.
 | Self-correction retries | `2`                                        | 0–5 (clamped)                                                         |
 | Parallel generation     | on                                         | Generate several tests side by side when more than one is picked      |
 | Files per run           | `10`                                       | How many gap files one pipeline run covers, 1–50 (clamped)            |
+| Files in flight         | `3`                                        | Per-file tasks in one run, 1–6 (clamped; a sandbox cap wins)          |
 | Test runner URL         | _(empty)_                                  | A runner you own that executes the suite, so validation is a real run |
 | Strict TypeScript       | on                                         | Reject `any`, `as any` and `@ts-ignore`-style suppressions            |
 | Appearance              | dark / indigo                              | Immediate theme and accent                                            |
@@ -169,61 +170,157 @@ custom path is simpler.
 
 ## Pipeline knobs
 
-| Knob                 | Default | Bounds  | Notes                                                         |
-| -------------------- | ------- | ------- | ------------------------------------------------------------- |
-| `coverageTarget`     | 90      | 0–100   | Prompt guidance only; no coverage is measured                 |
-| `maxRetries`         | 2       | 0–5     | Extra generations after a failed validation                   |
-| `parallelGeneration` | true    | boolean | Generate the picked tests in parallel instead of one by one   |
-| `maxFiles`           | 10      | 1–50    | How many gap files one pipeline run generates a test for      |
-| `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments |
+| Knob                 | Default | Bounds  | Notes                                                                 |
+| -------------------- | ------- | ------- | --------------------------------------------------------------------- |
+| `coverageTarget`     | 90      | 0–100   | Coverage threshold; with a runner, files below it are `coverage` gaps |
+| `maxRetries`         | 2       | 0–5     | Extra generations after a failed validation                           |
+| `parallelGeneration` | true    | boolean | Generate the picked tests in parallel instead of one by one           |
+| `maxFiles`           | 10      | 1–50    | How many gap files one pipeline run generates a test for              |
+| `concurrency`        | 3       | 1–6     | Files generated and validated at once; a lower sandbox cap wins       |
+| `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments         |
 
 Bad values are clamped, not rejected. `strictTypes` and `parallelGeneration`
 default to true
 unless the request explicitly sends `false`.
 
 A run covers the first `maxFiles` gaps, highest risk first, and every test it
-writes waits in **Review** for a pull request.
+writes waits in **Review** for a pull request. Files run through a bounded pool:
+`ready` stays in scan order even though events interleave, and each event names
+its `sourcePath`. One file that exhausts its retries fails alone.
 
 ## Sandbox runner (optional)
 
 A runner executes the generated suite, so the result is a real pass or fail
 instead of a static check. Without one, the dashboard shows **static check
-only** and `validation.verified` is false.
+only** and `validation.verified` is false. A runner is the security boundary:
+generated tests and repository code are untrusted, so run them in a hosted
+microVM or on Linux under `bwrap`—never directly on the Worker or a shared host.
 
 There are two ways to point at a runner:
 
-1. **Settings → Test runner URL.** The URL travels in the `x-sandbox-url`
-   header and its key in `x-sandbox-key`. The Worker calls it, so it has to be
-   reachable from the internet; `http://localhost` only works with a Worker
-   running on your own machine. Only `https` is accepted, apart from a local
-   runner.
-2. **Deployment secret.** `SANDBOX_RUNNER_URL` (and `SANDBOX_API_KEY`) is used
-   when the request carries no runner of its own.
+1. **Settings → Sandbox.** The URL travels in the `x-sandbox-url` header, its key
+   in `x-sandbox-key`, and the non-secret knobs in one `x-sandbox-config` JSON
+   header. The Worker calls it, so it has to be reachable from it;
+   `http://localhost` only works with a Worker running on your own machine. A
+   deployed Worker rejects loopback and private targets.
+2. **Deployment defaults.** `SANDBOX_RUNNER_URL` and `SANDBOX_API_KEY` are used
+   when the request carries no runner of its own. Caller config wins.
 
-The Worker sends:
+`x-sandbox-config` accepts `provider` (`auto`, `docker`, `podman`, `bwrap`,
+`e2b`, `vercel`, `daytona` or `custom`), `setup` (commands, one per line in the
+UI), `env` (`KEY=VALUE`), `server` (`command`, `readyUrl`, `timeoutMs`),
+`timeoutMs` (clamped 10 s – 10 min), `concurrency` (1–4), `coverage`, `cwd`,
+`allowRepoToken` and `v2`.
+Unknown fields, bad types and escaping paths are rejected with a `400` naming
+the field; validation lives in `packages/core/src/sandbox.ts`.
+
+The Settings picker is scoped to where the dashboard runs. Under the Vite dev
+server (`bun run dev`) it lists `docker`, `podman` and `bwrap` next to the
+hosted drivers; the Worker lists only `auto`, `e2b`, `vercel`, `daytona` and
+`custom` — including `wrangler dev` on localhost, which serves the built
+assets — and a stored local driver is reset to `auto`. The runner itself still
+accepts every id, so the header contract is unchanged.
+
+A named `provider` is an assertion: it travels as `x-sandbox-provider`, and a
+runner using another driver refuses the request instead of silently running it
+elsewhere. `auto` and `custom` assert nothing. The runner's `/health` reports
+`provider` and `isolation` (`namespace`, `container`, `vm` or `none`), and the
+Settings dialog hides the app and coverage knobs a tested runner does not
+support.
+
+### The contract
+
+A plain `{files, command}` body stays v1, so an existing runner keeps working.
+Any v2 feature upgrades the request:
 
 ```json
 {
-  "files": {
-    "src/math.ts": "export const add = (a, b) => a + b;",
-    "src/math.test.ts": "import { describe, it, expect } from \"bun:test\";\n…"
-  },
-  "command": "bun test"
+  "v": 2,
+  "repo": { "url": "https://github.com/acme/api.git", "ref": "main" },
+  "files": { "src/math.test.ts": "…" },
+  "cwd": "packages/api",
+  "setup": ["bun install --frozen-lockfile"],
+  "env": { "NODE_ENV": "test" },
+  "server": { "command": "bun run dev", "readyUrl": "http://127.0.0.1:3000/health" },
+  "coverage": { "format": "lcov" },
+  "command": "bun test",
+  "timeoutMs": 180000
 }
 ```
 
-with `authorization: Bearer <SANDBOX_API_KEY>` when a key is configured, and a
-120-second timeout.
-
-The AI call itself gets 180 seconds. A provider that is merely slow is told
-apart from one that is gone: the request ends with _the provider did not answer
-within 180 seconds_, never with _unreachable_.
-
-It expects:
+The runner replies with `exitCode`, `stdout`, `stderr`, the request `files` read
+back (so a formatter can return its work), `artifacts` and, when it parsed the
+report, `coverage`:
 
 ```json
-{ "exitCode": 0, "stdout": "…", "stderr": "…" }
+{
+  "exitCode": 0,
+  "stdout": "…",
+  "files": { "src/math.test.ts": "…formatted…" },
+  "artifacts": { "coverage/lcov.info": "SF:src/math.ts\nDA:1,1\nend_of_record\n" },
+  "coverage": { "lines": { "covered": 42, "total": 50 }, "files": [] }
+}
 ```
+
+`setup` runs sequentially and stops on failure. A failed clone, setup or app
+boot is `environmentError: "setup" | "server"`; a killed run is `timedOut`.
+Neither is a failed test, and neither is ever reported as passed. Coverage is
+read from `coverage/lcov.info` (or the runner's parsed field); with no report the
+result is “not measured”, never 0 %.
+
+### The deployment's own runner
+
+The repository ships `packages/sandbox`, a reference runner with no Dockerfile. It
+is a Bun HTTP service that runs each request in a `bwrap` namespace, or in a
+Docker Desktop / Podman container when that is all the machine has:
+
+```bash
+bun run sandbox                                  # 127.0.0.1:8788, auto-detect
+SANDBOX_PROVIDER=docker bun run sandbox          # Docker Desktop
+SANDBOX_PROVIDER=podman SANDBOX_IMAGE=node:22 bun run sandbox
+```
+
+`auto` prefers `bwrap`, then Docker, then Podman. Containers pull an existing
+image (`oven/bun:1` by default); the repository still has no Dockerfile. A
+container gets its own network and a published port for the app's readiness
+URL; `bwrap` stays the stronger boundary because its network is empty unless
+`SANDBOX_ALLOW_EGRESS=1`.
+
+Hosted providers are the same runner with `SANDBOX_PROVIDER=e2b|vercel|daytona`
+and their key in the runner's environment. Install the SDK first
+(`bun add e2b`, `bun add @vercel/sandbox`, or `bun add @daytona/sdk`, all with
+`--cwd packages/sandbox`). Vercel also needs `VERCEL_TEAM_ID` and
+`VERCEL_PROJECT_ID`; Daytona reads `DAYTONA_API_KEY` (plus optional
+`DAYTONA_API_URL`, `DAYTONA_TARGET`, `DAYTONA_SNAPSHOT`). Keys are never part of
+the request, the dashboard config or the Worker. These providers own the
+filesystem, so the runner uploads the workspace and downloads the requested
+files; `isolation` is reported as `vm`.
+
+Point a local Worker at it with `SANDBOX_RUNNER_URL=http://127.0.0.1:8788`, or
+put it behind TLS and a key for a deployment. `POST /api/sandbox/health`
+proxies the runner's `/health`; the Settings dialog has a **Test connection**
+button for it. See `packages/sandbox/README.md` for limits, egress and
+authentication.
+
+### Your own runner
+
+Any endpoint that speaks the contract above works: pick **Custom runner** in
+Settings and give its URL and key. Two routes are enough:
+
+- `GET /health` → `{ ok, version, capabilities, provider, isolation }`. List
+  only what the runner really does: `server` if it boots the app and waits for
+  `readyUrl`, `coverage` if it reads `coverage/lcov.info`, `repo` if it clones.
+  Settings hides the knobs a runner does not list.
+- `POST /run` → the reply above. The key arrives as
+  `authorization: Bearer <key>`.
+
+`packages/sandbox` is the reference implementation of both routes;
+`packages/sandbox/custom-runner.example.ts` is a small runnable one that shells out
+to `docker run` and mounts the workspace. Copy either, or put a queue, a CI
+job or a hosted API behind the same two endpoints. Report `isolation` truthfully
+(`namespace`, `container`, `vm` or `none`): it is shown next to the result, so a
+runner without a boundary must say `none`. Generated code is untrusted — run it
+inside a boundary, never on the runner's host.
 
 ### The repository's own checks
 
@@ -256,9 +353,8 @@ Without that field the formatter step cannot rewrite the file, and the format
 check catches the difference instead.
 
 `exitCode === 0` → `ok: true, verified: true`. A non-2xx response or an
-unreachable runner → `ok: false, verified: false`. The runner should execute in a
-throwaway environment with no network and no secrets; EdgeSpec does not sandbox
-the code itself.
+unreachable runner → `verified: false` with `environmentError`. A check whose
+tool is missing is `skipped`, never a pass.
 
 ## Deployment
 

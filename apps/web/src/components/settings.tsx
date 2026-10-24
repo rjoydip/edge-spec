@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { AlertCircle, Check, KeyRound, Moon, Sun } from "lucide-react";
 import { PROVIDERS, providerById } from "@edge-spec/core/catalog";
+import { sandboxProvidersFor, type SandboxProviderId } from "@edge-spec/core/sandbox";
 import {
   Badge,
   Button,
@@ -17,10 +18,19 @@ import {
   SelectValue,
   Slider,
   Switch,
+  Textarea,
   cn,
 } from "@edge-spec/ui";
-import { isLocalHost } from "@/lib/env";
-import { clearSecrets, setSecrets, setSettings, type Secrets, type Settings } from "@/lib/settings";
+import { isLocalDashboard, isLocalHost } from "@/lib/env";
+import { checkSandbox } from "@/api";
+import {
+  clearSecrets,
+  sandboxConfigOf,
+  setSecrets,
+  setSettings,
+  type Secrets,
+  type Settings,
+} from "@/lib/settings";
 import { ACCENTS, setAccent, setMode, useAppearance } from "@/lib/theme";
 
 interface SettingsDialogProps {
@@ -96,12 +106,19 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
   const [draft, setDraft] = useState<Settings>(settings);
   const [keys, setKeys] = useState<Secrets>(secrets);
   const [wasOpen, setWasOpen] = useState(false);
+  const [probe, setProbe] = useState<{
+    busy?: boolean;
+    ok?: boolean;
+    message?: string;
+    capabilities?: string[];
+  }>({});
 
   // Re-seed the drafts exactly when the dialog opens.
   if (open && !wasOpen) {
     setWasOpen(true);
     setDraft(settings);
     setKeys(secrets);
+    setProbe({});
     // Jump to the section the reader asked for. The dialog content mounts in
     // a portal, so the scroll waits for the second frame.
     if (section) {
@@ -124,6 +141,12 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
   // only; a deployed Worker runs on the visitor's own account.
   const localBinding = workersAi && !workersAiByok && isLocalHost();
   const patch = (next: Partial<Settings>) => setDraft((current) => ({ ...current, ...next }));
+  // A tested runner tells us what it supports; before a test, show every knob.
+  const supports = (capability: string) =>
+    !probe.capabilities || probe.capabilities.includes(capability);
+  // Local drivers need a runner on this machine; a deployed dashboard hides them.
+  const local = isLocalDashboard();
+  const sandboxProviders = sandboxProvidersFor(local ? "local" : "deployed");
 
   const chooseProvider = (id: string) => {
     const next = providerById(id);
@@ -138,6 +161,35 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
     setSettings(draft);
     setSecrets(keys);
     onClose();
+  };
+
+  const testSandbox = async () => {
+    if (!draft.sandboxUrl.trim()) {
+      setProbe({ ok: false, message: "Enter a sandbox URL first." });
+      return;
+    }
+    setProbe({ busy: true, message: "Checking…" });
+    try {
+      const health = await checkSandbox(draft.sandboxUrl, keys.sandboxKey, sandboxConfigOf(draft));
+      const detail = [health.provider, health.isolation].filter(Boolean).join(" · ");
+      setProbe(
+        health.ok
+          ? {
+              ok: true,
+              message: `Runner reachable${health.version ? ` (v${health.version})` : ""}${
+                detail ? ` · ${detail}` : ""
+              }.`,
+              capabilities: health.capabilities,
+            }
+          : {
+              ok: false,
+              message: health.error ?? "The runner reported not ok.",
+              capabilities: health.capabilities,
+            },
+      );
+    } catch (error) {
+      setProbe({ ok: false, message: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   return (
@@ -182,6 +234,28 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
         title="Sandbox"
         hint="A sandbox executes the generated suite, so the result is a real pass or fail instead of a static check. Without one, EdgeSpec can only check the test statically."
       >
+        <Field label="Runner driver">
+          <Select
+            value={draft.sandboxProvider}
+            onValueChange={(value) => patch({ sandboxProvider: value as SandboxProviderId })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {sandboxProviders.map((entry) => (
+                <SelectItem key={entry.id} value={entry.id}>
+                  {entry.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-500">
+            {local
+              ? "Docker, Podman and bwrap run the suite on this machine; hosted providers work from anywhere."
+              : "Hosted providers and a custom runner only. Docker, Podman and bwrap need the local dev server (bun run dev)."}
+          </p>
+        </Field>
         <Field label="Sandbox URL">
           <Input
             value={draft.sandboxUrl}
@@ -206,10 +280,125 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
             </Button>
           </div>
         </Field>
+        <Field label="Setup commands (one per line)">
+          <Textarea
+            value={draft.sandboxSetup}
+            onChange={(event) => patch({ sandboxSetup: event.target.value })}
+            placeholder={"bun install --frozen-lockfile"}
+            spellCheck={false}
+            className="font-mono"
+          />
+        </Field>
+        <Field label="Environment (KEY=VALUE, one per line)">
+          <Textarea
+            value={draft.sandboxEnv}
+            onChange={(event) => patch({ sandboxEnv: event.target.value })}
+            placeholder={"NODE_ENV=test\nBASE_URL=http://127.0.0.1:3000"}
+            spellCheck={false}
+            className="font-mono"
+          />
+        </Field>
+        {supports("server") && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="App command (optional)">
+              <Input
+                value={draft.sandboxServerCommand}
+                onChange={(event) => patch({ sandboxServerCommand: event.target.value })}
+                placeholder="bun run dev"
+                spellCheck={false}
+                className="font-mono"
+              />
+            </Field>
+            <Field label="App ready URL (optional)">
+              <Input
+                value={draft.sandboxReadyUrl}
+                onChange={(event) => patch({ sandboxReadyUrl: event.target.value })}
+                placeholder="http://127.0.0.1:3000/health"
+                spellCheck={false}
+                className="font-mono"
+              />
+            </Field>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Timeout (seconds)">
+            <Input
+              type="number"
+              min={10}
+              max={600}
+              step={10}
+              value={Math.round(draft.sandboxTimeoutMs / 1000)}
+              onChange={(event) => {
+                const seconds = Number(event.target.value);
+                if (Number.isFinite(seconds)) {
+                  patch({ sandboxTimeoutMs: seconds * 1000 });
+                }
+              }}
+            />
+          </Field>
+          <Field label="Working directory (optional)">
+            <Input
+              value={draft.sandboxCwd}
+              onChange={(event) => patch({ sandboxCwd: event.target.value })}
+              placeholder="packages/api"
+              spellCheck={false}
+              className="font-mono"
+            />
+          </Field>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium text-zinc-200">Parallel runs</p>
+            <p className="mt-0.5 text-[11px] text-zinc-500">Runs in flight in the sandbox.</p>
+          </div>
+          <div className="flex gap-1.5">
+            {[1, 2, 3, 4].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => patch({ sandboxConcurrency: value })}
+                aria-pressed={draft.sandboxConcurrency === value}
+                className={cn(
+                  "size-8 rounded-lg font-mono text-xs font-bold transition",
+                  draft.sandboxConcurrency === value
+                    ? "bg-indigo-600 text-white"
+                    : "border border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200",
+                )}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+        {supports("coverage") && (
+          <Toggle
+            checked={draft.sandboxCoverage}
+            onChange={(sandboxCoverage) => patch({ sandboxCoverage })}
+            label="Ask for coverage"
+            hint="Runs the suite with LCOV output. Without a report, coverage stays “not measured”."
+          />
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={testSandbox} disabled={probe.busy}>
+            {probe.busy ? "Testing…" : "Test connection"}
+          </Button>
+          {probe.message && (
+            <span
+              className={cn(
+                "flex items-center gap-1.5 text-[11px]",
+                probe.ok ? "text-emerald-400" : "text-rose-400",
+              )}
+            >
+              {probe.ok ? <Check className="size-3.5" /> : <AlertCircle className="size-3.5" />}
+              {probe.message}
+            </span>
+          )}
+        </div>
         <p className="text-[11px] leading-relaxed text-zinc-500">
-          The Worker calls the sandbox, so it must be reachable from the internet.{" "}
-          <code className="font-mono text-zinc-400">http://localhost</code> only works with a Worker
-          running on your own machine.
+          The Worker sends repository content to this URL and the key as a bearer header. Nothing is
+          stored server-side. <code className="font-mono text-zinc-400">http://localhost</code> only
+          works with a Worker running on your own machine; a deployed Worker must reach an https
+          runner.
         </p>
       </Section>
 
@@ -466,6 +655,33 @@ export function SettingsDialog({ open, onClose, settings, secrets, section }: Se
                 className={cn(
                   "size-8 rounded-lg font-mono text-xs font-bold transition",
                   draft.maxFiles === value
+                    ? "bg-indigo-600 text-white"
+                    : "border border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200",
+                )}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium text-zinc-200">Files in flight</p>
+            <p className="mt-0.5 text-[11px] text-zinc-500">
+              How many files one run generates and validates at the same time.
+            </p>
+          </div>
+          <div className="flex gap-1.5">
+            {[1, 2, 3, 4, 6].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => patch({ concurrency: value })}
+                aria-pressed={draft.concurrency === value}
+                className={cn(
+                  "size-8 rounded-lg font-mono text-xs font-bold transition",
+                  draft.concurrency === value
                     ? "bg-indigo-600 text-white"
                     : "border border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-zinc-200",
                 )}

@@ -24,7 +24,7 @@ Environment:
   EDGESPEC_DEPLOYMENT_AI=1     Use the deployment's Workers AI binding
 
 Start it from an MCP client with:
-  bun /absolute/path/to/edge-spec/apps/mcp/src/index.ts
+  bun /absolute/path/to/edge-spec/packages/mcp/src/index.ts
 `;
 
 async function main(): Promise<void> {

@@ -1,5 +1,14 @@
 /** Pure gap analysis: which source files have no matching test file. */
-import type { ApiArtifact, Gap, OpenApiSpec, RepositoryOverview, Risk } from "./types";
+import { parse as parseYaml } from "yaml";
+import type {
+  ApiArtifact,
+  Gap,
+  OpenApiParameter,
+  OpenApiRequestBody,
+  OpenApiSpec,
+  RepositoryOverview,
+  Risk,
+} from "./types";
 
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs)$/i;
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/i;
@@ -59,74 +68,186 @@ export function riskOf(path: string, exportCount = 0): Risk {
 }
 
 const TEST_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+const TEST_DIRS = ["test", "tests", "__tests__", "spec"];
+/** Extra suffixes ecosystems use instead of `.test`/`.spec`. */
+const TEST_SUFFIXES = ["test", "spec", "e2e-spec", "-spec", "_spec"];
 
-/** Candidate test file paths for a source file, across common runtimes/frameworks. */
-export function testCandidates(path: string): string[] {
+/** `src/a/b.ts` -> `{ dir: "src/a/", base: "b", ext: ".ts" }`. */
+function splitPath(path: string): { dir: string; base: string; ext: string } {
   const lastSlash = path.lastIndexOf("/");
   const dir = lastSlash >= 0 ? path.slice(0, lastSlash + 1) : "";
   const file = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
   const dot = file.lastIndexOf(".");
-  const base = dot >= 0 ? file.slice(0, dot) : file;
-  const ext = dot >= 0 ? file.slice(dot) : ".ts";
-  const exts = [ext, ...TEST_EXTENSIONS.filter((candidate) => candidate !== ext)];
+  return {
+    dir,
+    base: dot >= 0 ? file.slice(0, dot) : file,
+    ext: dot >= 0 ? file.slice(dot) : ".ts",
+  };
+}
 
+/** Every test file path a source file may use, common runtimes included. */
+export function testCandidates(path: string): string[] {
+  const { dir, base, ext } = splitPath(path);
+  const exts = [ext, ...TEST_EXTENSIONS.filter((candidate) => candidate !== ext)];
   const names: string[] = [];
   for (const candidate of exts) {
-    names.push(`${base}.test${candidate}`);
-    names.push(`${base}.spec${candidate}`);
+    for (const suffix of TEST_SUFFIXES) names.push(`${base}.${suffix}${candidate}`);
   }
 
   const candidates = new Set<string>();
-  // Sibling test file.
   for (const name of names) candidates.add(`${dir}${name}`);
 
-  // Test directories beside the source.
-  for (const testDir of ["test/", "tests/", "__tests__/"]) {
-    for (const name of names) candidates.add(`${dir}${testDir}${name}`);
-  }
-
-  // Root-level or mirrored test directories.
+  const segments = dir.split("/").filter(Boolean);
   const relativeWithoutExt = path.replace(/\.[^.]+$/, "");
-  for (const testDir of ["test/", "tests/", "__tests__/"]) {
-    for (const name of names) {
-      candidates.add(`${testDir}${name}`);
+  for (let depth = segments.length; depth >= 0; depth -= 1) {
+    const ancestor = segments.slice(0, depth).join("/");
+    const prefix = ancestor ? `${ancestor}/` : "";
+    for (const testDir of TEST_DIRS) {
+      for (const name of names) candidates.add(`${prefix}${testDir}/${name}`);
+      // Mirrored path: tests/src/foo.test.ts
+      for (const candidate of exts) {
+        candidates.add(`${prefix}${testDir}/${relativeWithoutExt}.test${candidate}`);
+        candidates.add(`${prefix}${testDir}/${relativeWithoutExt}.spec${candidate}`);
+      }
     }
-    // Mirrored path: tests/src/foo.test.ts
-    candidates.add(`${testDir}${relativeWithoutExt}.test${ext}`);
-    candidates.add(`${testDir}${relativeWithoutExt}.spec${ext}`);
   }
 
   return [...candidates];
 }
 
-/**
- * `paths` is every blob in the repository. A source file is a gap when none of
- * its conventional test file locations are present.
- */
-export function findGaps(paths: readonly string[], limit = 50): Gap[] {
+/** All existing test files for a source path, in tree order. */
+export function testFilesFor(path: string, paths: Iterable<string>): string[] {
   const present = new Set(paths);
-  const gaps: Gap[] = [];
+  return testCandidates(path).filter((candidate) => present.has(candidate));
+}
+
+/** The language a source extension belongs to, when EdgeSpec can name it. */
+export function languageOf(path: string): string | undefined {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const extension = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+  return LANGUAGES[extension] ?? FILE_LANGUAGES[name];
+}
+
+/** Languages EdgeSpec cannot generate tests for yet. */
+const UNSUPPORTED_EXTENSIONS: Record<string, string> = {
+  py: "Python",
+  pyi: "Python",
+  pyw: "Python",
+  go: "Go",
+  rs: "Rust",
+  rb: "Ruby",
+  rake: "Ruby",
+  java: "Java",
+  kt: "Kotlin",
+  kts: "Kotlin",
+  swift: "Swift",
+  cs: "C#",
+  php: "PHP",
+  scala: "Scala",
+  sc: "Scala",
+  ex: "Elixir",
+  exs: "Elixir",
+  dart: "Dart",
+  lua: "Lua",
+  jl: "Julia",
+  r: "R",
+  zig: "Zig",
+  cr: "Crystal",
+  hs: "Haskell",
+  clj: "Clojure",
+  cljs: "Clojure",
+  fs: "F#",
+  fsx: "F#",
+};
+
+/** Directories that hold other-language tests, not source. */
+const OTHER_TEST_DIR = /(^|\/)(test|tests|__tests__|spec|specs|__mocks__|fixtures)\//i;
+const OTHER_SOURCE_EXCLUDE =
+  /(^|\/)(dist|build|out|coverage|node_modules|vendor|generated|migrations|target|bin|obj)\//i;
+
+function unsupportedLanguage(path: string): string | undefined {
+  if (OTHER_TEST_DIR.test(path) || OTHER_SOURCE_EXCLUDE.test(path)) return undefined;
+  if (/\.(d\.ts|test|spec)\./i.test(path)) return undefined;
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  const extension = dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
+  return UNSUPPORTED_EXTENSIONS[extension];
+}
+
+/** The risk order the UI uses: dangerous first, then alphabetical. */
+const RISK_ORDER: Record<Risk, number> = { high: 0, medium: 1, low: 2 };
+
+function sortGaps(gaps: Gap[]): Gap[] {
+  return gaps.sort(
+    (a, b) => RISK_ORDER[a.risk] - RISK_ORDER[b.risk] || a.path.localeCompare(b.path),
+  );
+}
+
+/**
+ * Classifies a whole tree once:
+ * - `missing`: supported source with no test anywhere a convention looks.
+ * - `unsupported`: a language EdgeSpec cannot generate for yet.
+ * - `testsBySource`: the existing test files per supported source file.
+ */
+export function classifyTree(paths: readonly string[]): {
+  missing: Gap[];
+  unsupported: Gap[];
+  testsBySource: Map<string, string[]>;
+} {
+  const present = new Set(paths);
+  const missing: Gap[] = [];
+  const unsupported: Gap[] = [];
+  const testsBySource = new Map<string, string[]>();
 
   for (const path of present) {
+    const language = unsupportedLanguage(path);
+    if (language) {
+      const { dir, base } = splitPath(path);
+      unsupported.push({
+        path,
+        testPath: `${dir}${base}.test${path.slice(path.lastIndexOf("."))}`,
+        risk: "low",
+        exports: [],
+        reason: `EdgeSpec cannot generate a ${language} test yet.`,
+        kind: "unsupported",
+        language,
+      });
+      continue;
+    }
     if (!isSourceFile(path)) continue;
-    const candidates = testCandidates(path);
-    if (candidates.some((candidate) => present.has(candidate))) continue;
+
+    const tests = testFilesFor(path, present);
+    if (tests.length > 0) {
+      testsBySource.set(path, tests);
+      continue;
+    }
 
     const testPath = expectedTestPath(path);
-    const risk = riskOf(path);
     const testName = testPath.slice(testPath.lastIndexOf("/") + 1);
-    gaps.push({
+    missing.push({
       path,
       testPath,
-      risk,
+      risk: riskOf(path),
       exports: [],
-      reason: `No ${testName} next to this file.`,
+      reason: `No ${testName} found next to this file or in an ancestor test directory.`,
+      kind: "missing",
+      language: languageOf(path),
     });
   }
 
-  const order: Record<Risk, number> = { high: 0, medium: 1, low: 2 };
-  gaps.sort((a, b) => order[a.risk] - order[b.risk] || a.path.localeCompare(b.path));
-  return gaps.slice(0, limit);
+  return {
+    missing: sortGaps(missing),
+    unsupported: unsupported.sort((a, b) => a.path.localeCompare(b.path)),
+    testsBySource,
+  };
+}
+
+/**
+ * `paths` is every blob in the repository. A source file is a gap when none of
+ * its conventional test file locations are present. Missing-only wrapper.
+ */
+export function findGaps(paths: readonly string[], limit = 500): Gap[] {
+  return classifyTree(paths).missing.slice(0, limit);
 }
 
 /** Puts the files under `folder` first; the scan itself stays whole-repo. */
@@ -456,64 +577,156 @@ export function packageFacts(
 
 const OPENAPI_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
 
-/** Parses an OpenAPI (JSON) document into a renderable summary. */
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+
+/** A local `#/components/...` reference resolver. Remote refs are not fetched. */
+function resolveRef(doc: Record<string, unknown>, ref: string, depth = 0): unknown {
+  if (depth > 20 || !ref.startsWith("#/")) return undefined;
+  let current: unknown = doc;
+  for (const part of ref.slice(2).split("/")) {
+    const record = asRecord(current);
+    if (!record) return undefined;
+    current = record[decodeURIComponent(part.replace(/~1/g, "/").replace(/~0/g, "~"))];
+  }
+  return current;
+}
+
+/** Follows local `$ref`s, with a depth cap so a cycle cannot hang the Worker. */
+function deref(doc: Record<string, unknown>, value: unknown, depth = 0): unknown {
+  const record = asRecord(value);
+  if (!record || depth > 20) return value;
+  const ref = typeof record.$ref === "string" ? record.$ref : undefined;
+  if (!ref) return value;
+  return deref(doc, resolveRef(doc, ref, depth), depth + 1);
+}
+
+function parseParameter(
+  doc: Record<string, unknown>,
+  value: unknown,
+): OpenApiParameter | undefined {
+  const parameter = asRecord(deref(doc, value));
+  if (!parameter || typeof parameter.name !== "string" || typeof parameter.in !== "string") {
+    return undefined;
+  }
+  const schema = asRecord(deref(doc, parameter.schema));
+  const enumValues = schema && Array.isArray(schema.enum) ? schema.enum : undefined;
+  return {
+    name: parameter.name,
+    in: parameter.in,
+    ...(parameter.required === true ? { required: true } : {}),
+    ...(schema ? { schema } : {}),
+    ...(parameter.example !== undefined ? { example: parameter.example } : {}),
+    ...(schema && schema.default !== undefined ? { default: schema.default } : {}),
+    ...(enumValues ? { enum: enumValues } : {}),
+  };
+}
+
+function parseRequestBody(
+  doc: Record<string, unknown>,
+  value: unknown,
+): OpenApiRequestBody | undefined {
+  const body = asRecord(deref(doc, value));
+  const content = body && asRecord(body.content);
+  if (!content) return undefined;
+  const [contentType, media] = Object.entries(content)[0] ?? [];
+  if (!contentType) return undefined;
+  const mediaRecord = asRecord(media);
+  const schema = asRecord(deref(doc, mediaRecord?.schema));
+  return {
+    contentType,
+    ...(body?.required === true ? { required: true } : {}),
+    ...(schema ? { schema } : {}),
+    ...(mediaRecord?.example !== undefined ? { example: mediaRecord.example } : {}),
+  };
+}
+
+function securityNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const names = new Set<string>();
+  for (const requirement of value) {
+    for (const name of Object.keys(asRecord(requirement) ?? {})) names.add(name);
+  }
+  return [...names];
+}
+
+/** Parses an OpenAPI JSON or YAML document into a renderable summary. */
 export function parseOpenApiSpec(content: string, path = ""): OpenApiSpec | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
   } catch {
-    const bunGlobal = (globalThis as { Bun?: { YAML?: { parse: (input: string) => unknown } } })
-      .Bun;
-    if (bunGlobal?.YAML) {
-      try {
-        parsed = bunGlobal.YAML.parse(content);
-      } catch {
-        return undefined;
-      }
-    } else {
+    try {
+      parsed = parseYaml(content);
+    } catch {
       return undefined;
     }
   }
-  if (typeof parsed !== "object" || parsed === null) return undefined;
-  const doc = parsed as {
-    openapi?: unknown;
-    swagger?: unknown;
-    info?: { title?: unknown; version?: unknown; description?: unknown };
-    paths?: unknown;
-  };
+  const doc = asRecord(parsed);
+  if (!doc) return undefined;
   const isOpenApi = typeof doc.openapi === "string" || typeof doc.swagger === "string";
   if (!isOpenApi) return undefined;
 
   const endpoints: OpenApiSpec["endpoints"] = [];
-  const paths = doc.paths;
-  if (paths && typeof paths === "object") {
-    for (const [route, operations] of Object.entries(paths as Record<string, unknown>)) {
-      if (!operations || typeof operations !== "object") continue;
+  const paths = asRecord(doc.paths);
+  if (paths) {
+    for (const [route, operations] of Object.entries(paths)) {
+      const item = asRecord(deref(doc, operations));
+      if (!item) continue;
+      const shared = Array.isArray(item.parameters)
+        ? item.parameters.flatMap((parameter) => {
+            const parsed = parseParameter(doc, parameter);
+            return parsed ? [parsed] : [];
+          })
+        : [];
       for (const method of OPENAPI_METHODS) {
-        const operation = (operations as Record<string, unknown>)[method];
-        if (!operation || typeof operation !== "object") continue;
-        const op = operation as {
-          summary?: unknown;
-          description?: unknown;
-          operationId?: unknown;
-        };
+        const op = asRecord(deref(doc, item[method]));
+        if (!op) continue;
+        const own = Array.isArray(op.parameters)
+          ? op.parameters.flatMap((parameter) => {
+              const parsed = parseParameter(doc, parameter);
+              return parsed ? [parsed] : [];
+            })
+          : [];
+        const byKey = new Map<string, OpenApiParameter>();
+        for (const parameter of [...shared, ...own]) {
+          byKey.set(`${parameter.in}:${parameter.name}`, parameter);
+        }
+        const requestBody =
+          op.requestBody === undefined ? undefined : parseRequestBody(doc, op.requestBody);
+        const responses = asRecord(deref(doc, op.responses));
+        const security = securityNames(op.security);
         endpoints.push({
           method: method.toUpperCase(),
           path: route,
           ...(typeof op.summary === "string" ? { summary: op.summary } : {}),
           ...(typeof op.description === "string" ? { description: op.description } : {}),
           ...(typeof op.operationId === "string" ? { operationId: op.operationId } : {}),
+          ...(byKey.size > 0 ? { parameters: [...byKey.values()] } : {}),
+          ...(requestBody ? { requestBody } : {}),
+          ...(responses ? { responses: Object.keys(responses) } : {}),
+          ...(security.length > 0 ? { security } : {}),
         });
       }
     }
   }
 
+  const info = asRecord(doc.info);
+  const servers = Array.isArray(doc.servers)
+    ? doc.servers.flatMap((server) => {
+        const record = asRecord(server);
+        return record && typeof record.url === "string" ? [record.url] : [];
+      })
+    : [];
   return {
     path,
-    ...(typeof doc.info?.title === "string" ? { title: doc.info.title } : {}),
-    ...(typeof doc.info?.version === "string" ? { version: doc.info.version } : {}),
-    ...(typeof doc.info?.description === "string" ? { description: doc.info.description } : {}),
+    ...(typeof info?.title === "string" ? { title: info.title } : {}),
+    ...(typeof info?.version === "string" ? { version: info.version } : {}),
+    ...(typeof info?.description === "string" ? { description: info.description } : {}),
     endpoints,
+    ...(servers.length > 0 ? { servers } : {}),
     content,
   };
 }

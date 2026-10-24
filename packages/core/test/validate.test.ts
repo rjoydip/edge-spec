@@ -91,6 +91,25 @@ describe("validateTest", () => {
     expect((body as { command: string }).command).toBe("bun test");
   });
 
+  it("targets the generated file after the runner clones a v2 repository", async () => {
+    let body: Record<string, unknown> = {};
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ exitCode: 0, stdout: "1 pass" }));
+    }) as unknown as typeof fetch;
+
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example", v2: true },
+      repo: { url: "https://github.com/acme/api.git", ref: "main" },
+      fetchImpl: fakeFetch,
+    });
+
+    expect(result.verified).toBe(true);
+    expect(body.repo).toEqual({ url: "https://github.com/acme/api.git", ref: "main" });
+    expect(body.command).toBe("bun test 'src/math.test.ts'");
+  });
+
   it("does not claim verification when the runner is unreachable", async () => {
     const fakeFetch = (async () => {
       throw new Error("boom");

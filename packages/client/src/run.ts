@@ -8,13 +8,13 @@ export interface GeneratedTest {
 /** Keeps the last generation/validation pair for each source file. */
 export function collectGenerations(events: readonly RunEvent[]): Map<string, GeneratedTest> {
   const generated = new Map<string, GeneratedTest>();
-  let current: string | undefined;
   for (const event of events) {
     if (event.type === "generation") {
-      current = event.generation.sourcePath;
-      generated.set(current, { generation: event.generation });
-    } else if (event.type === "validation" && current) {
-      const item = generated.get(current);
+      generated.set(event.generation.sourcePath, { generation: event.generation });
+    } else if (event.type === "validation") {
+      // Concurrent events interleave, so the path must come from the event.
+      const path = event.sourcePath;
+      const item = path ? generated.get(path) : undefined;
       if (item) item.validation = event.validation;
     }
   }

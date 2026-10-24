@@ -34,6 +34,8 @@ export interface EnvDefaults {
   aiBaseUrl?: string;
   sandboxUrl?: string;
   sandboxKey?: string;
+  /** Non-secret runner knobs as JSON; see `x-sandbox-config`. */
+  sandboxConfig?: string;
   deploymentAi: boolean;
   provider?: string;
   model?: string;
@@ -52,6 +54,7 @@ export function envDefaults(env: Env, provider?: string): EnvDefaults {
   const aiBaseUrl = env.EDGESPEC_AI_BASE_URL?.trim();
   const sandboxUrl = env.EDGESPEC_SANDBOX_URL?.trim();
   const sandboxKey = env.EDGESPEC_SANDBOX_KEY?.trim();
+  const sandboxConfig = env.EDGESPEC_SANDBOX_CONFIG?.trim();
   const model = env.EDGESPEC_AI_MODEL?.trim();
   const accountId = first(env, ["CLOUDFLARE_ACCOUNT_ID", "EDGESPEC_ACCOUNT_ID"]);
   return {
@@ -61,6 +64,7 @@ export function envDefaults(env: Env, provider?: string): EnvDefaults {
     ...(aiBaseUrl ? { aiBaseUrl } : {}),
     ...(sandboxUrl ? { sandboxUrl } : {}),
     ...(sandboxKey ? { sandboxKey } : {}),
+    ...(sandboxConfig ? { sandboxConfig } : {}),
     deploymentAi: bool(env.EDGESPEC_DEPLOYMENT_AI),
     ...(selectedProvider ? { provider: selectedProvider } : {}),
     ...(model ? { model } : {}),

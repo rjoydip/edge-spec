@@ -129,6 +129,58 @@ describe("runPipeline", () => {
     expect(result && "ready" in result ? result.ready : undefined).toEqual(paths);
   });
 
+  it("bounds concurrent generation and reports ready tests in scan order", async () => {
+    const calls: string[] = [];
+    let inFlight = 0;
+    let peak = 0;
+    const slowAi = (async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      inFlight -= 1;
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }] }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    const github = fakeGitHub(calls);
+    github.tree = async () => [
+      { path: "src/a.ts", type: "blob" },
+      { path: "src/b.ts", type: "blob" },
+      { path: "src/c.ts", type: "blob" },
+      { path: "src/d.ts", type: "blob" },
+    ];
+    const provider = providerById("openai");
+    if (!provider) throw new Error("catalog lost openai");
+
+    const events: RunEvent[] = [];
+    for await (const event of runPipeline(
+      { ...input, ref: "main", maxFiles: 4, concurrency: 2 },
+      {
+        github,
+        aiConfig: { provider, model: "gpt-6-astra", apiKey: "sk-test" },
+        fetchImpl: slowAi,
+      },
+    )) {
+      events.push(event);
+    }
+
+    expect(peak).toBe(2);
+    // Every validation names its own file, even though the events interleave.
+    const validations = events.filter((event) => event.type === "validation");
+    expect(
+      validations.map((event) => (event.type === "validation" ? event.sourcePath : "")),
+    ).toEqual(["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts"]);
+    const result = events.find((event) => event.type === "result");
+    expect(result && "ready" in result ? result.ready : undefined).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+      "src/c.ts",
+      "src/d.ts",
+    ]);
+  });
+
   it("stops before the PR when validation fails", async () => {
     const calls: string[] = [];
     const events: RunEvent[] = [];

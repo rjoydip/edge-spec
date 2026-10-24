@@ -29,6 +29,8 @@ export interface ClientConfig {
   aiBaseUrl?: string;
   sandboxUrl?: string;
   sandboxKey?: string;
+  /** Non-secret runner knobs as JSON; the Worker validates it. */
+  sandboxConfig?: string;
   deploymentAi?: boolean;
   fetchImpl?: typeof fetch;
 }
@@ -83,6 +85,7 @@ export function clientConfigFromEnv(env: Env, provider?: string): ClientConfig {
     ...(defaults.aiBaseUrl ? { aiBaseUrl: defaults.aiBaseUrl } : {}),
     ...(defaults.sandboxUrl ? { sandboxUrl: defaults.sandboxUrl } : {}),
     ...(defaults.sandboxKey ? { sandboxKey: defaults.sandboxKey } : {}),
+    ...(defaults.sandboxConfig ? { sandboxConfig: defaults.sandboxConfig } : {}),
     deploymentAi: defaults.deploymentAi,
   };
 }
@@ -135,6 +138,7 @@ export class EdgeSpecClient {
     if (this.config.aiBaseUrl) headers["x-ai-base-url"] = this.config.aiBaseUrl;
     if (this.config.sandboxUrl) headers["x-sandbox-url"] = this.config.sandboxUrl;
     if (this.config.sandboxKey) headers["x-sandbox-key"] = this.config.sandboxKey;
+    if (this.config.sandboxConfig) headers["x-sandbox-config"] = this.config.sandboxConfig;
     if (this.config.deploymentAi) headers["x-deployment-ai"] = "1";
     return headers;
   }

@@ -124,7 +124,7 @@ describe("EdgeSpecClient", () => {
   it("pairs validations with generations and finds the final result", () => {
     const events: RunEvent[] = [
       { type: "generation", generation },
-      { type: "validation", validation },
+      { type: "validation", validation, sourcePath: "src/a.ts" },
       { type: "result", ok: true, ready: ["src/a.ts"] },
     ];
     const generated = collectGenerations(events);

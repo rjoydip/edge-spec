@@ -156,6 +156,7 @@ export const DEFAULT_PIPELINE = {
   coverageTarget: 90,
   parallelGeneration: true,
   maxFiles: 10,
+  concurrency: 3,
 } as const;
 
 export function providerById(id: string): Provider | undefined {
@@ -350,6 +351,7 @@ export interface PipelineConfigInput {
   coverageTarget?: unknown;
   maxFiles?: unknown;
   parallelGeneration?: unknown;
+  concurrency?: unknown;
 }
 
 export function pipelineConfig(input: PipelineConfigInput): {
@@ -360,11 +362,13 @@ export function pipelineConfig(input: PipelineConfigInput): {
   coverageTarget: number;
   maxFiles: number;
   parallelGeneration: boolean;
+  concurrency: number;
 } {
   const retries = Number(input.maxRetries);
   const aiRetries = Number(input.maxAiRetries);
   const target = Number(input.coverageTarget);
   const files = Number(input.maxFiles);
+  const concurrency = Number(input.concurrency);
   return {
     maxRetries: Number.isFinite(retries) ? Math.min(5, Math.max(0, Math.round(retries))) : 2,
     maxAiRetries: Number.isFinite(aiRetries) ? Math.min(5, Math.max(0, Math.round(aiRetries))) : 2,
@@ -373,14 +377,52 @@ export function pipelineConfig(input: PipelineConfigInput): {
     coverageTarget: Number.isFinite(target) ? Math.min(100, Math.max(0, Math.round(target))) : 90,
     maxFiles: Number.isFinite(files) ? Math.min(50, Math.max(1, Math.round(files))) : 10,
     parallelGeneration: input.parallelGeneration !== false,
+    concurrency: Number.isFinite(concurrency)
+      ? Math.min(6, Math.max(1, Math.round(concurrency)))
+      : 3,
   };
+}
+
+/** Loopback names and addresses. */
+function isLoopbackHost(hostname: string): boolean {
+  return ["localhost", "127.0.0.1", "[::1]", "::1"].includes(hostname.toLowerCase());
+}
+
+/** Private, link-local and reserved hosts a deployed Worker must not fetch. */
+function isPrivateHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
+  if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) {
+    return true;
+  }
+  const octets = host.split(".").map(Number);
+  if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part))) return false;
+  const [a, b] = octets as [number, number, number, number];
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
+export interface SandboxUrlOptions {
+  /** Local development may target loopback; a deployed Worker must not. */
+  allowLocal?: boolean;
 }
 
 /**
  * A runner URL the visitor supplied. The Worker fetches it, so only https is
- * accepted, or http for a runner on the same machine.
+ * accepted, or http for a runner on the same machine. A deployed request may
+ * not target loopback or private hosts.
  */
-export function parseSandboxUrl(input: string | undefined): string | null {
+export function parseSandboxUrl(
+  input: string | undefined,
+  options: SandboxUrlOptions = {},
+): string | null {
+  const allowLocal = options.allowLocal !== false;
   const raw = (input ?? "").trim();
   if (!raw) return null;
   let url: URL;
@@ -389,7 +431,8 @@ export function parseSandboxUrl(input: string | undefined): string | null {
   } catch {
     return null;
   }
-  const local = ["localhost", "127.0.0.1", "[::1]", "::1"].includes(url.hostname);
+  const local = isLoopbackHost(url.hostname);
+  if (!allowLocal && (local || isPrivateHost(url.hostname))) return null;
   if (url.protocol === "https:") return url.toString();
   if (url.protocol === "http:" && local) return url.toString();
   return null;

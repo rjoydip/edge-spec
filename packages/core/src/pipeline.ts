@@ -7,21 +7,33 @@ import { generateTest } from "./ai";
 import type { AiConfig } from "./ai";
 import type { GitHub } from "./github";
 import { detectChecks, SUPPORT_FILES } from "./ci";
-import { describeRepository, extractExports, findGaps, riskOf } from "./scanner";
+import {
+  classifyTree,
+  describeRepository,
+  extractExports,
+  parseOpenApiSpec,
+  riskOf,
+} from "./scanner";
 import {
   formatWithRunner,
   runRepositoryChecks,
+  staticCheck,
   validateTest,
   type SandboxConfig,
 } from "./validate";
+import { sandboxRepo, runInSandbox } from "./sandbox";
+import { apiGaps, contractTestsFor, parseJUnit } from "./openapi";
 import {
   HttpError,
+  type ApiTestResult,
   type CheckResult,
   type RateLimitInfo,
   type Generation,
   type Gap,
+  type OpenApiSpec,
   type RunEvent,
   type ScanResult,
+  type ScanTotals,
   type Validation,
 } from "./types";
 
@@ -34,14 +46,95 @@ export interface PipelineInput {
   coverageTarget: number;
   /** How many gap files one run covers. */
   maxFiles: number;
+  /** Per-file tasks in flight. Clamped 1–6, default 3. */
+  concurrency?: number;
+  /** `unit` generates unit tests, `api` contract tests, `both` does each. */
+  mode?: "unit" | "api" | "both";
   /** When re-running after a failure, skip scan and regenerate only these paths. */
   retryGaps?: string[];
 }
+
+const DEFAULT_CONCURRENCY = 3;
+
+/** Bounded work pool: `limit` workers pull from one index. No unbounded all. */
+async function pool<T>(
+  items: readonly T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= items.length) return;
+      await task(items[index] as T, index);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(Math.max(1, limit), items.length) }, () => worker()),
+  );
+}
+
+/** Runs a bounded async map, preserving input order. */
+async function poolMap<T, R>(
+  items: readonly T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = [];
+  await pool(items, limit, async (item, index) => {
+    results[index] = await task(item, index);
+  });
+  return results;
+}
+
+/** A tiny async channel: tasks push, the generator drains, SSE stays live. */
+function channel<T>() {
+  const queue: T[] = [];
+  let resolve: (() => void) | undefined;
+  let closed = false;
+  const wake = () => {
+    resolve?.();
+    resolve = undefined;
+  };
+  return {
+    push(item: T) {
+      queue.push(item);
+      wake();
+    },
+    close() {
+      closed = true;
+      wake();
+    },
+    async *drain(): AsyncGenerator<T> {
+      for (;;) {
+        const item = queue.shift();
+        if (item !== undefined) {
+          yield item;
+          continue;
+        }
+        if (closed) return;
+        await new Promise<void>((next) => {
+          resolve = next;
+        });
+      }
+    },
+  };
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Jittered backoff for a provider that is rate limiting or unreachable. */
+const backoff = (attempt: number): Promise<void> =>
+  sleep(Math.min(4_000, 250 * 2 ** attempt) + Math.floor(Math.random() * 250));
 
 export interface PipelineOptions {
   github: GitHub;
   aiConfig: AiConfig;
   sandbox?: SandboxConfig;
+  /** Sent to the sandbox only when `sandbox.allowRepoToken` is set. */
+  repoToken?: string;
   ai?: AiBinding;
   fetchImpl?: typeof fetch;
 }
@@ -51,6 +144,9 @@ const log = (level: "info" | "ai" | "warn" | "success" | "error", text: string):
   level,
   text,
 });
+
+/** A single-quoted shell word, so a repository path cannot inject a command. */
+const shellWord = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
 
 /** One line of a failure, so the log shows the reason instead of just "failed". */
 function failureSummary(output: string, max = 1200): string {
@@ -164,6 +260,12 @@ export async function* runPipeline(
 ): AsyncGenerator<RunEvent> {
   const { github, aiConfig } = options;
   const model = `${aiConfig.provider.name} · ${aiConfig.model}`;
+  const repoArg = sandboxRepo({
+    repo: input.repo,
+    ref: input.ref,
+    ...(options.sandbox ? { sandbox: options.sandbox } : {}),
+    ...(options.repoToken ? { token: options.repoToken } : {}),
+  });
 
   try {
     yield log("info", `EdgeSpec run started for ${input.repo}@${input.ref}.`);
@@ -172,12 +274,18 @@ export async function* runPipeline(
     let loaded: Loaded[] = [];
     let blobs: string[] = [];
     let allGaps: Gap[] = [];
+    let apiSpecs: OpenApiSpec[] = [];
+    let apiGapList: Gap[] = [];
+    let unsupported: Gap[] = [];
+    const apiMode = input.mode === "api" || input.mode === "both";
+    const unitMode = input.mode !== "api";
+    const retry = Boolean(input.retryGaps && input.retryGaps.length > 0);
 
-    if (input.retryGaps && input.retryGaps.length > 0) {
+    if (retry) {
       // Re-run: skip the scan, regenerate only the paths that failed before.
       yield { type: "step", step: "scan", status: "done", note: "re-run" };
-      yield log("info", `Re-running ${input.retryGaps.length} file(s) that did not pass.`);
-      allGaps = input.retryGaps.map((path) => ({
+      yield log("info", `Re-running ${input.retryGaps?.length ?? 0} file(s) that did not pass.`);
+      allGaps = (input.retryGaps ?? []).map((path) => ({
         path,
         testPath: path,
         exports: [],
@@ -188,8 +296,40 @@ export async function* runPipeline(
       yield { type: "step", step: "scan", status: "start" };
       const tree = await github.tree(input.repo, input.ref);
       blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
-      const gaps = findGaps(blobs);
-      if (gaps.length === 0) {
+      const classification = classifyTree(blobs);
+      const gaps = unitMode ? classification.missing : [];
+      unsupported = classification.unsupported;
+
+      if (apiMode) {
+        const OPENAPI_LIKE = /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i;
+        const specPaths = blobs.filter((path) => OPENAPI_LIKE.test(path)).slice(0, 4);
+        apiSpecs = (
+          await poolMap(specPaths, 4, async (path): Promise<OpenApiSpec | undefined> => {
+            try {
+              return parseOpenApiSpec(await github.file(input.repo, path, input.ref), path);
+            } catch {
+              return undefined;
+            }
+          })
+        ).filter((spec): spec is OpenApiSpec => Boolean(spec));
+        apiGapList = apiGaps(apiSpecs);
+      }
+
+      const totals: ScanTotals = {
+        missing: gaps.length,
+        coverage: 0,
+        api: apiGapList.length,
+        unsupported: unsupported.length,
+      };
+      const overview = describeRepository(blobs);
+      if (gaps.length === 0 && apiGapList.length === 0) {
+        yield {
+          type: "gaps",
+          gaps: unsupported,
+          overview,
+          totals,
+          coverageStatus: "not-run",
+        };
         yield { type: "step", step: "scan", status: "done", note: "No missing tests" };
         yield log("success", `No untested source files found in ${blobs.length} paths.`);
         yield { type: "result", ok: true, reason: "No missing tests found." };
@@ -199,31 +339,42 @@ export async function* runPipeline(
       allGaps = gaps;
       // The run covers as many gaps as the settings allow, highest risk first.
       const target = gaps.slice(0, input.maxFiles);
-      loaded = [];
-      for (const gap of target) {
-        const file = await load(github, input.repo, gap, input.ref);
-        if (file) loaded.push(file);
-      }
+      // Source reads are independent; a bounded pool keeps a large scan honest.
+      loaded = (await poolMap(target, 6, (gap) => load(github, input.repo, gap, input.ref))).filter(
+        (file): file is Loaded => Boolean(file),
+      );
 
       const scan: ScanResult = {
         repo: input.repo,
         ref: input.ref,
         scanned: blobs.length,
-        gaps: [...loaded.map((item) => item.gap), ...gaps.slice(input.maxFiles)],
-        overview: describeRepository(blobs),
+        gaps: gaps,
+        coverageGaps: [],
+        apiGaps: apiGapList,
+        unsupported,
+        totals,
+        truncated: { missing: false, coverage: false, api: false },
+        coverageStatus: "not-run",
+        overview,
       };
-      yield { type: "gaps", gaps: scan.gaps, overview: scan.overview };
-      yield { type: "step", step: "scan", status: "done", note: `${gaps.length} gaps` };
+      yield {
+        type: "gaps",
+        gaps: [...gaps, ...apiGapList, ...unsupported],
+        overview,
+        totals,
+        coverageStatus: scan.coverageStatus,
+      };
+      yield { type: "step", step: "scan", status: "done", note: `${gaps.length} missing` };
       yield log(
         "warn",
-        `${gaps.length} untested file(s) found. This run covers ${loaded.length} of them.`,
+        `${gaps.length} missing, 0 coverage, ${apiGapList.length} API; this run covers ${loaded.length} missing file(s)${apiSpecs.length > 0 ? ` and ${apiSpecs.length} API spec(s)` : ""}.`,
       );
     }
 
-    if (input.retryGaps && input.retryGaps.length > 0) {
+    if (retry) {
       // Load sources for the retry paths.
       loaded = [];
-      for (const path of input.retryGaps) {
+      for (const path of input.retryGaps ?? []) {
         const gap = allGaps.find((g) => g.path === path);
         if (!gap) continue;
         const file = await load(github, input.repo, gap, input.ref);
@@ -234,148 +385,40 @@ export async function* runPipeline(
     const blobsForChecks = input.retryGaps && input.retryGaps.length > 0 ? [] : blobs;
     const checks = await readRepositoryChecks(github, input.repo, input.ref, blobsForChecks);
 
-    const ready: string[] = [];
-    let last: { generation: Generation; validation: Validation } | undefined;
+    const ready = new Set<string>();
+    // A sandbox may cap its own runs; honour the tighter of the two.
+    const effective = Math.min(
+      6,
+      Math.max(1, Math.round(input.concurrency ?? DEFAULT_CONCURRENCY)),
+      options.sandbox?.concurrency ?? 6,
+    );
 
-    for (const [index, file] of loaded.entries()) {
-      const { gap, source } = file;
-      const position = `${index + 1}/${loaded.length}`;
+    if (unitMode && loaded.length > 0) {
+      const events = channel<RunEvent>();
+      const emit = (event: RunEvent) => events.push(event);
 
-      yield { type: "step", step: "generate", status: "start", note: position };
-      yield log("info", `Fetching ${gap.path}...`);
-      yield log("ai", `Generating ${gap.testPath}...`);
+      const runFile = async (file: Loaded, index: number): Promise<boolean> => {
+        const { gap, source } = file;
+        const position = `${index + 1}/${loaded.length}`;
 
-      let rateLimit: RateLimitInfo | undefined;
-      const generateInput = {
-        filePath: gap.path,
-        source,
-        config: aiConfig,
-        coverageTarget: input.coverageTarget,
-        onRateLimit: (info: RateLimitInfo) => {
-          rateLimit = info;
-        },
-        ...(checks.style.length ? { style: checks.style } : {}),
-        ...(checks.checks.length
-          ? { checks: checks.checks.map((check) => ({ name: check.name, command: check.command })) }
-          : {}),
-        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-      };
-      let code: string | undefined;
-      let generateError: unknown;
-      // Retry the AI call when the provider is unreachable or errors out, up to
-      // the configured number of retries, so a transient failure does not kill
-      // a whole run for a single file.
-      for (let attempt = 0; attempt <= input.maxAiRetries; attempt += 1) {
-        try {
-          code = await generateTest(generateInput as Parameters<typeof generateTest>[0]);
-          break;
-        } catch (error) {
-          generateError = error;
-          if (attempt < input.maxAiRetries) {
-            yield log(
-              "warn",
-              `AI call failed for ${gap.path} (${attempt + 1}/${input.maxAiRetries + 1}), retrying…`,
-            );
-            continue;
-          }
-        }
-      }
-      if (code === undefined) throw generateError;
-
-      // The repository formats the file itself, so the code in the pull
-      // request is the code CI will see.
-      if (checks.formatter && options.sandbox) {
-        const formatted = await formatWithRunner({
-          sandbox: options.sandbox,
-          files: { ...checks.support, [gap.path]: source, [gap.testPath]: code },
-          command: checks.formatter.command,
-          path: gap.testPath,
-          ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+        emit({
+          type: "step",
+          step: "generate",
+          status: "start",
+          note: position,
+          sourcePath: gap.path,
         });
-        if (formatted.code && formatted.code.trim()) code = formatted.code;
-      }
+        emit(log("info", `Fetching ${gap.path}...`));
+        emit(log("ai", `Generating ${gap.testPath}...`));
 
-      if (rateLimit) yield { type: "quota", rateLimit };
-
-      let generation: Generation = {
-        sourcePath: gap.path,
-        testPath: gap.testPath,
-        code,
-        provider: aiConfig.provider.id,
-        model: aiConfig.model,
-        corrected: false,
-        source,
-      };
-      yield { type: "generation", generation };
-      yield {
-        type: "step",
-        step: "generate",
-        status: "done",
-        note: `${position} · ${code.split("\n").length} lines`,
-      };
-
-      let attempt = 0;
-      yield { type: "step", step: "validate", status: "start", note: position };
-      let validation = await validateTest({
-        sourcePath: gap.path,
-        source,
-        testPath: gap.testPath,
-        test: code,
-        strictTypes: input.strictTypes,
-        ...(options.sandbox ? { sandbox: options.sandbox } : {}),
-        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-      });
-
-      // The repository's own CI commands, run against the generated test.
-      const checkResults = await runRepositoryChecks({
-        sandbox: options.sandbox,
-        files: { ...checks.support, [gap.path]: source, [gap.testPath]: code },
-        checks: checks.checks,
-        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-      });
-      validation = withChecks(validation, checkResults);
-
-      yield { type: "validation", validation };
-      yield {
-        type: "step",
-        step: "validate",
-        status: validation.ok ? "done" : "failed",
-        note: validation.verified
-          ? `${position} · ${checkResults.length > 0 ? `${checkResults.filter((check) => check.ok).length}/${checkResults.length} checks` : "bun test"}`
-          : `${position} · static check only`,
-      };
-      yield log(
-        validation.ok ? "success" : "warn",
-        validation.verified
-          ? validation.ok
-            ? `bun test passed in ${validation.durationMs} ms.`
-            : `bun test failed in ${validation.durationMs} ms.`
-          : (validation.output.split("\n")[0] ?? "Static validation complete."),
-      );
-      for (const check of checkResults) {
-        yield log(
-          check.ok ? "success" : "warn",
-          `${check.name} (${check.command}): ${check.ok ? "passed" : "failed"}`,
-        );
-      }
-      if (!validation.ok) {
-        yield log("error", `${gap.path} validation failed: ${failureSummary(validation.output)}`);
-      }
-
-      while (!validation.ok && attempt < input.maxRetries) {
-        attempt += 1;
-        yield { type: "step", step: "correct", status: "start", note: `${position} · ${attempt}` };
-        yield log("ai", `Self-correction ${attempt}/${input.maxRetries}...`);
-
-        let retryRateLimit: RateLimitInfo | undefined;
-        const retryGenerateInput = {
+        let rateLimit: RateLimitInfo | undefined;
+        const generateInput = {
           filePath: gap.path,
           source,
           config: aiConfig,
-          previous: { code, output: validation.output },
           coverageTarget: input.coverageTarget,
           onRateLimit: (info: RateLimitInfo) => {
-            retryRateLimit = info;
+            rateLimit = info;
           },
           ...(checks.style.length ? { style: checks.style } : {}),
           ...(checks.checks.length
@@ -388,80 +431,401 @@ export async function* runPipeline(
             : {}),
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         };
-        let retryCode: string | undefined;
-        let retryGenerateError: unknown;
+        let code: string | undefined;
+        let generateError: unknown;
+        // Retry the AI call when the provider is unreachable or errors out, up
+        // to the configured number of retries, so a transient failure does not
+        // kill the whole run for a single file.
         for (let attempt = 0; attempt <= input.maxAiRetries; attempt += 1) {
           try {
-            retryCode = await generateTest(
-              retryGenerateInput as Parameters<typeof generateTest>[0],
-            );
+            code = await generateTest(generateInput as Parameters<typeof generateTest>[0]);
             break;
           } catch (error) {
-            retryGenerateError = error;
+            generateError = error;
             if (attempt < input.maxAiRetries) {
-              yield log(
-                "warn",
-                `AI call failed for ${gap.path} correction ${attempt} (${attempt + 1}/${input.maxAiRetries + 1}), retrying…`,
+              emit(
+                log(
+                  "warn",
+                  `AI call failed for ${gap.path} (${attempt + 1}/${input.maxAiRetries + 1}), retrying…`,
+                ),
               );
+              await backoff(attempt);
               continue;
             }
           }
         }
-        if (retryCode === undefined) throw retryGenerateError;
-        code = retryCode;
-        generation = { ...generation, code, corrected: true };
-        yield { type: "generation", generation };
-        if (retryRateLimit) yield { type: "quota", rateLimit: retryRateLimit };
+        if (code === undefined) throw generateError;
 
-        validation = await validateTest({
+        // The repository formats the file itself, so the code in the pull
+        // request is the code CI will see.
+        if (checks.formatter && options.sandbox) {
+          const formatted = await formatWithRunner({
+            sandbox: options.sandbox,
+            ...(repoArg ? { repo: repoArg } : {}),
+            files: { ...checks.support, [gap.path]: source, [gap.testPath]: code },
+            command: checks.formatter.command,
+            path: gap.testPath,
+            ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+          });
+          if (formatted.code && formatted.code.trim()) code = formatted.code;
+        }
+
+        if (rateLimit) emit({ type: "quota", rateLimit });
+
+        let generation: Generation = {
+          sourcePath: gap.path,
+          testPath: gap.testPath,
+          code,
+          provider: aiConfig.provider.id,
+          model: aiConfig.model,
+          corrected: false,
+          source,
+        };
+        emit({ type: "generation", generation });
+        emit({
+          type: "step",
+          step: "generate",
+          status: "done",
+          note: `${position} · ${code.split("\n").length} lines`,
+          sourcePath: gap.path,
+        });
+
+        let attempt = 0;
+        emit({
+          type: "step",
+          step: "validate",
+          status: "start",
+          note: position,
+          sourcePath: gap.path,
+        });
+        let validation = await validateTest({
           sourcePath: gap.path,
           source,
           testPath: gap.testPath,
           test: code,
           strictTypes: input.strictTypes,
           ...(options.sandbox ? { sandbox: options.sandbox } : {}),
+          ...(repoArg ? { repo: repoArg } : {}),
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         });
-        const retryChecks = await runRepositoryChecks({
+
+        // The repository's own CI commands, run against the generated test.
+        const checkResults = await runRepositoryChecks({
           sandbox: options.sandbox,
+          ...(repoArg ? { repo: repoArg } : {}),
           files: { ...checks.support, [gap.path]: source, [gap.testPath]: code },
           checks: checks.checks,
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         });
-        validation = withChecks(validation, retryChecks);
-        yield { type: "validation", validation };
-        yield {
+        validation = withChecks(validation, checkResults);
+
+        emit({ type: "validation", validation, sourcePath: gap.path });
+        emit({
           type: "step",
-          step: "correct",
+          step: "validate",
           status: validation.ok ? "done" : "failed",
-          note: `${position} · ${attempt}`,
-        };
-        yield log(
-          validation.ok ? "success" : "warn",
-          validation.ok
-            ? `Correction passed (${validation.durationMs} ms).`
-            : `Correction ${attempt} still failing.`,
+          note: validation.verified
+            ? `${position} · ${
+                checkResults.length > 0
+                  ? `${checkResults.filter((check) => check.ok).length}/${checkResults.length} checks`
+                  : "bun test"
+              }`
+            : `${position} · static check only`,
+          sourcePath: gap.path,
+        });
+        emit(
+          log(
+            validation.ok ? "success" : "warn",
+            validation.verified
+              ? validation.ok
+                ? `bun test passed in ${validation.durationMs} ms.`
+                : `bun test failed in ${validation.durationMs} ms.`
+              : (validation.output.split("\n")[0] ?? "Static validation complete."),
+          ),
         );
-        if (!validation.ok) {
-          yield log(
-            "error",
-            `${gap.path} correction ${attempt} failed: ${failureSummary(validation.output)}`,
+        for (const check of checkResults) {
+          emit(
+            log(
+              check.ok ? "success" : "warn",
+              `${check.name} (${check.command}): ${check.ok ? "passed" : "failed"}`,
+            ),
           );
         }
-      }
+        if (!validation.ok) {
+          emit(log("error", `${gap.path} validation failed: ${failureSummary(validation.output)}`));
+        }
 
-      if (!validation.ok) {
-        yield log("error", `${gap.path}: validation did not pass, so it waits for a review.`);
-        continue;
-      }
-      ready.push(gap.path);
-      last = { generation, validation };
+        while (!validation.ok && attempt < input.maxRetries) {
+          attempt += 1;
+          emit({
+            type: "step",
+            step: "correct",
+            status: "start",
+            note: `${position} · ${attempt}`,
+            sourcePath: gap.path,
+          });
+          emit(log("ai", `Self-correction ${attempt}/${input.maxRetries}...`));
+
+          let retryRateLimit: RateLimitInfo | undefined;
+          const retryGenerateInput = {
+            filePath: gap.path,
+            source,
+            config: aiConfig,
+            previous: { code, output: validation.output },
+            coverageTarget: input.coverageTarget,
+            onRateLimit: (info: RateLimitInfo) => {
+              retryRateLimit = info;
+            },
+            ...(checks.style.length ? { style: checks.style } : {}),
+            ...(checks.checks.length
+              ? {
+                  checks: checks.checks.map((check) => ({
+                    name: check.name,
+                    command: check.command,
+                  })),
+                }
+              : {}),
+            ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+          };
+          let retryCode: string | undefined;
+          let retryGenerateError: unknown;
+          for (let retry = 0; retry <= input.maxAiRetries; retry += 1) {
+            try {
+              retryCode = await generateTest(
+                retryGenerateInput as Parameters<typeof generateTest>[0],
+              );
+              break;
+            } catch (error) {
+              retryGenerateError = error;
+              if (retry < input.maxAiRetries) {
+                emit(
+                  log(
+                    "warn",
+                    `AI call failed for ${gap.path} correction ${attempt} (${retry + 1}/${input.maxAiRetries + 1}), retrying…`,
+                  ),
+                );
+                await backoff(retry);
+                continue;
+              }
+            }
+          }
+          if (retryCode === undefined) throw retryGenerateError;
+          code = retryCode;
+          generation = { ...generation, code, corrected: true };
+          emit({ type: "generation", generation });
+          if (retryRateLimit) emit({ type: "quota", rateLimit: retryRateLimit });
+
+          validation = await validateTest({
+            sourcePath: gap.path,
+            source,
+            testPath: gap.testPath,
+            test: code,
+            strictTypes: input.strictTypes,
+            ...(options.sandbox ? { sandbox: options.sandbox } : {}),
+            ...(repoArg ? { repo: repoArg } : {}),
+            ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+          });
+          const retryChecks = await runRepositoryChecks({
+            sandbox: options.sandbox,
+            ...(repoArg ? { repo: repoArg } : {}),
+            files: { ...checks.support, [gap.path]: source, [gap.testPath]: code },
+            checks: checks.checks,
+            ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+          });
+          validation = withChecks(validation, retryChecks);
+          emit({ type: "validation", validation, sourcePath: gap.path });
+          emit({
+            type: "step",
+            step: "correct",
+            status: validation.ok ? "done" : "failed",
+            note: `${position} · ${attempt}`,
+            sourcePath: gap.path,
+          });
+          emit(
+            log(
+              validation.ok ? "success" : "warn",
+              validation.ok
+                ? `Correction passed (${validation.durationMs} ms).`
+                : `Correction ${attempt} still failing.`,
+            ),
+          );
+          if (!validation.ok) {
+            emit(
+              log(
+                "error",
+                `${gap.path} correction ${attempt} failed: ${failureSummary(validation.output)}`,
+              ),
+            );
+          }
+        }
+
+        if (!validation.ok) {
+          emit(log("error", `${gap.path}: validation did not pass, so it waits for a review.`));
+          return false;
+        }
+        return true;
+      };
+
+      const producer = (async () => {
+        try {
+          await pool(loaded, effective, async (file, index) => {
+            try {
+              if (await runFile(file, index)) ready.add(file.gap.path);
+            } catch (error) {
+              // One file that exhausts its retries fails alone; the run goes on.
+              const message = error instanceof Error ? error.message : String(error);
+              emit(log("error", `${file.gap.path}: ${message}`));
+              emit(
+                log(
+                  "error",
+                  `${file.gap.path}: generation did not finish, so it waits for a review.`,
+                ),
+              );
+            }
+          });
+        } finally {
+          events.close();
+        }
+      })();
+      for await (const event of events.drain()) yield event;
+      await producer;
     }
 
-    if (ready.length === 0) {
+    if (apiMode && apiSpecs.length > 0) {
+      for (const [index, spec] of apiSpecs.entries()) {
+        const contract = contractTestsFor(spec);
+        const position = `${index + 1}/${apiSpecs.length}`;
+
+        yield {
+          type: "step",
+          step: "generate",
+          status: "start",
+          note: `api ${position}`,
+          sourcePath: spec.path,
+        };
+        const generation: Generation = {
+          sourcePath: spec.path,
+          testPath: contract.path,
+          code: contract.code,
+          provider: "openapi",
+          model: "deterministic",
+          corrected: false,
+        };
+        yield { type: "generation", generation };
+        yield {
+          type: "step",
+          step: "generate",
+          status: "done",
+          note: `api ${position} · ${contract.operations.length} operation(s)`,
+          sourcePath: spec.path,
+        };
+
+        let results: ApiTestResult[] = contract.operations.map((operation) => {
+          const skipped = contract.skipped.find(
+            (item) => item.method === operation.method && item.path === operation.path,
+          );
+          return {
+            specPath: spec.path,
+            method: operation.method,
+            path: operation.path,
+            status: skipped ? "skipped" : "not-run",
+            ...(skipped ? { error: skipped.reason } : {}),
+          };
+        });
+
+        let validation: Validation;
+        const problems = staticCheck(contract.code, input.strictTypes);
+        if (problems.length > 0) {
+          validation = {
+            ok: false,
+            verified: false,
+            output: problems.map((problem) => `- ${problem.problem}`).join("\n"),
+            durationMs: 0,
+          };
+        } else if (!options.sandbox?.url?.trim()) {
+          validation = {
+            ok: true,
+            verified: false,
+            output:
+              "Static checks passed. No sandbox runner is configured, so the contract tests were not executed.",
+            durationMs: 0,
+          };
+        } else {
+          const started = Date.now();
+          const sandbox: SandboxConfig = { ...options.sandbox };
+          const readyUrl = options.sandbox.server?.readyUrl;
+          if (readyUrl) {
+            try {
+              const base = new URL(readyUrl).origin;
+              sandbox.env = { ...options.sandbox.env, BASE_URL: base };
+            } catch {
+              // A malformed ready URL is the runner's problem, not ours.
+            }
+          }
+          const run = await runInSandbox({
+            sandbox,
+            ...(repoArg ? { repo: repoArg } : {}),
+            files: {
+              [spec.path]: spec.content ?? "",
+              [contract.path]: contract.code,
+            },
+            command: `bun test ${shellWord(contract.path)} --reporter=junit --reporter-outfile=junit.xml`,
+            coverage: { format: "lcov" },
+            ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+          });
+          if (run.unreachable || run.environmentError) {
+            // No app, no test result. Never turn a boot failure into green.
+            results = results.map((result) => ({ ...result, status: "not-run" as const }));
+            validation = {
+              ok: false,
+              verified: false,
+              output: run.output,
+              durationMs: Date.now() - started,
+              ...(run.environmentError ? { environmentError: run.environmentError } : {}),
+            };
+          } else {
+            const parsed = parseJUnit(run.artifacts["junit.xml"] ?? "", spec.path);
+            if (parsed.length > 0) results = parsed;
+            validation = {
+              ok: run.ok,
+              verified: true,
+              output: run.output || (run.ok ? "Contract tests passed." : "Contract tests failed."),
+              durationMs: Date.now() - started,
+            };
+          }
+        }
+
+        yield { type: "api", results };
+        yield { type: "validation", validation, sourcePath: spec.path };
+        const passed = results.filter((result) => result.status === "passed").length;
+        yield {
+          type: "step",
+          step: "validate",
+          status: validation.ok ? "done" : "failed",
+          note: `api ${position} · ${passed}/${results.length}`,
+          sourcePath: spec.path,
+        };
+        for (const result of results) {
+          yield log(
+            result.status === "passed" ? "success" : result.status === "failed" ? "warn" : "info",
+            `${result.method} ${result.path}: ${result.status}${result.error ? ` · ${result.error}` : ""}`,
+          );
+        }
+        if (validation.ok) ready.add(spec.path);
+      }
+    }
+
+    // Scan order, not completion order: two files that finish at the same time
+    // still produce the same `ready` list.
+    const ordered = [
+      ...loaded.map((file) => file.gap.path).filter((path) => ready.has(path)),
+      ...(apiMode ? apiSpecs.map((spec) => spec.path).filter((path) => ready.has(path)) : []),
+    ];
+
+    if (ordered.length === 0) {
       yield { type: "step", step: "pull-request", status: "failed", note: "No PR" };
       yield log("error", "No test passed the check. Open Missing tests to look at them.");
-      yield { type: "result", ok: false, reason: "Validation did not pass.", ready };
+      yield { type: "result", ok: false, reason: "Validation did not pass.", ready: ordered };
       return;
     }
 
@@ -471,18 +835,13 @@ export async function* runPipeline(
       type: "step",
       step: "pull-request",
       status: "done",
-      note: `${ready.length} ready to open`,
+      note: `${ordered.length} ready to open`,
     };
     yield log(
       "success",
-      `${ready.length} test(s) ready. Review the preview, then open the pull request.`,
+      `${ordered.length} test(s) ready. Review the preview, then open the pull request.`,
     );
-    yield {
-      type: "result",
-      ok: true,
-      ...(last ? { generation: last.generation } : {}),
-      ready,
-    };
+    yield { type: "result", ok: true, ready: ordered };
   } catch (error) {
     const message =
       error instanceof HttpError
