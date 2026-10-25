@@ -291,8 +291,8 @@ export function SourceDialog({
       open={open}
       onClose={onClose}
       title={generation.testPath}
-      description={`Metadata and source for ${generation.sourcePath}`}
-      className="max-w-3xl"
+      description={`Compare the source and the generated test for ${generation.sourcePath}`}
+      className="max-w-5xl"
       footer={
         <>
           <Button variant="outline" size="sm" className="mr-auto" onClick={onViewDiff}>
@@ -343,17 +343,62 @@ export function SourceDialog({
 
         <CheckGrid validation={validation} />
 
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
-            Source file
-          </p>
-          {generation.source ? (
-            <HighlightedCode code={generation.source} language="typescript" />
-          ) : (
-            <p className="rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-3 py-2 text-[11px] text-zinc-500">
-              The source was not included in this generation.
-            </p>
-          )}
+        <div className="grid gap-2 lg:grid-cols-2">
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <FileCode2 className="size-3.5 shrink-0 text-sky-400" />
+              <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+                Source
+              </p>
+              <span className="truncate font-mono text-[9px] text-zinc-600">
+                {generation.sourcePath}
+              </span>
+            </div>
+            {generation.source ? (
+              <HighlightedCode
+                code={generation.source}
+                language={languageForPath(generation.sourcePath)}
+                className="max-h-[44vh]"
+              />
+            ) : (
+              <p className="rounded-xl border border-zinc-800/70 bg-zinc-950/40 px-3 py-6 text-center text-[10px] text-zinc-500">
+                The source was not included. Open the spec for a contract test.
+              </p>
+            )}
+          </div>
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <FileDiff className="size-3.5 shrink-0 text-violet-400" />
+              <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+                Generated test
+              </p>
+              <span className="truncate font-mono text-[9px] text-zinc-600">
+                {generation.testPath}
+              </span>
+              <Hint label="Download test">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="ml-auto size-6"
+                  aria-label="Download test"
+                  onClick={() =>
+                    downloadFile(
+                      generation.testPath.split("/").pop() ?? "test.ts",
+                      generation.code,
+                      "text/typescript",
+                    )
+                  }
+                >
+                  <HardDriveDownload className="size-3.5" stroke={ICON_GRADIENT} />
+                </Button>
+              </Hint>
+            </div>
+            <HighlightedCode
+              code={generation.code}
+              language={languageForPath(generation.testPath)}
+              className="max-h-[44vh]"
+            />
+          </div>
         </div>
 
         <Alert variant={validation.ok ? (validation.verified ? "success" : "warning") : "danger"}>
@@ -1270,6 +1315,12 @@ function CodeBlock({ lines, kind = "plain" }: { lines: string[]; kind?: "plain" 
       })}
     </div>
   );
+}
+
+function languageForPath(path: string): "json" | "typescript" | "yaml" {
+  if (/\.ya?ml$/i.test(path)) return "yaml";
+  if (/\.json$/i.test(path)) return "json";
+  return "typescript";
 }
 
 function specSection(spec: string, path: string): string {
