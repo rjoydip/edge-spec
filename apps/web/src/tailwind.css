@@ -597,7 +597,7 @@ html.light {
   position: absolute;
   inset: -1px;
   border-radius: inherit;
-  padding: 2px;
+  padding: 1px;
   background: conic-gradient(
     from -90deg,
     var(--stage-tone, var(--color-zinc-600)) var(--stage-progress, 0%),
@@ -612,7 +612,14 @@ html.light {
     linear-gradient(#000 0 0);
   mask-composite: exclude;
   pointer-events: none;
-  transition: --stage-progress 0.6s ease;
+  transition:
+    --stage-progress 0.6s ease,
+    padding 0.3s ease;
+}
+
+/* The active stage is a little thicker; once it completes it settles to 1px. */
+.stage-ring[data-state="running"] {
+  padding: 2px;
 }
 
 /* A row that is being generated pulses its outline, not its background tint. */

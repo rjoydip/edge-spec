@@ -1610,7 +1610,7 @@ function StageNode({
               : "bg-zinc-900/40",
         )}
       >
-        <span className="stage-ring" aria-hidden="true" />
+        <span className="stage-ring" data-state={state} aria-hidden="true" />
         <div className="flex items-center gap-2">
           <span
             className={cn(
