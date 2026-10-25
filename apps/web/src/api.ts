@@ -44,6 +44,44 @@ export function fetchCatalog(): Promise<Catalog> {
   return apiJson<Catalog>("/api/catalog");
 }
 
+export interface SandboxHealth {
+  ok: boolean;
+  version?: string;
+  capabilities?: string[];
+  provider?: string;
+  isolation?: "namespace" | "container" | "vm" | "none";
+  error?: string;
+}
+
+/**
+ * Probes a runner through the Worker. The Worker does the fetch, so an
+ * arbitrary origin works and the key never has to be exposed cross-origin.
+ */
+export async function checkSandbox(
+  url: string,
+  key: string,
+  config?: Record<string, unknown>,
+): Promise<SandboxHealth> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (key.trim()) headers["x-sandbox-key"] = key.trim();
+  if (config) headers["x-sandbox-config"] = JSON.stringify(config);
+
+  let response: Response;
+  try {
+    response = await fetch("/api/sandbox/health", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ url: url.trim(), ...(config ? { config } : {}) }),
+    });
+  } catch (error) {
+    throw new Error(
+      `Cannot reach the Worker: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return (await response.json()) as SandboxHealth;
+}
+
 export interface Branches {
   branches: string[];
   defaultBranch: string;
@@ -183,6 +221,7 @@ export async function runPipelineStream(
         maxRetries: settings.maxRetries,
         maxAiRetries: settings.maxAiRetries,
         maxFiles: settings.maxFiles,
+        concurrency: settings.concurrency,
         strictTypes: settings.strictTypes,
         coverageTarget: settings.coverageTarget,
         ...(retryGaps && retryGaps.length > 0 ? { retryGaps } : {}),

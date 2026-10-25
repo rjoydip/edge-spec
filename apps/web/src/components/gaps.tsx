@@ -14,7 +14,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import type { Gap } from "@edge-spec/core/types";
+import type { CoverageStatus, Gap, ScanTotals, ScanTruncation } from "@edge-spec/core/types";
 import { Badge, Button, Switch, cn } from "@edge-spec/ui";
 
 const RISK = {
@@ -22,6 +22,11 @@ const RISK = {
   medium: { variant: "warning" as const, label: "M" },
   low: { variant: "neutral" as const, label: "L" },
 };
+
+/** The gap categories the tab filters. */
+export type GapFilter = "missing" | "coverage" | "api" | "unsupported";
+
+const kindOf = (gap: Gap): GapFilter => gap.kind ?? "missing";
 
 interface GapsProps {
   gaps: Gap[];
@@ -33,6 +38,13 @@ interface GapsProps {
   parallel: boolean;
   selected: string;
   checked: string[];
+  /** Totals from the scan, so a filtered or truncated list stays honest. */
+  totals?: ScanTotals;
+  truncated?: ScanTruncation;
+  coverageStatus?: CoverageStatus;
+  coverageReason?: string;
+  /** A runner is configured, so coverage and API tests can be measured. */
+  hasRunner?: boolean;
   /** Focuses the file in the preview, in the code view or the metadata view. */
   onSelect: (gap: Gap, mode: "code" | "meta") => void;
   /** One path, or a list of paths, to add to or remove from the selection. */
@@ -67,6 +79,11 @@ export function Gaps({
   pipelineRunning,
   selected,
   checked,
+  totals,
+  truncated,
+  coverageStatus,
+  coverageReason,
+  hasRunner = false,
   onSelect,
   onToggleCheck,
   onSetChecked,
@@ -78,7 +95,15 @@ export function Gaps({
   onClearFolder,
 }: GapsProps) {
   const listRef = useRef<HTMLUListElement>(null);
-  const pending = gaps.filter((gap) => !generatedPaths.includes(gap.path));
+  const [filter, setFilter] = useState<GapFilter>("missing");
+  const counts: ScanTotals = totals ?? {
+    missing: gaps.filter((gap) => kindOf(gap) === "missing").length,
+    coverage: gaps.filter((gap) => kindOf(gap) === "coverage").length,
+    api: gaps.filter((gap) => kindOf(gap) === "api").length,
+    unsupported: gaps.filter((gap) => kindOf(gap) === "unsupported").length,
+  };
+  const visible = gaps.filter((gap) => kindOf(gap) === filter);
+  const pending = visible.filter((gap) => !generatedPaths.includes(gap.path));
   const allChecked = pending.length > 0 && pending.every((gap) => checked.includes(gap.path));
   const someChecked = checked.length > 0 && !allChecked;
   const passedCount = generatedPaths.filter((path) => validations[path] === true).length;
@@ -89,6 +114,15 @@ export function Gaps({
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   // While a generation runs, parallel mode still accepts new files.
   const canGenerate = !generating || parallel;
+  const truncatedHere = truncated?.[filter as keyof ScanTruncation] === true;
+  const total = counts[filter];
+
+  const FILTERS: Array<[GapFilter, string, string | undefined]> = [
+    ["missing", "Missing", undefined],
+    ["coverage", "Coverage", hasRunner ? undefined : "Needs a sandbox runner to measure coverage."],
+    ["api", "API", hasRunner ? undefined : "Needs a sandbox runner to execute contract tests."],
+    ["unsupported", "Unsupported", undefined],
+  ];
 
   // A file picked elsewhere (the Overview, the tree) is scrolled into view, so
   // the list always shows which one is focused.
@@ -106,8 +140,8 @@ export function Gaps({
         <p className="flex min-w-0 items-center gap-2 text-[11px] text-zinc-500">
           <ShieldAlert className="size-4 shrink-0 text-indigo-400" />
           <span className="truncate">
-            {gaps.length > 0
-              ? `${gaps.length} untested file${gaps.length === 1 ? "" : "s"}`
+            {counts.missing + counts.coverage + counts.api + counts.unsupported > 0
+              ? `${counts.missing} missing · ${counts.coverage} coverage · ${counts.api} API · ${counts.unsupported} unsupported`
               : "No cached scan"}
           </span>
         </p>
@@ -223,15 +257,63 @@ export function Gaps({
         </div>
       )}
 
-      {gaps.length === 0 ? (
+      {(counts.missing + counts.coverage + counts.api + counts.unsupported > 0 ||
+        gaps.length > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-zinc-800 bg-zinc-950/60 px-4 py-2">
+          {FILTERS.map(([id, label, disabledReason]) => {
+            const disabled = Boolean(disabledReason);
+            const active = filter === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setFilter(id)}
+                disabled={disabled}
+                title={disabled ? disabledReason : undefined}
+                aria-pressed={active}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 font-mono text-[10px] transition",
+                  active
+                    ? "border-indigo-500/40 bg-indigo-500/15 text-indigo-200"
+                    : "border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300",
+                  disabled &&
+                    "cursor-not-allowed opacity-40 hover:border-zinc-800 hover:text-zinc-500",
+                )}
+              >
+                {label} ({counts[id]})
+              </button>
+            );
+          })}
+          {coverageStatus === "not-run" && (
+            <span className="ml-auto text-[10px] text-zinc-600">coverage not measured</span>
+          )}
+          {coverageStatus === "unavailable" && (
+            <span className="ml-auto truncate text-[10px] text-amber-400/80" title={coverageReason}>
+              coverage unavailable{coverageReason ? ` · ${coverageReason}` : ""}
+            </span>
+          )}
+        </div>
+      )}
+
+      {visible.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center px-5 py-16 text-center">
           <FileCode2 className="mx-auto size-8 text-zinc-700" />
           <p className="mt-3 text-sm font-medium text-zinc-300">
-            {repo ? "No missing tests yet" : "No repository set"}
+            {repo
+              ? gaps.length === 0
+                ? "No missing tests yet"
+                : `No ${filter} gaps`
+              : "No repository set"}
           </p>
           <p className="mx-auto mt-1 max-w-sm text-xs text-zinc-500">
             {repo
-              ? "Scan the repository to list source files that have no test next to them."
+              ? gaps.length === 0
+                ? "Scan the repository to list source files that have no test next to them."
+                : filter === "coverage" && coverageStatus === "not-run"
+                  ? "Run a scan with a sandbox runner to measure coverage."
+                  : filter === "api"
+                    ? "Add an OpenAPI spec, or run the pipeline in API mode, to list contract gaps."
+                    : "Nothing in this category. Pick another filter."
               : "Enter owner/name or a folder path in the header, then scan."}
           </p>
         </div>
@@ -240,8 +322,15 @@ export function Gaps({
           ref={listRef}
           className="no-scrollbar min-h-0 flex-1 divide-y divide-zinc-800 overflow-auto"
         >
-          {gaps.map((gap) => {
+          {truncatedHere && (
+            <li className="bg-amber-500/5 px-4 py-1.5 text-[10px] text-amber-400">
+              Showing {visible.length} of {total} {filter} gaps.
+            </li>
+          )}
+          {visible.map((gap) => {
             const risk = RISK[gap.risk];
+            const kind = kindOf(gap);
+            const unsupported = kind === "unsupported";
             const done = generatedPaths.includes(gap.path);
             const failed = validations[gap.path] === false;
             const failure = done ? undefined : errors[gap.path];
@@ -269,17 +358,24 @@ export function Gaps({
                   itemBusy && "animate-pulse",
                 )}
               >
-                <input
-                  type="checkbox"
-                  className="size-3.5 shrink-0"
-                  checked={isChecked}
-                  onChange={(event) => onToggleCheck(gap.path, event.target.checked)}
-                  onClick={(event) => event.stopPropagation()}
-                  aria-label={`Select ${gap.path}`}
-                />
+                {!unsupported && (
+                  <input
+                    type="checkbox"
+                    className="size-3.5 shrink-0"
+                    checked={isChecked}
+                    onChange={(event) => onToggleCheck(gap.path, event.target.checked)}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label={`Select ${gap.path}`}
+                  />
+                )}
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <Badge variant={risk.variant}>{risk.label}</Badge>
                   <span className="truncate font-mono text-[11px] text-zinc-300">{gap.path}</span>
+                  {kind !== "missing" && (
+                    <span className="shrink-0 rounded-full border border-zinc-700 px-1.5 py-0.5 text-[9px] tracking-wide text-zinc-400 uppercase">
+                      {gap.language ?? kind}
+                    </span>
+                  )}
                 </div>
 
                 {itemBusy && !done && (
@@ -334,7 +430,7 @@ export function Gaps({
                   <Info className="size-3.5" />
                 </button>
 
-                {done ? (
+                {unsupported ? null : done ? (
                   <>
                     <button
                       type="button"

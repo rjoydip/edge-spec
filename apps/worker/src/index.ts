@@ -17,21 +17,35 @@ import { readRepositoryChecks, runPipeline, withChecks } from "@edge-spec/core/p
 import { detectChecks, SUPPORT_FILES } from "@edge-spec/core/ci";
 import { pullFilesOf, slugOf } from "@edge-spec/core/pr";
 import {
+  classifyTree,
   describeRepository,
   extractExports,
-  findGaps,
   packageFacts,
   parseOpenApiSpec,
   riskOf,
 } from "@edge-spec/core/scanner";
+import { apiGaps } from "@edge-spec/core/openapi";
+import { coverageGaps } from "@edge-spec/core/coverage";
 import {
   formatWithRunner,
+  runInSandbox,
   runRepositoryChecks,
   staticCheck,
   validateTest,
-  type SandboxConfig,
 } from "@edge-spec/core/validate";
-import { HttpError, type Gap, type RateLimitInfo, type Validation } from "@edge-spec/core/types";
+import {
+  checkSandboxHealth,
+  parseSandboxConfig,
+  sandboxRepo,
+  type SandboxConfig,
+} from "@edge-spec/core/sandbox";
+import {
+  HttpError,
+  type Gap,
+  type OpenApiSpec,
+  type RateLimitInfo,
+  type Validation,
+} from "@edge-spec/core/types";
 import type { Env } from "./env";
 
 export { TestGenerationWorkflow } from "./workflow";
@@ -48,6 +62,8 @@ const DEPLOYMENT_AI_HEADER = "x-deployment-ai";
 const SANDBOX_URL_HEADER = "x-sandbox-url";
 /** Header carrying the key for that runner. */
 const SANDBOX_KEY_HEADER = "x-sandbox-key";
+/** Header carrying the non-secret runner knobs as JSON. */
+const SANDBOX_CONFIG_HEADER = "x-sandbox-config";
 
 type AppContext = Context<{ Bindings: Env }>;
 
@@ -113,19 +129,39 @@ function aiConfigFor(c: AppContext, body: Record<string, unknown>): AiConfig {
   };
 }
 
+function sandboxConfigHeader(c: AppContext): SandboxConfig {
+  const raw = c.req.header(SANDBOX_CONFIG_HEADER)?.trim();
+  if (!raw) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, "x-sandbox-config must be a JSON object.");
+  }
+  return parseSandboxConfig(parsed);
+}
+
 /**
  * The runner that executes the suite. A visitor may point at their own runner
- * with a header; otherwise the deployment's binding is used.
+ * with a header; otherwise the deployment's binding is used. Non-secret knobs
+ * travel in one JSON header; URL and key stay separate.
  */
 function sandboxFor(c: AppContext): SandboxConfig | undefined {
-  const own = parseSandboxUrl(c.req.header(SANDBOX_URL_HEADER));
-  if (own) {
-    const key = c.req.header(SANDBOX_KEY_HEADER)?.trim();
-    return { url: own, ...(key ? { apiKey: key } : {}) };
+  const config = sandboxConfigHeader(c);
+  const rawUrl = c.req.header(SANDBOX_URL_HEADER)?.trim();
+  const own = parseSandboxUrl(rawUrl, { allowLocal: isLocalRequest(c) });
+  if (rawUrl && !own) {
+    throw new HttpError(400, "The sandbox URL must be https (or http on localhost).");
   }
+  const key = c.req.header(SANDBOX_KEY_HEADER)?.trim();
+  if (own) return { ...config, url: own, ...(key ? { apiKey: key } : {}) };
   const url = c.env.SANDBOX_RUNNER_URL?.trim();
   if (!url) return undefined;
-  return { url, ...(c.env.SANDBOX_API_KEY ? { apiKey: c.env.SANDBOX_API_KEY } : {}) };
+  return {
+    ...config,
+    url,
+    ...(c.env.SANDBOX_API_KEY ? { apiKey: c.env.SANDBOX_API_KEY } : {}),
+  };
 }
 
 function fail(err: unknown): Response {
@@ -183,6 +219,52 @@ app.get("/api/catalog", (c) =>
   }),
 );
 
+/**
+ * Probes a runner from the Worker. The browser cannot call an arbitrary origin,
+ * and the key must not be exposed to it; the Worker can do both.
+ */
+app.post("/api/sandbox/health", async (c) => {
+  try {
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readJson(c);
+    } catch {
+      // An empty body is fine: the headers or the deployment may carry the URL.
+    }
+
+    const headerConfig = sandboxConfigHeader(c);
+    const bodyConfig = body.config === undefined ? undefined : parseSandboxConfig(body.config);
+    const config = { ...headerConfig, ...bodyConfig };
+    const requested = str(body.url);
+    const allowLocal = isLocalRequest(c);
+
+    let url: string | null;
+    if (requested) {
+      url = parseSandboxUrl(requested, { allowLocal });
+      if (!url) {
+        throw new HttpError(400, "A sandbox URL must be https (or http on localhost).");
+      }
+    } else {
+      const headerUrl = c.req.header(SANDBOX_URL_HEADER)?.trim();
+      const own = parseSandboxUrl(headerUrl, { allowLocal });
+      if (headerUrl && !own) {
+        throw new HttpError(400, "A sandbox URL must be https (or http on localhost).");
+      }
+      url = own ?? c.env.SANDBOX_RUNNER_URL?.trim() ?? null;
+    }
+    if (!url) return c.json({ ok: false, error: "No sandbox runner is configured." });
+
+    const key = c.req.header(SANDBOX_KEY_HEADER)?.trim() || c.env.SANDBOX_API_KEY;
+    return c.json(
+      await checkSandboxHealth({
+        sandbox: { ...config, url, ...(key ? { apiKey: key } : {}) },
+      }),
+    );
+  } catch (err) {
+    return fail(err);
+  }
+});
+
 app.get("/api/branches", async (c) => {
   try {
     const parsed = parseRepo(c.req.query("repo"));
@@ -210,7 +292,8 @@ app.post("/api/scan", async (c) => {
     const github = githubFor(c);
     const tree = await github.tree(repo, ref);
     const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
-    const gaps = findGaps(blobs, 25);
+    const classification = classifyTree(blobs);
+    const gaps = classification.missing.slice(0, 25);
 
     // Fetch a few sources so the table can show exported symbols. Failures are
     // cosmetic and leave the gap as-is.
@@ -236,8 +319,8 @@ app.post("/api/scan", async (c) => {
     }
 
     // Parse any OpenAPI specs so the dashboard can render them.
+    const openApiSpecs: OpenApiSpec[] = [];
     try {
-      const openApiSpecs = [];
       const OPENAPI_LIKE = /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i;
       for (const artifactPath of blobs.filter((path) => OPENAPI_LIKE.test(path)).slice(0, 4)) {
         try {
@@ -257,6 +340,13 @@ app.post("/api/scan", async (c) => {
     } catch {
       // Best effort.
     }
+    const contractGaps = apiGaps(openApiSpecs);
+    const totals = {
+      missing: classification.missing.length,
+      coverage: 0,
+      api: contractGaps.length,
+      unsupported: classification.unsupported.length,
+    };
 
     // The commands the repository's CI runs, so the dashboard can show them
     // before anything is generated.
@@ -298,7 +388,101 @@ app.post("/api/scan", async (c) => {
       ref,
       scanned: blobs.length,
       gaps: [...enriched, ...gaps.slice(8)],
+      coverageGaps: [],
+      apiGaps: contractGaps,
+      unsupported: classification.unsupported,
+      totals,
+      truncated: {
+        missing: classification.missing.length > 25,
+        coverage: false,
+        api: false,
+      },
+      coverageStatus: "not-run",
       overview,
+    });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.post("/api/coverage", async (c) => {
+  try {
+    const body = await readJson(c);
+    const repo = repoOf(body);
+    const ref = parseRef(str(body.ref));
+    const sandbox = sandboxFor(c);
+    if (!sandbox?.url) {
+      throw new HttpError(400, "Coverage needs a sandbox runner (x-sandbox-url).");
+    }
+    const github = githubFor(c);
+    const tree = await github.tree(repo, ref);
+    const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
+    const classification = classifyTree(blobs);
+    const target = pipelineConfig(body).coverageTarget;
+
+    const base = {
+      repo,
+      ref,
+      scanned: blobs.length,
+      totals: {
+        missing: classification.missing.length,
+        coverage: 0,
+        api: 0,
+        unsupported: classification.unsupported.length,
+      },
+      truncated: { missing: false, coverage: false, api: false },
+    };
+    const unavailable = (reason: string) =>
+      c.json({
+        ...base,
+        coverageGaps: [],
+        coverageStatus: "unavailable",
+        coverageReason: reason.slice(0, 600),
+      });
+
+    // The suite the repository itself runs; no invented command.
+    let packageJson: string | undefined;
+    try {
+      packageJson = await github.file(repo, "package.json", ref);
+    } catch {
+      // A repository without package.json has no bun/npm test command.
+    }
+    const detected = detectChecks({
+      paths: blobs,
+      ...(packageJson ? { packageJson } : {}),
+      workflows: {},
+      files: packageJson ? { "package.json": packageJson } : {},
+    });
+    const test = detected.checks.find((check) => check.kind === "test");
+    if (!test) return unavailable("No test command found in this repository.");
+
+    const config: SandboxConfig = { ...sandbox, coverage: true };
+    const repoArg = sandboxRepo({
+      repo,
+      ref,
+      sandbox: config,
+      ...(config.allowRepoToken ? { token: c.req.header(TOKEN_HEADER) ?? "" } : {}),
+    });
+    const run = await runInSandbox({
+      sandbox: config,
+      ...(repoArg ? { repo: repoArg } : {}),
+      command: test.command,
+      coverage: { format: "lcov" },
+    });
+    if (run.unreachable || run.environmentError) return unavailable(run.output);
+    if (!run.coverage) {
+      return unavailable(
+        run.output || "The runner returned no coverage report (lcov.info missing).",
+      );
+    }
+
+    const gaps = coverageGaps(blobs, run.coverage, target, classification.testsBySource);
+    return c.json({
+      ...base,
+      coverageGaps: gaps.slice(0, 500),
+      totals: { ...base.totals, coverage: gaps.length },
+      truncated: { ...base.truncated, coverage: gaps.length > 500 },
+      coverageStatus: "measured",
     });
   } catch (err) {
     return fail(err);
@@ -311,7 +495,14 @@ app.post("/api/run", async (c) => {
     ref: string;
     github: GitHub;
     aiConfig: AiConfig;
-    input: ReturnType<typeof pipelineConfig> & { repo: string; ref: string; retryGaps?: string[] };
+    sandbox?: SandboxConfig;
+    repoToken?: string;
+    input: ReturnType<typeof pipelineConfig> & {
+      repo: string;
+      ref: string;
+      mode?: "unit" | "api" | "both";
+      retryGaps?: string[];
+    };
   };
   try {
     const body = await readJson(c);
@@ -320,24 +511,39 @@ app.post("/api/run", async (c) => {
     const retryGaps = Array.isArray(body.retryGaps)
       ? body.retryGaps.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
       : undefined;
+    const sandbox = sandboxFor(c);
+    const repoToken = sandbox?.allowRepoToken
+      ? c.req.header(TOKEN_HEADER)?.trim() || undefined
+      : undefined;
     prepared = {
       repo,
       ref,
       github: githubFor(c),
       aiConfig: aiConfigFor(c, body),
-      input: { repo, ref, ...pipelineConfig(body), ...(retryGaps ? { retryGaps } : {}) },
+      ...(sandbox ? { sandbox } : {}),
+      ...(repoToken ? { repoToken } : {}),
+      input: {
+        repo,
+        ref,
+        ...pipelineConfig(body),
+        ...(body.mode === "api" || body.mode === "both" || body.mode === "unit"
+          ? { mode: body.mode }
+          : {}),
+        ...(retryGaps ? { retryGaps } : {}),
+      },
     };
   } catch (err) {
     return fail(err);
   }
 
-  const { github, aiConfig, input } = prepared;
+  const { github, aiConfig, sandbox, repoToken, input } = prepared;
   return streamSSE(c, async (stream) => {
     try {
       for await (const event of runPipeline(input, {
         github,
         aiConfig,
-        ...(sandboxFor(c) ? { sandbox: sandboxFor(c) } : {}),
+        ...(sandbox ? { sandbox } : {}),
+        ...(repoToken ? { repoToken } : {}),
       })) {
         await stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
       }
@@ -366,6 +572,17 @@ app.post("/api/generate", async (c) => {
     const config = pipelineConfig(body);
     const aiConfig = aiConfigFor(c, body);
     const sandbox = sandboxFor(c);
+    const repoToken = sandbox?.allowRepoToken
+      ? c.req.header(TOKEN_HEADER)?.trim() || undefined
+      : undefined;
+    const repoArg = repo
+      ? sandboxRepo({
+          repo,
+          ref,
+          ...(sandbox ? { sandbox } : {}),
+          ...(repoToken ? { token: repoToken } : {}),
+        })
+      : undefined;
 
     const github = githubFor(c);
     let source = inlineSource;
@@ -405,6 +622,7 @@ app.post("/api/generate", async (c) => {
       if (!checks?.formatter || !sandbox) return candidate;
       const formatted = await formatWithRunner({
         sandbox,
+        ...(repoArg ? { repo: repoArg } : {}),
         files: { ...checks.support, [path]: source, [testPath]: candidate },
         command: checks.formatter.command,
         path: testPath,
@@ -421,9 +639,11 @@ app.post("/api/generate", async (c) => {
         test: candidate,
         strictTypes: config.strictTypes,
         ...(sandbox ? { sandbox } : {}),
+        ...(repoArg ? { repo: repoArg } : {}),
       });
       const results = await runRepositoryChecks({
         ...(sandbox ? { sandbox } : {}),
+        ...(repoArg ? { repo: repoArg } : {}),
         files: { ...checks?.support, [path]: source, [testPath]: candidate },
         checks: checks?.checks ?? [],
       });

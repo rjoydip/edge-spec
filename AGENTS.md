@@ -19,6 +19,7 @@ bun run dev:worker     # API on http://127.0.0.1:8787
 bun run dev            # dashboard on http://127.0.0.1:5173 (proxies /api)
 bun --silent run cli -- --help  # terminal client
 bun run mcp -- --help  # stdio MCP server
+bun run sandbox        # self-hosted test runner on http://127.0.0.1:8788
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
 bun run docs:build     # static site in apps/docs/.vitepress/dist
 bun test               # discovers every workspace's test/ directory
@@ -37,10 +38,18 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 ## Layout
 
 - `packages/core/src/` — pure logic. No Hono, no React, no browser globals.
+  `scanner.ts` owns classification (`classifyTree`: missing/unsupported plus the
+  existing tests per source), `coverage.ts` parses LCOV, `openapi.ts` builds
+  deterministic contract tests and parses JUnit, and `pipeline.ts` runs files
+  through a bounded pool whose events name their `sourcePath`.
 - `packages/client/src/` — HTTP client for the Worker API, shared by the CLI and
   MCP server. It may import core types but must not call core pipeline code.
 - `packages/ui/src/` — shared React primitives and `theme.css` brand tokens. The
   dashboard imports the components; the VitePress site imports only the tokens.
+- `packages/cli/src/` — `scan`, `generate`, `run`, and `catalog` commands.
+- `packages/mcp/src/` — stdio MCP server wrapping the shared client.
+- `packages/sandbox/src/` — reference self-hosted runner; `bwrap`/Docker/Podman plus
+  hosted E2B/Vercel/Daytona SDK drivers, no image build.
 - `examples/` — scenario apps for local test generation: framework examples
   (`hono/`, `express/`, `elysia/`), `pure-node/`, `openapi/`, and dependency-free
   fixtures in `src/`. Reference tests stay in each `tests/` folder;
@@ -48,8 +57,6 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 - `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
   durable `workflow.ts`.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
-- `apps/cli/src/` — `scan`, `generate`, `run`, and `catalog` commands.
-- `apps/mcp/src/` — stdio MCP server wrapping the shared client.
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `PLAN.md` — product requirements and review feedback.
 
@@ -59,12 +66,14 @@ EdgeSpec still sees the incomplete examples as gaps. `examples/complete-app/`
 deliberately keeps its test beside the source. Do not colocate `*.test.ts` under
 `src/` elsewhere.
 
-Bun workspaces live under `apps/*`, `packages/*`, and `examples/`. `packages/core`
-is imported as `@edge-spec/core/<module>`; `packages/client` as
-`@edge-spec/client`; `packages/ui` as `@edge-spec/ui` (and
-`@edge-spec/ui/theme.css`); the apps are `@edge-spec/web`, `@edge-spec/worker`,
-`@edge-spec/cli`, `@edge-spec/mcp`, and `@edge-spec/docs`. Vite outputs the web
-and worker bundles to the root `dist/`, which is what `wrangler.toml` uploads.
+Bun workspaces live under `apps/*`, `packages/*`, and `examples/`. `packages/`
+holds what you import or run yourself: `packages/core`
+(`@edge-spec/core/<module>`), `packages/client` (`@edge-spec/client`),
+`packages/ui` (`@edge-spec/ui`, plus `theme.css`), the `bin` entry points
+`packages/cli` and `packages/mcp`, and the self-hosted `packages/sandbox`
+runner. `apps/` is what this repository deploys: `@edge-spec/web`,
+`@edge-spec/worker`, and the `@edge-spec/docs` site. Vite outputs the web and
+worker bundles to the root `dist/`, which is what `wrangler.toml` uploads.
 
 The CLI and MCP server are **API clients**. Do not make them call
 `packages/core/src/pipeline.ts` directly; that would fork the behavior from the

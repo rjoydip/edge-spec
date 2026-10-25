@@ -3,11 +3,13 @@
  * of claiming a test passed.
  */
 import type { CheckKind, CheckResult, Validation } from "./types";
+import { runInSandbox, type SandboxConfig, type SandboxRepo } from "./sandbox";
 
-export interface SandboxConfig {
-  url?: string;
-  apiKey?: string;
-}
+export { runInSandbox } from "./sandbox";
+export type { SandboxConfig } from "./sandbox";
+
+/** A single-quoted shell word, so a repository path cannot inject a command. */
+const shellWord = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
 
 export interface StaticProblem {
   problem: string;
@@ -51,17 +53,6 @@ export function staticCheck(test: string, strictTypes: boolean): StaticProblem[]
   return problems;
 }
 
-interface SandboxReply {
-  exitCode?: number;
-  stdout?: string;
-  stderr?: string;
-  /** The files after the command ran, when the runner returns them. */
-  files?: Record<string, string>;
-}
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-
 export interface ValidateInput {
   sourcePath: string;
   source: string;
@@ -69,81 +60,9 @@ export interface ValidateInput {
   test: string;
   strictTypes: boolean;
   sandbox?: SandboxConfig;
+  /** The repository a v2 runner clones before writing the files. */
+  repo?: SandboxRepo;
   fetchImpl?: typeof fetch;
-}
-
-export interface SandboxRun {
-  ok: boolean;
-  exitCode: number;
-  output: string;
-  /** The files the runner returned after the command. */
-  files: Record<string, string>;
-  /** Set when the runner could not be reached. */
-  unreachable?: string;
-}
-
-/**
- * Runs one command in the sandbox with the given files. The runner may return
- * the files it ended up with, which is how a formatter returns formatted code.
- */
-export async function runInSandbox(input: {
-  sandbox?: SandboxConfig;
-  files: Record<string, string>;
-  command: string;
-  fetchImpl?: typeof fetch;
-}): Promise<SandboxRun> {
-  const url = input.sandbox?.url?.trim();
-  if (!url) {
-    return { ok: false, exitCode: 1, output: "No sandbox runner is configured.", files: {} };
-  }
-
-  const fetchImpl = input.fetchImpl ?? fetch;
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (input.sandbox?.apiKey) headers.authorization = `Bearer ${input.sandbox.apiKey}`;
-
-  let response: Response;
-  try {
-    response = await fetchImpl(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ files: input.files, command: input.command }),
-      signal: AbortSignal.timeout(120_000),
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      ok: false,
-      exitCode: 1,
-      output: `Sandbox unreachable: ${message}`,
-      files: {},
-      unreachable: message,
-    };
-  }
-
-  const text = await response.text();
-  let reply: SandboxReply = {};
-  try {
-    reply = asRecord(JSON.parse(text)) as SandboxReply;
-  } catch {
-    // Treated as a runner failure below.
-  }
-
-  if (!response.ok) {
-    return {
-      ok: false,
-      exitCode: 1,
-      output: `Sandbox returned ${response.status}: ${text.slice(0, 2000)}`,
-      files: {},
-    };
-  }
-
-  const exitCode = Number(reply.exitCode ?? 1);
-  const output = [reply.stdout, reply.stderr].filter(Boolean).join("\n").slice(0, 6000);
-  const files: Record<string, string> = {};
-  for (const [path, content] of Object.entries(reply.files ?? {})) {
-    if (typeof content === "string") files[path] = content;
-  }
-  return { ok: exitCode === 0, exitCode, output, files };
 }
 
 export async function validateTest(input: ValidateInput): Promise<Validation> {
@@ -170,20 +89,22 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
 
   const run = await runInSandbox({
     sandbox: input.sandbox,
+    ...(input.repo ? { repo: input.repo } : {}),
     files: {
       [input.sourcePath]: input.source,
       [input.testPath]: input.test,
     },
-    command: "bun test",
+    command: input.repo ? `bun test ${shellWord(input.testPath)}` : "bun test",
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
   });
 
-  if (run.unreachable) {
+  if (!run.ok && (run.unreachable || run.environmentError)) {
     return {
       ok: false,
       verified: false,
       output: run.output,
       durationMs: Date.now() - started,
+      ...(run.environmentError ? { environmentError: run.environmentError } : {}),
     };
   }
 
@@ -207,13 +128,15 @@ export async function formatWithRunner(input: {
   command: string;
   /** The file the formatter should write. */
   path: string;
+  repo?: SandboxRepo;
   fetchImpl?: typeof fetch;
 }): Promise<{ code?: string; output: string; ok: boolean }> {
   if (!input.sandbox?.url?.trim()) return { output: "", ok: true };
   const run = await runInSandbox({
     sandbox: input.sandbox,
+    ...(input.repo ? { repo: input.repo } : {}),
     files: input.files,
-    command: `${input.command} ${input.path}`,
+    command: `${input.command} ${shellWord(input.path)}`,
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
   });
   const formatted = run.files[input.path];
@@ -236,6 +159,7 @@ export async function runRepositoryChecks(input: {
   sandbox?: SandboxConfig;
   files: Record<string, string>;
   checks: { kind: CheckKind; name: string; command: string }[];
+  repo?: SandboxRepo;
   fetchImpl?: typeof fetch;
 }): Promise<CheckResult[]> {
   if (!input.sandbox?.url?.trim() || input.checks.length === 0) return [];
@@ -244,19 +168,22 @@ export async function runRepositoryChecks(input: {
     const started = Date.now();
     const run = await runInSandbox({
       sandbox: input.sandbox,
+      ...(input.repo ? { repo: input.repo } : {}),
       files: input.files,
       command: check.command,
       ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
     });
-    // A missing tool is not a failing check: the runner cannot run it. Saying
-    // so is honest; pretending it passed would not be.
-    const skipped = !run.ok && couldNotRun(run.output);
+    // A missing tool or a failed setup is not a failing check: the runner
+    // cannot run it. Saying so is honest; pretending it passed would not be.
+    const environmentError = run.environmentError;
+    const skipped = !run.ok && (couldNotRun(run.output) || Boolean(environmentError));
     results.push({
       name: check.name,
       kind: check.kind,
       command: check.command,
       ok: run.ok,
       ...(skipped ? { skipped: true } : {}),
+      ...(environmentError ? { environmentError } : {}),
       output: run.output || (run.ok ? `${check.name} passed.` : `${check.name} failed.`),
       durationMs: Date.now() - started,
     });

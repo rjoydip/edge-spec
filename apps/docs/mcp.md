@@ -20,7 +20,7 @@ Use an absolute path to the server entry point:
   "mcpServers": {
     "edgespec": {
       "command": "bun",
-      "args": ["/absolute/path/to/edge-spec/apps/mcp/src/index.ts"],
+      "args": ["/absolute/path/to/edge-spec/packages/mcp/src/index.ts"],
       "env": {
         "EDGESPEC_URL": "https://edge-spec.example.workers.dev",
         "GITHUB_TOKEN": "ghp_...",

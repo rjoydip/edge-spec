@@ -85,10 +85,12 @@ bun run deploy -- --dry-run
 ```text
 packages/core/src/   pure pipeline logic (scanner, AI, GitHub, validation)
 packages/client/src/ Worker API client shared by the CLI and MCP server
+packages/ui/src/     shared React primitives and theme tokens
+packages/cli/src/    terminal client
+packages/mcp/src/    stdio MCP server
+packages/sandbox/src/ self-hosted sandbox runner
 apps/worker/src/     Hono routes, bindings, durable Workflow
 apps/web/src/        React dashboard
-apps/cli/src/        terminal client
-apps/mcp/src/        stdio MCP server
 apps/docs/           this documentation site
 ```
 

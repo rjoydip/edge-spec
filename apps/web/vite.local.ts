@@ -11,13 +11,14 @@ import type { ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { detectChecks, SUPPORT_FILES } from "@edge-spec/core/ci";
 import {
+  classifyTree,
   describeRepository,
   extractExports,
-  findGaps,
   packageFacts,
   parseOpenApiSpec,
   riskOf,
 } from "@edge-spec/core/scanner";
+import { apiGaps } from "@edge-spec/core/openapi";
 import type { Gap, ScanResult } from "@edge-spec/core/types";
 
 const MAX_FILES = 20_000;
@@ -124,7 +125,8 @@ function readIfPresent(root: string, path: string): string | undefined {
 /** The same scan shape as `/api/scan`, backed by the local tree. */
 export function scanLocalProject(root: string): ScanResult {
   const blobs = walk(root);
-  const gaps = findGaps(blobs, 25);
+  const classification = classifyTree(blobs);
+  const gaps = classification.missing.slice(0, 25);
 
   const enriched: Gap[] = gaps.slice(0, 8).map((gap) => {
     try {
@@ -191,6 +193,21 @@ export function scanLocalProject(root: string): ScanResult {
     ref: "local",
     scanned: blobs.length,
     gaps: [...enriched, ...gaps.slice(8)],
+    coverageGaps: [],
+    apiGaps: apiGaps(openApiSpecs),
+    unsupported: classification.unsupported,
+    totals: {
+      missing: classification.missing.length,
+      coverage: 0,
+      api: apiGaps(openApiSpecs).length,
+      unsupported: classification.unsupported.length,
+    },
+    truncated: {
+      missing: classification.missing.length > 25,
+      coverage: false,
+      api: false,
+    },
+    coverageStatus: "not-run",
     overview,
   };
 }

@@ -195,9 +195,12 @@ describe("pipelineConfig", () => {
       coverageTarget: 0,
       maxFiles: 50,
       parallelGeneration: true,
+      concurrency: 3,
     });
     expect(pipelineConfig({ maxRetries: "x" }).maxRetries).toBe(2);
     expect(pipelineConfig({ maxFiles: 0 }).maxFiles).toBe(1);
+    expect(pipelineConfig({ concurrency: 99 }).concurrency).toBe(6);
+    expect(pipelineConfig({ concurrency: 0 }).concurrency).toBe(1);
   });
 });
 
