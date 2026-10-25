@@ -3,7 +3,7 @@ import { cn } from "../lib/utils";
 
 const VARIANTS = {
   default:
-    "bg-indigo-600 text-white shadow-lg shadow-indigo-950/20 hover:bg-indigo-500 active:scale-[0.99]",
+    "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-950/20 hover:from-indigo-500 hover:to-violet-500 active:scale-[0.99]",
   danger:
     "bg-rose-600 text-white shadow-lg shadow-rose-950/25 hover:bg-rose-500 active:scale-[0.99]",
   secondary: "bg-zinc-800 text-zinc-100 hover:bg-zinc-700",

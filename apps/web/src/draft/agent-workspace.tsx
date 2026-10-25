@@ -1446,11 +1446,7 @@ export function AgentWorkspaceDraft() {
                   }
                 >
                   <span className="inline-flex">
-                    <Button
-                      onClick={() => setPrOpen(true)}
-                      disabled={rank < 5}
-                      className="bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-950/30"
-                    >
+                    <Button onClick={() => setPrOpen(true)} disabled={rank < 5}>
                       <GitPullRequest />
                       Review pull request
                       <ArrowUpRight className="size-3.5" />
