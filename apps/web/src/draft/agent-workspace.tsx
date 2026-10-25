@@ -97,7 +97,6 @@ import {
   cn,
 } from "@edge-spec/ui";
 import { providerById } from "@edge-spec/core/catalog";
-import { SANDBOX_PROVIDERS } from "@edge-spec/core/sandbox";
 import { toggleMode, useAppearance } from "@/lib/theme";
 import {
   CHECKS,
@@ -131,7 +130,7 @@ import {
   type SettingsSection,
 } from "./settings-sheet";
 import {
-  CheckChips,
+  CheckSummary,
   EndpointStatus,
   MethodChip,
   RISK,
@@ -509,10 +508,10 @@ export function AgentWorkspaceDraft() {
               </button>
               <div className="min-w-0 leading-tight">
                 <h1 className="truncate text-sm font-bold tracking-tight text-zinc-50">
-                  EdgeSpec <span className="text-zinc-400">AI Agent</span>
+                  EdgeSpec <span className="text-zinc-400">Agentic Test Engineer</span>
                 </h1>
                 <p className="hidden text-[10px] text-zinc-500 sm:block">
-                  finds the gaps, tests the edges, opens the pull request
+                  plans the gaps, runs the suite, fixes the tests and opens the PR
                 </p>
               </div>
 
@@ -540,10 +539,8 @@ export function AgentWorkspaceDraft() {
                     className="hidden rounded-xl focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none sm:block"
                     aria-label="Open sandbox settings"
                   >
-                    <Badge variant="neutral" className="h-9 items-center gap-1 px-2.5">
-                      <Boxes className="size-3.5 text-violet-400" />
-                      {SANDBOX_PROVIDERS.find((item) => item.id === settings.sandboxProvider)
-                        ?.label ?? settings.sandboxProvider}
+                    <Badge variant="neutral" className="size-9 items-center justify-center p-0">
+                      <Boxes className="size-4 text-violet-400" />
                     </Badge>
                   </button>
                 </Hint>
@@ -603,6 +600,7 @@ export function AgentWorkspaceDraft() {
                 title="Target Repository"
                 icon={FolderGit2}
                 tone="clone"
+                iconClass="text-zinc-400"
                 hint="clone · parse the AST · read the tree"
                 aside={
                   <Badge variant="neutral" className="font-mono">
@@ -716,7 +714,7 @@ export function AgentWorkspaceDraft() {
                       {(rank * 2.4).toFixed(1)}s
                     </Badge>
                     <Button variant="ghost" size="xs" onClick={() => setFactsOpen(true)}>
-                      <FileJson className="size-3 text-sky-400" />
+                      <FileJson className="size-3" />
                       Facts
                     </Button>
                     <Button
@@ -861,7 +859,7 @@ export function AgentWorkspaceDraft() {
                       )}
                       {gapKind === "api" && (
                         <p className="mb-1.5 flex items-center gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/[0.05] px-2 py-1 text-[9px] text-amber-300">
-                          <FileJson className="size-3 text-sky-400" />
+                          <FileJson className="size-3" />
                           contract drift against openapi.yaml
                         </p>
                       )}
@@ -967,7 +965,7 @@ export function AgentWorkspaceDraft() {
                         "not run"
                       )}
                       <Button variant="ghost" size="xs" onClick={() => setSpecOpen(true)}>
-                        <FileJson className="size-3 text-sky-400" />
+                        <FileJson className="size-3" />
                         Spec
                       </Button>
                     </div>
@@ -1078,11 +1076,11 @@ export function AgentWorkspaceDraft() {
                   onClick={downloadAccepted}
                   disabled={acceptedCount === 0}
                 >
-                  <Download className="size-3.5 text-sky-400" />
+                  <Download className="size-3.5" />
                   Download accepted
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setSpecOpen(true)}>
-                  <FileJson className="size-3.5 text-amber-400" />
+                  <FileJson className="size-3.5" />
                   Spec & contract
                 </Button>
                 <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-500">
@@ -1126,7 +1124,7 @@ export function AgentWorkspaceDraft() {
                         </span>
                       </span>
                       <span className="hidden sm:block">
-                        <CheckChips checks={CHECKS} />
+                        <CheckSummary checks={CHECKS} />
                       </span>
                       <Badge
                         variant={accepted ? "success" : rejected ? "danger" : "warning"}
@@ -1186,7 +1184,7 @@ export function AgentWorkspaceDraft() {
                           )
                         }
                       >
-                        <Download className="size-3.5 text-sky-400" />
+                        <Download className="size-3.5" />
                       </Button>
                     </div>
                   );
@@ -1435,6 +1433,7 @@ function StepHead({
   hint,
   icon: Icon,
   tone,
+  iconClass,
   aside,
 }: {
   n: string;
@@ -1442,6 +1441,7 @@ function StepHead({
   hint: string;
   icon: typeof FolderGit2;
   tone: Tone;
+  iconClass?: string;
   aside?: ReactNode;
 }) {
   const palette = TONES[tone];
@@ -1459,7 +1459,7 @@ function StepHead({
       </span>
       <div className="min-w-0">
         <h2 className="flex items-center gap-1.5 text-xs font-semibold text-zinc-100">
-          <Icon className={cn("size-3.5", palette.text)} />
+          <Icon className={cn("size-3.5", iconClass ?? palette.text)} />
           {title}
         </h2>
         <p className="text-[10px] text-zinc-500">{hint}</p>

@@ -1,6 +1,7 @@
 /** Every modal the four-step workspace opens. Fixtures only. */
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  AlignLeft,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -9,6 +10,7 @@ import {
   Download,
   FileCode2,
   FileJson,
+  FlaskConical,
   FolderGit2,
   GitPullRequest,
   ListChecks,
@@ -19,6 +21,7 @@ import {
   Sparkles,
   Timer,
   TriangleAlert,
+  Type,
   Wrench,
   X,
 } from "lucide-react";
@@ -52,7 +55,7 @@ import {
   type StageId,
 } from "./data";
 import {
-  CheckChips,
+  CheckSummary,
   EndpointStatus,
   LogLines,
   MethodChip,
@@ -245,7 +248,7 @@ export function ReviewDialog({
           <Badge variant="neutral" className="font-mono">
             {entry.file.source}
           </Badge>
-          <CheckChips checks={CHECKS} />
+          <CheckSummary checks={CHECKS} />
           <Badge
             variant={state === "accepted" ? "success" : state === "rejected" ? "danger" : "warning"}
           >
@@ -278,6 +281,32 @@ export function ReviewDialog({
             />
           </TabsContent>
         </Tabs>
+
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Checks</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {CHECKS.map((check) => {
+              const meta = CHECK_META[check.kind] ?? {
+                icon: FlaskConical,
+                tone: "text-emerald-300",
+              };
+              const Icon = meta.icon;
+              return (
+                <div
+                  key={check.kind}
+                  className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5"
+                >
+                  <Icon className={cn("size-3.5 shrink-0", meta.tone)} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[10px] text-zinc-300">{check.kind}</span>
+                    <span className="block font-mono text-[9px] text-zinc-500">{check.ms}ms</span>
+                  </span>
+                  <CheckCircle2 className="ml-auto size-3.5 shrink-0 text-emerald-400" />
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         <Alert variant="success">
           <ShieldCheck />
@@ -496,7 +525,7 @@ export function SpecDialog({ open, onClose }: { open: boolean; onClose: () => vo
       <Tabs value={tab} onValueChange={setTab} className="space-y-2">
         <TabsList>
           <TabsTrigger value="spec">
-            <FileJson className="size-3.5 text-sky-400" />
+            <FileJson className="size-3.5" />
             Spec source
           </TabsTrigger>
           <TabsTrigger value="contract">
@@ -785,12 +814,7 @@ export function PrDialog({
         )}
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <Summary
-            label="Repository"
-            value={`${FACTS.repo} → main`}
-            icon={FolderGit2}
-            iconClass="text-sky-400"
-          />
+          <Summary label="Repository" value={`${FACTS.repo} → main`} icon={FolderGit2} />
           <Summary
             label="Base branch"
             value="main"
@@ -886,7 +910,7 @@ export function PrDialog({
                 <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-zinc-200">
                   {entry.file.test}
                 </span>
-                <CheckChips checks={CHECKS} />
+                <CheckSummary checks={CHECKS} />
               </div>
             ))
           )}
@@ -941,6 +965,14 @@ export function PrDialog({
     </Dialog>
   );
 }
+
+const CHECK_META: Record<string, { icon: typeof AlignLeft; tone: string }> = {
+  format: { icon: AlignLeft, tone: "text-sky-300" },
+  lint: { icon: ListChecks, tone: "text-violet-300" },
+  typecheck: { icon: Type, tone: "text-amber-300" },
+  test: { icon: FlaskConical, tone: "text-emerald-300" },
+  build: { icon: ShieldCheck, tone: "text-indigo-300" },
+};
 
 const CI_TONE: Record<string, string> = {
   format: "text-sky-300",

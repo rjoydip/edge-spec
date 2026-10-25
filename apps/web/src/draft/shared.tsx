@@ -122,6 +122,39 @@ export function CheckChips({ checks }: { checks: ReadonlyArray<{ kind: string; o
   );
 }
 
+/** Compact four-dot check summary for dense rows. Detail lives in the modal. */
+export function CheckSummary({ checks }: { checks: ReadonlyArray<{ kind: string; ok: boolean }> }) {
+  const passed = checks.filter((check) => check.ok).length;
+  const dots: Record<string, string> = {
+    format: "bg-sky-400",
+    lint: "bg-violet-400",
+    typecheck: "bg-amber-400",
+    test: "bg-emerald-400",
+    build: "bg-indigo-400",
+  };
+  return (
+    <span
+      title={checks.map((check) => `${check.kind}: ${check.ok ? "passed" : "failed"}`).join(" · ")}
+      className="inline-flex items-center gap-1.5 rounded-md border border-zinc-800/70 bg-zinc-950/40 px-1.5 py-0.5"
+    >
+      <span className="flex items-center gap-0.5">
+        {checks.map((check) => (
+          <span
+            key={check.kind}
+            className={cn(
+              "size-1.5 rounded-full",
+              check.ok ? (dots[check.kind] ?? "bg-zinc-500") : "bg-rose-500",
+            )}
+          />
+        ))}
+      </span>
+      <span className="font-mono text-[9px] text-zinc-500">
+        {passed}/{checks.length} checks
+      </span>
+    </span>
+  );
+}
+
 export interface EndpointRow extends DraftEndpoint {
   visible?: boolean;
   wasHttp?: number;
