@@ -1179,16 +1179,16 @@ export function AgentWorkspaceDraft() {
               </div>
 
               {rejectedCount > 0 && (
-                <div className="overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/[0.06]">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/20 px-3 py-2">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-500/15">
-                      <TriangleAlert className="size-3.5 text-amber-300" />
+                <div className="overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/[0.035]">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/15 px-3 py-2">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
+                      <TriangleAlert className="size-3.5 text-amber-300/80" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-semibold text-amber-200">
+                      <p className="text-[11px] font-semibold text-amber-200/90">
                         Rejected · kept out of the pull request
                       </p>
-                      <p className="text-[10px] text-amber-300/60">
+                      <p className="text-[10px] text-amber-300/50">
                         {rejectedCount} file(s) stay in this session. Restore any before
                         dispatching.
                       </p>
@@ -1197,7 +1197,7 @@ export function AgentWorkspaceDraft() {
                     <Button
                       variant="ghost"
                       size="xs"
-                      className="text-amber-200 hover:bg-amber-500/10"
+                      className="text-amber-200/80 hover:bg-amber-500/[0.08]"
                       onClick={restoreRejected}
                     >
                       <RotateCcw className="size-3.5" />
