@@ -695,7 +695,10 @@ export function AgentWorkspaceDraft() {
                 <Button
                   onClick={running ? resetRun : start}
                   disabled={!repo.trim() || invalid}
-                  className="sm:w-36"
+                  className={cn(
+                    "sm:w-36",
+                    running && "from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500",
+                  )}
                 >
                   {running ? (
                     <>
@@ -839,7 +842,7 @@ export function AgentWorkspaceDraft() {
                       {(rank * 2.4).toFixed(1)}s
                     </Badge>
                     <Button variant="ghost" size="xs" onClick={() => setFactsOpen(true)}>
-                      <FileJson className="size-3" />
+                      <FileJson className="size-3" stroke={ICON_GRADIENT} />
                       Facts
                     </Button>
                     <Button
@@ -1225,7 +1228,7 @@ export function AgentWorkspaceDraft() {
                           disabled={rank < 5}
                           aria-label="Preview diff"
                         >
-                          <FileDiff className="size-3.5" stroke={ICON_GRADIENT} />
+                          <FileDiff className="size-3.5 text-zinc-400" />
                         </Button>
                       </Hint>
                       <Hint label="Generate test">
@@ -1238,7 +1241,7 @@ export function AgentWorkspaceDraft() {
                         >
                           <RefreshCw
                             className={cn(
-                              "size-3.5",
+                              "size-3.5 text-sky-400",
                               regenerating === entry.file.source && "animate-spin",
                             )}
                           />

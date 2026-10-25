@@ -5,7 +5,8 @@ import {
   Check,
   CheckCircle2,
   Clipboard,
-  Download,
+  Cpu,
+  ArrowDownToLine,
   FileCode2,
   FileDiff,
   FileJson,
@@ -13,7 +14,9 @@ import {
   FolderGit2,
   GitPullRequest,
   ListChecks,
+  Package,
   Loader2,
+  Palette,
   RefreshCw,
   RotateCcw,
   Search,
@@ -145,7 +148,7 @@ export function LogDialog({
               )
             }
           >
-            <Download className="size-4" stroke={ICON_GRADIENT} />
+            <ArrowDownToLine className="size-4" stroke={ICON_GRADIENT} />
           </Button>
         </Hint>
       }
@@ -235,7 +238,7 @@ export function DiffDialog({
               )
             }
           >
-            <Download className="size-4" stroke={ICON_GRADIENT} />
+            <ArrowDownToLine className="size-4" stroke={ICON_GRADIENT} />
           </Button>
         </Hint>
       }
@@ -587,7 +590,7 @@ export function SpecDialog({
               )
             }
           >
-            <Download className="size-4" stroke={ICON_GRADIENT} />
+            <ArrowDownToLine className="size-4" stroke={ICON_GRADIENT} />
           </Button>
         </Hint>
       }
@@ -669,39 +672,56 @@ export function FactsDialog({ open, onClose }: { open: boolean; onClose: () => v
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
-            { label: "Source files", value: FACTS.sourceFiles },
-            { label: "Test files", value: FACTS.testFiles },
-            { label: "Runtime", value: FACTS.runtime },
-            { label: "Package manager", value: FACTS.packageManager },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="rounded-xl border border-zinc-800/70 bg-zinc-950/40 p-2.5"
-            >
-              <p className="text-[10px] text-zinc-500">{item.label}</p>
-              <p className="mt-0.5 truncate font-mono text-[11px] text-zinc-200">{item.value}</p>
-            </div>
-          ))}
+            { label: "Source files", value: FACTS.sourceFiles, icon: FileCode2 },
+            { label: "Test files", value: FACTS.testFiles, icon: FlaskConical },
+            { label: "Runtime", value: FACTS.runtime, icon: Cpu },
+            { label: "Package manager", value: FACTS.packageManager, icon: Package },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <div
+                key={item.label}
+                className="rounded-xl border border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.06] to-violet-500/[0.06] p-2.5"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Icon className="size-3.5 shrink-0" stroke={ICON_GRADIENT} />
+                  <p className="text-[10px] text-zinc-500">{item.label}</p>
+                </div>
+                <p className="mt-1 truncate font-mono text-[11px] text-zinc-200">{item.value}</p>
+              </div>
+            );
+          })}
         </div>
 
         <div className="space-y-1.5">
           <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
             Languages
           </p>
-          {FACTS.languages.map((language) => (
-            <div key={language.name} className="flex items-center gap-2">
-              <span className="w-24 shrink-0 text-[11px] text-zinc-300">{language.name}</span>
-              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
-                <span
-                  className="block h-full rounded-full bg-stage-clone"
-                  style={{ width: `${(language.count / total) * 100}%` }}
-                />
-              </span>
-              <span className="w-8 text-right font-mono text-[10px] text-zinc-500">
-                {language.count}
-              </span>
-            </div>
-          ))}
+          {FACTS.languages.map((language) => {
+            const meta = LANGUAGE_META[language.name] ?? {
+              icon: FileCode2,
+              tone: "text-zinc-400",
+              bar: "bg-zinc-500",
+            };
+            const Icon = meta.icon;
+            return (
+              <div key={language.name} className="flex items-center gap-2">
+                <span className="flex w-28 shrink-0 items-center gap-1.5">
+                  <Icon className={cn("size-3.5 shrink-0", meta.tone)} />
+                  <span className="text-[11px] text-zinc-300">{language.name}</span>
+                </span>
+                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                  <span
+                    className={cn("block h-full rounded-full", meta.bar)}
+                    style={{ width: `${(language.count / total) * 100}%` }}
+                  />
+                </span>
+                <span className="w-8 text-right font-mono text-[10px] text-zinc-500">
+                  {language.count}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex flex-wrap gap-1.5">
@@ -1068,6 +1088,12 @@ const CHECK_STATUS = {
   warning: { icon: TriangleAlert, tone: "text-amber-400" },
   failed: { icon: X, tone: "text-rose-400" },
 } as const;
+
+const LANGUAGE_META: Record<string, { icon: typeof FileCode2; tone: string; bar: string }> = {
+  TypeScript: { icon: FileCode2, tone: "text-indigo-300", bar: "bg-indigo-400" },
+  JavaScript: { icon: FileJson, tone: "text-amber-300", bar: "bg-amber-400" },
+  CSS: { icon: Palette, tone: "text-sky-300", bar: "bg-sky-400" },
+};
 
 const CI_TONE: Record<string, string> = {
   format: "text-sky-300",
