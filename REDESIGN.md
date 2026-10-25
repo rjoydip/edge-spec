@@ -4,6 +4,25 @@ Branch: `feat/agent-redesign` (from `feat/sandbox`).
 Scope: dashboard UX/UI only. No CLI, MCP, Worker-route or contract-test changes
 unless a phase says so explicitly.
 
+## 0. Draft on this branch
+
+A fixture-driven mockup of this layout is mounted at **`/?draft`** (and
+`/?draft&theme=light`). It plays one staged run on load: clone → gaps →
+contract tests → fix → review, then gates Dispatch on Accept so the honesty
+rule is visible.
+
+- `apps/web/src/draft/agent-workspace.tsx` — the four steps, header, footer,
+  log sheet, settings sheet. Fixtures only, no Worker calls.
+- `apps/web/src/draft/data.ts` — repo facts, 14 gaps, 14 endpoints, diff, log.
+- `apps/web/src/main.tsx` — lazy `?draft` entry; the shipped dashboard is
+  untouched and the mockup is a separate chunk.
+- `packages/ui` — 17 new shadcn primitives (P0), all with a consumer here.
+- `apps/web/src/tailwind.css` — stage tokens and the workspace keyframes.
+
+What is real in the draft: tokens, layout, motion, primitives, keyboard/focus
+behaviour, light/dark. What is mocked: every number and stage transition. The
+wiring phases below replace the fixtures with `RunEvent`s.
+
 ## 1. Goal
 
 Replace the current tabbed dashboard with the four-step agent workspace in the
