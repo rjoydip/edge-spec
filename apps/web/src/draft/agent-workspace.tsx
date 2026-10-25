@@ -1251,10 +1251,13 @@ export function AgentWorkspaceDraft() {
                   </div>
                 </Alert>
               ) : rank < 5 ? (
-                <Alert variant="warning">
+                <Alert
+                  variant="warning"
+                  className="border-amber-500/20 bg-amber-500/[0.035] text-amber-300/70 [&_svg]:text-amber-300/80"
+                >
                   <TriangleAlert />
                   <div>
-                    <AlertTitle>Not verified yet</AlertTitle>
+                    <AlertTitle className="text-amber-200/90">Not verified yet</AlertTitle>
                     <AlertDescription>
                       No runner has executed this suite yet. A static check is not a pass.
                     </AlertDescription>
