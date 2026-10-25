@@ -53,8 +53,8 @@ export function Dialog({
               <DialogPrimitive.Close asChild>
                 <button
                   type="button"
-                  aria-label="Close settings"
-                  className="rounded-lg p-1 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
+                  aria-label="Close dialog"
+                  className="rounded-lg p-1 text-zinc-500 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 hover:bg-zinc-800 hover:text-zinc-200"
                 >
                   <X className="size-4" />
                 </button>

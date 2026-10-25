@@ -7,21 +7,43 @@ unless a phase says so explicitly.
 ## 0. Draft on this branch
 
 A fixture-driven mockup of this layout is mounted at **`/?draft`** (and
-`/?draft&theme=light`). It plays one staged run on load: clone → gaps →
-contract tests → fix → review, then gates Dispatch on Accept so the honesty
-rule is visible.
+`/?draft&theme=light`). Every modal also has a deep link:
+`?draft&modal=log | diff | endpoint | spec | pr | facts | pulls | settings`.
 
-- `apps/web/src/draft/agent-workspace.tsx` — the four steps, header, footer,
-  log sheet, settings sheet. Fixtures only, no Worker calls.
-- `apps/web/src/draft/data.ts` — repo facts, 14 gaps, 14 endpoints, diff, log.
+The draft plays one staged run on load: clone → gaps → contract tests → fix →
+review, then gates the PR on per-file decisions.
+
+- `apps/web/src/draft/agent-workspace.tsx` — the four steps, header, footer.
+- `apps/web/src/draft/dialogs.tsx` — event log, diff review, endpoint detail,
+  spec/contract, repository facts, PR package, pull requests.
+- `apps/web/src/draft/settings-sheet.tsx` — editable provider, sandbox, keys,
+  pipeline and appearance (Accordion + inputs).
+- `apps/web/src/draft/shared.tsx` — stage tones, badges, downloads, log lines.
+- `apps/web/src/draft/data.ts` — repo facts, 14 gaps, 14 endpoints, 4 generated
+  files, spec YAML, logs, checks.
 - `apps/web/src/main.tsx` — lazy `?draft` entry; the shipped dashboard is
   untouched and the mockup is a separate chunk.
-- `packages/ui` — 17 new shadcn primitives (P0), all with a consumer here.
+- `packages/ui` — 17 new shadcn primitives (P0).
 - `apps/web/src/tailwind.css` — stage tokens and the workspace keyframes.
 
+Interactions covered by the draft:
+
+| Flow         | Where                                                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Stage events | click a rail node, or "Event log" → modal with stage tabs                                                             |
+| Diff review  | "Diff" per file → modal with generated test, source, checks, accept/reject, download                                  |
+| Decisions    | per-file accept/reject, "Accept all", rejected tray with Restore                                                      |
+| PR gate      | footer → package modal (included, excluded, branch, model, verification); dispatch is blocked while a file is pending |
+| Endpoints    | click a matrix row → request, response, execution log, copy cURL, re-test, open spec                                  |
+| Spec         | "Spec" → raw YAML + generated contract, download                                                                      |
+| Gaps         | tabs: Missing 11 · Coverage 2 · Contract 1, coverage labelled from `lcov.info`                                        |
+| Facts        | repository languages, runtime, CI checks, coverage source                                                             |
+| Settings     | Accordion sections with editable provider/model, runner, keys, retries, strict mode, accent                           |
+| Autonomous   | auto-accepts, then opens the PR package instead of dispatching silently                                               |
+
 What is real in the draft: tokens, layout, motion, primitives, keyboard/focus
-behaviour, light/dark. What is mocked: every number and stage transition. The
-wiring phases below replace the fixtures with `RunEvent`s.
+behaviour, light/dark, downloads. What is mocked: every number, command and
+stage transition. The wiring phases below replace the fixtures with `RunEvent`s.
 
 ## 1. Goal
 

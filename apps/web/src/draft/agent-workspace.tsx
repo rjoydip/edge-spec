@@ -15,8 +15,11 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Download,
+  ExternalLink,
   FileCode2,
   FileDiff,
+  FileJson,
   Folder,
   FolderGit2,
   GitBranch,
@@ -26,6 +29,7 @@ import {
   Moon,
   Play,
   RefreshCw,
+  RotateCcw,
   Search,
   Server,
   Settings,
@@ -70,9 +74,6 @@ import {
   DropdownMenuTrigger,
   Hint,
   Input,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
   Progress,
   RadioGroup,
   RadioGroupItem,
@@ -82,14 +83,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Separator,
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
   Skeleton,
   Table,
   TableBody,
@@ -97,76 +90,52 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsList,
+  TabsTrigger,
   TooltipProvider,
   cn,
 } from "@edge-spec/ui";
-import { ACCENTS, setAccent, toggleMode, useAppearance } from "@/lib/theme";
+import { providerById } from "@edge-spec/core/catalog";
+import { SANDBOX_PROVIDERS } from "@edge-spec/core/sandbox";
+import { toggleMode, useAppearance } from "@/lib/theme";
 import {
-  DIFF,
+  CHECKS,
+  DIFFS,
   ENDPOINTS,
-  FILES,
   GAPS,
-  LOG_LINES,
+  GENERATED,
+  LOGS,
   PHASE_RANK,
-  type DraftEndpoint,
   type DraftGap,
   type DraftPhase,
+  type StageId,
 } from "./data";
+import {
+  EndpointDialog,
+  FactsDialog,
+  LogDialog,
+  PrDialog,
+  PullsDialog,
+  ReviewDialog,
+  SpecDialog,
+  type ReviewEntry,
+  type ReviewState,
+} from "./dialogs";
+import { DEFAULT_DRAFT_SETTINGS, SettingsSheet, type DraftSettings } from "./settings-sheet";
+import {
+  CheckChips,
+  EndpointStatus,
+  MethodChip,
+  RISK,
+  STAGE_LABEL,
+  TONES,
+  downloadFile,
+  type EndpointRow,
+  type Tone,
+} from "./shared";
 
-const TONES = {
-  clone: {
-    text: "text-stage-clone",
-    border: "border-stage-clone/35",
-    soft: "bg-stage-clone/10",
-    bar: "bg-stage-clone",
-    glow: "shadow-stage-clone/20",
-  },
-  analyze: {
-    text: "text-stage-analyze",
-    border: "border-stage-analyze/35",
-    soft: "bg-stage-analyze/10",
-    bar: "bg-stage-analyze",
-    glow: "shadow-stage-analyze/20",
-  },
-  test: {
-    text: "text-stage-test",
-    border: "border-stage-test/35",
-    soft: "bg-stage-test/10",
-    bar: "bg-stage-test",
-    glow: "shadow-stage-test/20",
-  },
-  fix: {
-    text: "text-stage-fix",
-    border: "border-stage-fix/35",
-    soft: "bg-stage-fix/10",
-    bar: "bg-stage-fix",
-    glow: "shadow-stage-fix/20",
-  },
-  review: {
-    text: "text-stage-review",
-    border: "border-stage-review/35",
-    soft: "bg-stage-review/10",
-    bar: "bg-stage-review",
-    glow: "shadow-stage-review/20",
-  },
-} as const;
-
-type Tone = keyof typeof TONES;
 type StageState = "idle" | "running" | "done";
-
-const METHOD = {
-  GET: "border-sky-500/30 bg-sky-500/10 text-sky-300",
-  POST: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-  PUT: "border-violet-500/30 bg-violet-500/10 text-violet-300",
-  PATCH: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-  DELETE: "border-rose-500/30 bg-rose-500/10 text-rose-400",
-} as const;
-
-const RISK = {
-  high: { variant: "danger" as const, label: "H" },
-  medium: { variant: "warning" as const, label: "M" },
-  low: { variant: "neutral" as const, label: "L" },
-};
 
 const MODES = [
   {
@@ -178,26 +147,27 @@ const MODES = [
   {
     id: "auto",
     label: "Fully Autonomous",
-    desc: "Auto-accept, then open the PR once.",
+    desc: "Auto-accept, then show the PR package.",
     icon: Zap,
   },
 ] as const;
 
-const GROUPS = GAPS.reduce<Record<string, DraftGap[]>>((all, gap) => {
-  const dir = gap.path.split("/").slice(0, -1).join("/");
-  (all[dir] ??= []).push(gap);
-  return all;
-}, {});
-
-const STATUS_TEXT: Record<DraftPhase, string> = {
-  idle: "Ready · acme/edge-api · main",
-  scanning: "Cloning and parsing the tree",
-  analyzing: "14 gaps found, ranking by risk",
-  testing: "Contract tests executing on Docker",
-  fixing: "Correcting the failing contract, writing tests",
-  review: "8 tests ready · review, then dispatch",
-  dispatched: "PR #128 opened on acme/edge-api",
+const SEED_REVIEWS: Record<string, ReviewState> = {
+  "src/auth/session.ts": "accepted",
+  "src/edge/middleware.ts": "rejected",
+  "src/api/sync.ts": "pending",
+  "openapi.yaml": "accepted",
 };
+
+const GAP_KINDS = [
+  { id: "missing", label: "Missing tests" },
+  { id: "coverage", label: "Coverage gaps" },
+  { id: "api", label: "Contract gaps" },
+] as const;
+
+function statusOf(reviews: Record<string, ReviewState>, state: ReviewState): number {
+  return GENERATED.filter((file) => reviews[file.source] === state).length;
+}
 
 export function AgentWorkspaceDraft() {
   const appearance = useAppearance();
@@ -205,24 +175,52 @@ export function AgentWorkspaceDraft() {
   const [tested, setTested] = useState(0);
   const [written, setWritten] = useState(0);
   const [fixed, setFixed] = useState(false);
-  const [accepted, setAccepted] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [diffKey, setDiffKey] = useState(0);
   const [mode, setMode] = useState<"review" | "auto">("review");
   const [repo, setRepo] = useState("https://github.com/acme/edge-api.git");
   const [branch, setBranch] = useState("main");
-  const [activePath, setActivePath] = useState(FILES[0] as string);
-  const [selection, setSelection] = useState<string[]>(GAPS.slice(0, 8).map((gap) => gap.path));
-  const [logOpen, setLogOpen] = useState(false);
+  const [settings, setSettings] = useState<DraftSettings>(DEFAULT_DRAFT_SETTINGS);
+  const [reviews, setReviews] = useState<Record<string, ReviewState>>(SEED_REVIEWS);
+  const [selection, setSelection] = useState<string[]>(
+    GAPS.filter((gap) => gap.kind === "missing")
+      .slice(0, 8)
+      .map((gap) => gap.path),
+  );
+  const [gapKind, setGapKind] = useState<(typeof GAP_KINDS)[number]["id"]>("missing");
+  const [queued, setQueued] = useState<"idle" | "running" | "done">("idle");
+  const [queuedCount, setQueuedCount] = useState(0);
+  const [regenerating, setRegenerating] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [logStage, setLogStage] = useState<StageId | "all">("all");
+  const [reviewPath, setReviewPath] = useState<string | undefined>(undefined);
+  const [endpointKey, setEndpointKey] = useState<string | undefined>(undefined);
+  const [specOpen, setSpecOpen] = useState(false);
+  const [factsOpen, setFactsOpen] = useState(false);
+  const [pullsOpen, setPullsOpen] = useState(false);
+  const [prOpen, setPrOpen] = useState(false);
 
   const rank = PHASE_RANK[phase];
   const running = rank > 0 && rank < 5;
+  const providerName = providerById(settings.provider)?.name ?? settings.provider;
 
   // One pass through the four stages, so the motion is reviewable on load.
   useEffect(() => {
     const timer = setTimeout(() => setPhase("scanning"), 700);
     return () => clearTimeout(timer);
+  }, []);
+
+  // `?draft&modal=…` deep-links a modal for design review.
+  useEffect(() => {
+    const modal = new URLSearchParams(window.location.search).get("modal");
+    if (!modal) return;
+    if (modal === "settings") setSettingsOpen(true);
+    if (modal === "log") setLogOpen(true);
+    if (modal === "diff") setReviewPath(GENERATED[0]?.source);
+    if (modal === "endpoint") setEndpointKey("POST /api/v1/sync");
+    if (modal === "spec") setSpecOpen(true);
+    if (modal === "facts") setFactsOpen(true);
+    if (modal === "pulls") setPullsOpen(true);
+    if (modal === "pr") setPrOpen(true);
   }, []);
 
   useEffect(() => {
@@ -238,75 +236,114 @@ export function AgentWorkspaceDraft() {
       const timer = setTimeout(() => setPhase("fixing"), 600);
       return () => clearTimeout(timer);
     }
-    const timer = setTimeout(() => setTested((count) => count + 1), 180);
+    const timer = setTimeout(() => setTested((count) => count + 1), 170);
     return () => clearTimeout(timer);
   }, [phase, tested]);
 
   useEffect(() => {
     if (phase !== "fixing") return;
-    if (written >= 8) {
+    if (written >= GENERATED.length) {
       const timer = setTimeout(() => {
         setFixed(true);
         setPhase("review");
       }, 700);
       return () => clearTimeout(timer);
     }
-    const timer = setTimeout(() => setWritten((count) => count + 1), 150);
+    const timer = setTimeout(() => setWritten((count) => count + 1), 140);
     return () => clearTimeout(timer);
   }, [phase, written]);
 
-  // Autonomous mode accepts and dispatches once; the diff still appeared.
+  // Autonomous: accept the pending files, then open the package for a look.
   useEffect(() => {
-    if (phase !== "review" || mode !== "auto" || accepted) return;
-    const timer = setTimeout(() => {
-      setAccepted(true);
-      setPhase("dispatched");
-    }, 1700);
+    if (phase !== "review" || mode !== "auto") return;
+    const accept = setTimeout(
+      () =>
+        setReviews((current) =>
+          Object.fromEntries(
+            Object.entries(current).map(([key, value]) => [
+              key,
+              value === "pending" ? "accepted" : value,
+            ]),
+          ),
+        ),
+      900,
+    );
+    const open = setTimeout(() => setPrOpen(true), 1700);
+    return () => {
+      clearTimeout(accept);
+      clearTimeout(open);
+    };
+  }, [phase, mode]);
+
+  useEffect(() => {
+    if (queued !== "done") return;
+    const timer = setTimeout(() => setQueued("idle"), 3600);
     return () => clearTimeout(timer);
-  }, [phase, mode, accepted]);
+  }, [queued]);
+
+  const setReview = (source: string, state: ReviewState) => {
+    setReviews((current) => ({ ...current, [source]: state }));
+  };
 
   useEffect(() => {
     if (!regenerating) return;
     const timer = setTimeout(() => {
-      setRegenerating(false);
-      setDiffKey((key) => key + 1);
-    }, 950);
+      setReview(regenerating, "pending");
+      setRegenerating(null);
+    }, 1000);
     return () => clearTimeout(timer);
   }, [regenerating]);
 
-  const reset = () => {
+  const resetRun = () => {
     setPhase("idle");
     setTested(0);
     setWritten(0);
     setFixed(false);
-    setAccepted(false);
-    setRegenerating(false);
-    setDiffKey(0);
+    setQueued("idle");
+    setReviews(
+      Object.fromEntries(GENERATED.map((file) => [file.source, "pending" as ReviewState])),
+    );
+    setReviewPath(undefined);
+    setEndpointKey(undefined);
+    setPrOpen(false);
   };
 
   const start = () => {
-    reset();
+    resetRun();
     setPhase("scanning");
   };
 
-  const rows = ENDPOINTS.map((endpoint, index) => {
+  const rows: EndpointRow[] = ENDPOINTS.map((endpoint, index) => {
     const visible = index < tested || rank >= 5;
     const first = endpoint.firstHttp ?? endpoint.http;
     const pendingFix = endpoint.outcome === "fixed" && !fixed;
     return {
       ...endpoint,
       visible,
-      wasHttp: first,
+      firstHttp: endpoint.firstHttp,
       http: pendingFix ? first : endpoint.http,
       outcome: pendingFix ? undefined : endpoint.outcome,
     };
   });
   const passed = rows.filter((row) => row.visible && row.http < 300).length;
-  const fixedCount = rows.filter((row) => row.outcome === "fixed").length;
-  const allSelected = selection.length === GAPS.length;
+  const fixedCount = rows.filter(
+    (row) => row.outcome === "fixed" && row.firstHttp !== undefined,
+  ).length;
+  const skippedCount = rows.filter((row) => row.outcome === "skipped").length;
+  const endpointRow = rows.find((row) => `${row.method} ${row.path}` === endpointKey);
+
+  const acceptedCount = statusOf(reviews, "accepted");
+  const rejectedCount = statusOf(reviews, "rejected");
+  const pendingCount = statusOf(reviews, "pending");
+  const entries: ReviewEntry[] = GENERATED.map((file) => ({
+    file,
+    state: reviews[file.source] ?? "pending",
+  }));
+  const activeEntry = entries.find((entry) => entry.file.source === reviewPath);
+  const activeIndex = GENERATED.findIndex((file) => file.source === reviewPath);
 
   const stages: Array<{
-    id: number;
+    id: StageId;
     label: string;
     sub: string;
     icon: typeof FolderGit2;
@@ -315,7 +352,7 @@ export function AgentWorkspaceDraft() {
     pct: number;
   }> = [
     {
-      id: 1,
+      id: "clone",
       label: "Cloned Repo",
       sub: rank >= 2 ? "2,140 files · AST parsed" : "git clone --depth 1",
       icon: FolderGit2,
@@ -324,16 +361,19 @@ export function AgentWorkspaceDraft() {
       pct: rank >= 2 ? 100 : rank === 1 ? 55 : 0,
     },
     {
-      id: 2,
+      id: "analyze",
       label: "Analyzed Gaps",
-      sub: rank >= 2 ? `${GAPS.length} gaps · 11 missing` : "sibling test scan",
+      sub:
+        rank >= 2
+          ? `${GAPS.length} gaps · ${GAPS.filter((gap) => gap.kind === "missing").length} missing`
+          : "sibling test scan",
       icon: Search,
       tone: "analyze",
       state: rank >= 3 ? "done" : rank === 2 ? "running" : "idle",
       pct: rank >= 3 ? 100 : rank === 2 ? 60 : 0,
     },
     {
-      id: 3,
+      id: "test",
       label: "Testing OpenSpec",
       sub: rank >= 3 ? `${tested}/${ENDPOINTS.length} endpoints` : "live execution",
       icon: Zap,
@@ -342,18 +382,73 @@ export function AgentWorkspaceDraft() {
       pct: (tested / ENDPOINTS.length) * 100,
     },
     {
-      id: 4,
+      id: "fix",
       label: "Fixing & Generating",
-      sub: rank >= 4 ? `${written}/8 tests` : "bounded self-correction",
+      sub: rank >= 4 ? `${written}/${GENERATED.length} tests` : "bounded self-correction",
       icon: Wrench,
       tone: "fix",
       state: rank >= 5 ? "done" : rank === 4 ? "running" : "idle",
-      pct: (written / 8) * 100,
+      pct: (written / GENERATED.length) * 100,
     },
   ];
 
-  const visibleLogs =
-    rank === 0 ? [] : LOG_LINES.slice(0, Math.min(LOG_LINES.length, Math.max(2, rank * 2)));
+  const filteredGaps = GAPS.filter((gap) => gap.kind === gapKind);
+  const groups = filteredGaps.reduce<Record<string, DraftGap[]>>((all, gap) => {
+    const dir = gap.path.split("/").slice(0, -1).join("/");
+    (all[dir] ??= []).push(gap);
+    return all;
+  }, {});
+  const allSelected =
+    filteredGaps.length > 0 && filteredGaps.every((gap) => selection.includes(gap.path));
+
+  const openStage = (stage: StageId) => {
+    setLogStage(stage);
+    setLogOpen(true);
+  };
+
+  const generateSelected = () => {
+    if (selection.length === 0) return;
+    setQueuedCount(selection.length);
+    setQueued("running");
+    window.setTimeout(() => setQueued("done"), 1200);
+  };
+
+  const cycleReview = (direction: 1 | -1) => {
+    if (GENERATED.length === 0) return;
+    const next =
+      activeIndex === -1 ? 0 : (activeIndex + direction + GENERATED.length) % GENERATED.length;
+    setReviewPath(GENERATED[next]?.source);
+  };
+
+  const downloadAccepted = () => {
+    const accepted = entries.filter((entry) => entry.state === "accepted");
+    downloadFile(
+      "edgespec-tests.txt",
+      accepted
+        .map((entry) => `// ${entry.file.test}\n${(DIFFS[entry.file.source] ?? []).join("\n")}`)
+        .join("\n\n"),
+    );
+  };
+
+  const dispatch = () => {
+    setPrOpen(false);
+    setPhase("dispatched");
+  };
+
+  const statusText =
+    phase === "review"
+      ? `${acceptedCount} accepted · ${rejectedCount} rejected · ${pendingCount} pending`
+      : phase === "dispatched"
+        ? "PR #128 opened on acme/edge-api"
+        : phase === "idle"
+          ? `Ready · acme/edge-api · ${branch}`
+          : phase === "scanning"
+            ? "Cloning and parsing the tree"
+            : phase === "analyzing"
+              ? "14 gaps found, ranking by risk"
+              : phase === "testing"
+                ? "Contract tests executing on Docker"
+                : "Correcting the failing contract, writing tests";
 
   return (
     <TooltipProvider delayDuration={180}>
@@ -369,7 +464,7 @@ export function AgentWorkspaceDraft() {
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
-                onClick={reset}
+                onClick={resetRun}
                 title="Reset this draft run"
                 aria-label="Reset this draft run"
                 className="relative shrink-0 rounded-xl transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:outline-none"
@@ -398,19 +493,20 @@ export function AgentWorkspaceDraft() {
                 <Badge variant="warning" className="hidden h-9 items-center px-2 sm:inline-flex">
                   DRAFT
                 </Badge>
-                <Hint label="Workers AI · 1.2k calls left">
+                <Hint label={`${providerName} · 1.2k calls left`}>
                   <Badge variant="accent" className="h-9 items-center gap-1 px-2.5">
                     <Bot className="size-3.5" />
                     1.2k
                   </Badge>
                 </Hint>
-                <Hint label="Docker sandbox · runs are verified">
+                <Hint label={`${settings.sandboxProvider} sandbox · runs are verified`}>
                   <Badge
                     variant="neutral"
                     className="hidden h-9 items-center gap-1 px-2.5 sm:inline-flex"
                   >
                     <Boxes className="size-3.5 text-sky-400" />
-                    Docker
+                    {SANDBOX_PROVIDERS.find((item) => item.id === settings.sandboxProvider)
+                      ?.label ?? settings.sandboxProvider}
                   </Badge>
                 </Hint>
                 <Hint label="Settings">
@@ -445,13 +541,13 @@ export function AgentWorkspaceDraft() {
                       <KeyRound />
                       Provider & keys
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setPullsOpen(true)}>
                       <GitPullRequest />
                       Pull requests
                       <span className="ml-auto font-mono text-[10px] text-zinc-500">3</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={reset}>
+                    <DropdownMenuItem onSelect={resetRun}>
                       <RefreshCw />
                       Reset this run
                     </DropdownMenuItem>
@@ -505,7 +601,7 @@ export function AgentWorkspaceDraft() {
                   </SelectContent>
                 </Select>
                 <Button
-                  onClick={running ? reset : start}
+                  onClick={running ? resetRun : start}
                   disabled={!repo.trim()}
                   className="sm:w-36"
                 >
@@ -546,11 +642,7 @@ export function AgentWorkspaceDraft() {
                             : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700",
                         )}
                       >
-                        <RadioGroupItem
-                          value={option.id}
-                          id={`mode-${option.id}`}
-                          className="mt-0.5"
-                        />
+                        <RadioGroupItem value={option.id} className="mt-0.5" />
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-200">
                             <Icon
@@ -580,16 +672,27 @@ export function AgentWorkspaceDraft() {
                 title="Live Pipeline Telemetry"
                 icon={Activity}
                 tone="analyze"
-                hint="stages stream independently; counters come from events"
+                hint="click a stage to read its events; counters come from events"
                 aside={
                   <>
                     <Badge variant="neutral" className="gap-1">
                       <Clock className="size-3" />
                       {(rank * 2.4).toFixed(1)}s
                     </Badge>
-                    <Button variant="ghost" size="xs" onClick={() => setLogOpen(true)}>
+                    <Button variant="ghost" size="xs" onClick={() => setFactsOpen(true)}>
+                      <FileJson className="size-3" />
+                      Facts
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => {
+                        setLogStage("all");
+                        setLogOpen(true);
+                      }}
+                    >
                       <Terminal className="size-3" />
-                      Log
+                      Event log
                     </Button>
                   </>
                 }
@@ -600,7 +703,7 @@ export function AgentWorkspaceDraft() {
                     {index > 0 && (
                       <ChevronRight className="hidden size-3.5 shrink-0 text-zinc-600 md:block" />
                     )}
-                    <StageNode {...stage} />
+                    <StageNode {...stage} position={index + 1} onOpen={() => openStage(stage.id)} />
                   </Fragment>
                 ))}
               </div>
@@ -613,33 +716,17 @@ export function AgentWorkspaceDraft() {
                   >
                     <ChevronRight className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
                     <span className="truncate font-mono">
-                      {visibleLogs[visibleLogs.length - 1]?.text ?? "waiting for the first event"}
+                      {LOGS[Math.min(LOGS.length - 1, Math.max(0, rank * 4 - 1))]?.text ??
+                        "waiting for the first event"}
                     </span>
                     <span className="ml-auto shrink-0 font-mono text-zinc-600">
-                      {visibleLogs.length} events
+                      {LOGS.length} events
                     </span>
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <div className="mt-2 space-y-1 rounded-lg border border-zinc-800/70 bg-zinc-950/60 p-2.5 font-mono text-[10px] leading-relaxed">
-                    {visibleLogs.map((entry, index) => (
-                      <p key={index} className="flex gap-2">
-                        <span className="shrink-0 text-zinc-600">
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <span
-                          className={cn(
-                            entry.level === "success" && "text-emerald-400",
-                            entry.level === "warn" && "text-amber-400",
-                            entry.level === "error" && "text-rose-400",
-                            entry.level === "ai" && "text-violet-300",
-                            entry.level === "info" && "text-zinc-400",
-                          )}
-                        >
-                          {entry.text}
-                        </span>
-                      </p>
-                    ))}
+                  <div className="mt-2 rounded-lg border border-zinc-800/70 bg-zinc-950/60 p-2.5">
+                    <LogPreview rank={rank} />
                   </div>
                 </CollapsibleContent>
               </Collapsible>
@@ -655,12 +742,17 @@ export function AgentWorkspaceDraft() {
                 title="Triage & Findings"
                 icon={ShieldCheck}
                 tone="test"
-                hint="what is missing, and what the contract actually says"
+                hint="missing tests and coverage gaps are counted apart"
                 aside={
                   <>
-                    <Badge variant="warning">{GAPS.length} gaps</Badge>
+                    <Badge variant="warning">
+                      {GAPS.filter((gap) => gap.kind === "missing").length} missing
+                    </Badge>
+                    <Badge variant="accent">
+                      {GAPS.filter((gap) => gap.kind === "coverage").length} coverage
+                    </Badge>
                     <Badge variant={fixedCount ? "success" : "neutral"}>
-                      {fixedCount ? `${fixedCount} corrected` : "0 corrected"}
+                      {fixedCount} corrected
                     </Badge>
                   </>
                 }
@@ -668,24 +760,77 @@ export function AgentWorkspaceDraft() {
 
               <div className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
                 <div className="overflow-hidden rounded-xl border border-zinc-800/70 bg-zinc-950/30">
-                  <div className="flex items-center justify-between gap-2 border-b border-zinc-800/60 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 px-3 py-2">
                     <span className="text-[10px] font-semibold text-zinc-400">
-                      File tree / gaps <span className="text-zinc-600">({GAPS.length})</span>
+                      File tree / gaps{" "}
+                      <span className="text-zinc-600">({filteredGaps.length})</span>
                     </span>
                     <div className="flex items-center gap-1.5">
                       <Badge variant="neutral">{selection.length} selected</Badge>
                       <Button
                         variant="ghost"
                         size="xs"
-                        onClick={() => setSelection(allSelected ? [] : GAPS.map((gap) => gap.path))}
+                        onClick={() =>
+                          setSelection(
+                            allSelected
+                              ? selection.filter(
+                                  (path) => !filteredGaps.some((gap) => gap.path === path),
+                                )
+                              : [
+                                  ...new Set([
+                                    ...selection,
+                                    ...filteredGaps.map((gap) => gap.path),
+                                  ]),
+                                ],
+                          )
+                        }
                       >
                         {allSelected ? "Clear" : "All"}
                       </Button>
+                      <Button
+                        size="xs"
+                        onClick={generateSelected}
+                        disabled={selection.length === 0 || queued === "running"}
+                      >
+                        {queued === "running" ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="size-3" />
+                        )}
+                        Generate {selection.length}
+                      </Button>
                     </div>
                   </div>
-                  <ScrollArea className="h-[430px]">
+
+                  <Tabs
+                    value={gapKind}
+                    onValueChange={(value) => setGapKind(value as typeof gapKind)}
+                    className="space-y-0"
+                  >
+                    <TabsList className="w-full justify-start gap-1 overflow-x-auto border-b border-zinc-800/60 px-2 py-1.5">
+                      {GAP_KINDS.map((kind) => (
+                        <TabsTrigger key={kind.id} value={kind.id} className="h-7 px-2 text-[10px]">
+                          {kind.label} · {GAPS.filter((gap) => gap.kind === kind.id).length}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+
+                  <ScrollArea className="h-[386px]">
                     <div className="p-1.5">
-                      {Object.entries(GROUPS).map(([dir, files], groupIndex) => (
+                      {gapKind === "coverage" && (
+                        <p className="mb-1.5 flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/[0.05] px-2 py-1 text-[9px] text-emerald-300">
+                          <CheckCircle2 className="size-3" />
+                          measured from coverage/lcov.info · not a path heuristic
+                        </p>
+                      )}
+                      {gapKind === "api" && (
+                        <p className="mb-1.5 flex items-center gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/[0.05] px-2 py-1 text-[9px] text-amber-300">
+                          <FileJson className="size-3" />
+                          contract drift against openapi.yaml
+                        </p>
+                      )}
+                      {Object.entries(groups).map(([dir, files], groupIndex) => (
                         <Collapsible key={dir} defaultOpen={groupIndex < 3}>
                           <CollapsibleTrigger className="group flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] text-zinc-500 transition hover:text-zinc-300">
                             <ChevronRight className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
@@ -697,35 +842,32 @@ export function AgentWorkspaceDraft() {
                           </CollapsibleTrigger>
                           <CollapsibleContent>
                             {files.map((gap) => {
-                              const active = activePath === gap.path;
+                              const checked = selection.includes(gap.path);
+                              const toggle = () =>
+                                setSelection((current) =>
+                                  checked
+                                    ? current.filter((path) => path !== gap.path)
+                                    : [...new Set([...current, gap.path])],
+                                );
                               return (
                                 <div
                                   key={gap.path}
                                   role="button"
                                   tabIndex={0}
                                   title={gap.path}
-                                  onClick={() => setActivePath(gap.path)}
+                                  onClick={toggle}
                                   onKeyDown={(event) => {
                                     if (event.key === "Enter" || event.key === " ") {
                                       event.preventDefault();
-                                      setActivePath(gap.path);
+                                      toggle();
                                     }
                                   }}
-                                  className={cn(
-                                    "flex w-full cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 pl-6 text-left transition hover:bg-zinc-800/40",
-                                    active && "bg-zinc-800/60",
-                                  )}
+                                  className="flex w-full cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 pl-6 text-left transition hover:bg-zinc-800/40"
                                 >
                                   <Checkbox
-                                    checked={selection.includes(gap.path)}
+                                    checked={checked}
                                     onClick={(event) => event.stopPropagation()}
-                                    onCheckedChange={(checked) =>
-                                      setSelection((current) =>
-                                        checked === true
-                                          ? [...new Set([...current, gap.path])]
-                                          : current.filter((path) => path !== gap.path),
-                                      )
-                                    }
+                                    onCheckedChange={toggle}
                                     aria-label={`Select ${gap.path}`}
                                   />
                                   <FileCode2
@@ -757,6 +899,13 @@ export function AgentWorkspaceDraft() {
                       ))}
                     </div>
                   </ScrollArea>
+
+                  {queued === "done" && (
+                    <div className="flex items-center gap-1.5 border-t border-zinc-800/60 px-3 py-1.5 text-[10px] text-emerald-300">
+                      <CheckCircle2 className="size-3" />
+                      {queuedCount} test(s) queued · the runner writes them after the current batch
+                    </div>
+                  )}
                 </div>
 
                 <div className="overflow-hidden rounded-xl border border-zinc-800/70 bg-zinc-950/30">
@@ -768,7 +917,7 @@ export function AgentWorkspaceDraft() {
                         openapi.yaml
                       </Badge>
                     </span>
-                    <span className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
                       {rank === 3 ? (
                         <>
                           <Loader2 className="size-3 animate-spin text-amber-400" />
@@ -782,7 +931,11 @@ export function AgentWorkspaceDraft() {
                       ) : (
                         "not run"
                       )}
-                    </span>
+                      <Button variant="ghost" size="xs" onClick={() => setSpecOpen(true)}>
+                        <FileJson className="size-3" />
+                        Spec
+                      </Button>
+                    </div>
                   </div>
                   <ScrollArea className="h-[430px]">
                     <Table>
@@ -790,7 +943,9 @@ export function AgentWorkspaceDraft() {
                         <TableRow className="hover:bg-transparent">
                           <TableHead className="pl-3">Endpoint</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead className="pr-3 text-right">Time</TableHead>
+                          <TableHead className="hidden pr-3 text-right sm:table-cell">
+                            Time
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -798,73 +953,31 @@ export function AgentWorkspaceDraft() {
                           <TableRow
                             key={`${row.method}-${row.path}`}
                             className={cn(
-                              "matrix-row",
-                              row.outcome === "fixed" && "bg-emerald-500/[0.05]",
+                              "matrix-row cursor-pointer",
+                              row.outcome === "fixed" &&
+                                row.firstHttp !== undefined &&
+                                "bg-emerald-500/[0.05]",
                             )}
                             style={{ animationDelay: `${Math.min(index, 12) * 24}ms` }}
+                            onClick={() => setEndpointKey(`${row.method} ${row.path}`)}
                           >
                             <TableCell className="pl-3">
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="flex min-w-0 items-center gap-2 text-left"
-                                  >
-                                    <span
-                                      className={cn(
-                                        "inline-flex w-14 shrink-0 justify-center rounded border px-1 py-0.5 font-mono text-[9px] font-bold",
-                                        METHOD[row.method],
-                                      )}
-                                    >
-                                      {row.method}
-                                    </span>
-                                    <span className="truncate font-mono text-[11px] text-zinc-300">
-                                      {row.path}
-                                    </span>
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent align="start" className="w-80">
-                                  <p className="flex items-center gap-2 font-mono text-[11px] text-zinc-200">
-                                    <span
-                                      className={cn(
-                                        "inline-flex w-14 justify-center rounded border px-1 py-0.5 text-[9px] font-bold",
-                                        METHOD[row.method],
-                                      )}
-                                    >
-                                      {row.method}
-                                    </span>
-                                    {row.path}
-                                  </p>
-                                  <Separator className="my-2" />
-                                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11px]">
-                                    <dt className="text-zinc-500">Spec</dt>
-                                    <dd className="font-mono text-zinc-300">openapi.yaml</dd>
-                                    <dt className="text-zinc-500">HTTP</dt>
-                                    <dd className="font-mono text-zinc-300">
-                                      {row.visible ? row.http : "not run"}
-                                    </dd>
-                                    <dt className="text-zinc-500">Time</dt>
-                                    <dd className="font-mono text-zinc-300">
-                                      {row.visible ? `${row.ms}ms` : "—"}
-                                    </dd>
-                                    <dt className="text-zinc-500">Result</dt>
-                                    <dd className="text-zinc-300">
-                                      {row.outcome === "fixed"
-                                        ? `${row.wasHttp} on the first pass, passes after the test correction. The app was not modified.`
-                                        : (row.note ?? "The contract test passed as written.")}
-                                    </dd>
-                                  </dl>
-                                </PopoverContent>
-                              </Popover>
+                              <span className="flex min-w-0 items-center gap-2">
+                                <MethodChip method={row.method} />
+                                <span className="truncate font-mono text-[11px] text-zinc-300">
+                                  {row.path}
+                                </span>
+                                <ChevronRight className="size-3 shrink-0 text-zinc-700" />
+                              </span>
                             </TableCell>
                             <TableCell>
                               {row.visible ? (
-                                <StatusBadge row={row} />
+                                <EndpointStatus row={row} />
                               ) : (
                                 <Skeleton className="h-4 w-20" />
                               )}
                             </TableCell>
-                            <TableCell className="pr-3 text-right font-mono text-[10px] text-zinc-500">
+                            <TableCell className="hidden pr-3 text-right font-mono text-[10px] text-zinc-500 sm:table-cell">
                               {row.visible ? `${row.ms}ms` : "—"}
                             </TableCell>
                           </TableRow>
@@ -878,7 +991,7 @@ export function AgentWorkspaceDraft() {
                       ? "executed on the Docker sandbox"
                       : "needs a runner · static check only"}
                     <span className="ml-auto font-mono">
-                      {passed}/{ENDPOINTS.length}
+                      {passed}/{ENDPOINTS.length} · {fixedCount} corrected · {skippedCount} skipped
                     </span>
                   </div>
                 </div>
@@ -892,104 +1005,226 @@ export function AgentWorkspaceDraft() {
             <CardContent className="space-y-3 p-4">
               <StepHead
                 n="04"
-                title="Code Diff Review"
+                title="Review & Code Diff"
                 icon={FileDiff}
                 tone="review"
-                hint="the generated test, verified before it leaves"
+                hint="accept or reject each file; open the diff in a modal"
                 aside={
                   <>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="max-w-52 font-mono text-[10px]"
-                        >
-                          <FileCode2 className="size-3.5" />
-                          <span className="truncate">{activePath.split("/").pop()}</span>
-                          <ChevronDown className="size-3" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-64">
-                        <DropdownMenuLabel>Generated tests</DropdownMenuLabel>
-                        {FILES.map((file) => (
-                          <DropdownMenuItem
-                            key={file}
-                            className="font-mono text-[10px]"
-                            onSelect={() => setActivePath(file)}
-                          >
-                            {file}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setRegenerating(true)}
-                      disabled={rank < 5 || regenerating}
-                    >
-                      <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
-                      Regenerate
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={accepted ? "secondary" : "default"}
-                      onClick={() => setAccepted(true)}
-                      disabled={rank < 5 || accepted}
-                    >
-                      <Check className="size-3.5" />
-                      {accepted ? "Accepted" : "Accept"}
-                    </Button>
+                    <Badge variant="success">{acceptedCount} accepted</Badge>
+                    <Badge variant={rejectedCount ? "danger" : "neutral"}>
+                      {rejectedCount} rejected
+                    </Badge>
+                    <Badge variant={pendingCount ? "warning" : "neutral"}>
+                      {pendingCount} pending
+                    </Badge>
                   </>
                 }
               />
 
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-                <FolderGit2 className="size-3.5" />
-                <span className="font-mono text-zinc-300">
-                  {activePath.replace(/\.ts$/, ".test.ts")}
-                </span>
-                <Badge variant="success">generated</Badge>
-                <Badge variant="neutral">bun:test</Badge>
-                <span className="ml-auto flex items-center gap-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setReviews(
+                      Object.fromEntries(
+                        GENERATED.map((file) => [file.source, "accepted" as ReviewState]),
+                      ),
+                    )
+                  }
+                  disabled={rank < 5}
+                >
+                  <Check className="size-3.5" />
+                  Accept all
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={downloadAccepted}
+                  disabled={acceptedCount === 0}
+                >
+                  <Download className="size-3.5" />
+                  Download accepted
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setSpecOpen(true)}>
+                  <FileJson className="size-3.5" />
+                  Spec & contract
+                </Button>
+                <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-500">
                   <Sparkles className="size-3 text-violet-400" />
-                  claude-sonnet-4 · 2.4s
+                  {providerName} · {settings.model}
                 </span>
               </div>
 
-              <div className="overflow-hidden rounded-xl border border-zinc-800/70 bg-zinc-950/50">
-                <div className="flex items-center gap-2 border-b border-zinc-800/60 bg-zinc-900/60 px-3 py-1.5 font-mono text-[10px] text-zinc-500">
-                  <FileCode2 className="size-3" />
-                  @@ -0,0 +1,{DIFF.length} @@
-                  <span className="ml-auto">
-                    {regenerating ? "regenerating…" : accepted ? "accepted" : "pending review"}
-                  </span>
-                </div>
-                <div className="no-scrollbar max-h-[430px] overflow-auto py-1">
-                  {DIFF.map((line, index) => (
-                    <DiffRow key={`${diffKey}-${index}`} line={line} index={index} />
-                  ))}
-                </div>
+              <div className="space-y-1.5">
+                {entries.map((entry) => {
+                  const accepted = entry.state === "accepted";
+                  const rejected = entry.state === "rejected";
+                  return (
+                    <div
+                      key={entry.file.source}
+                      className={cn(
+                        "flex flex-wrap items-center gap-2 rounded-xl border px-2.5 py-2 transition",
+                        accepted
+                          ? "border-emerald-500/25 bg-emerald-500/[0.04]"
+                          : rejected
+                            ? "border-rose-500/25 bg-rose-500/[0.04]"
+                            : "border-zinc-800/70 bg-zinc-900/40",
+                      )}
+                    >
+                      <FileCode2
+                        className={cn(
+                          "size-3.5 shrink-0",
+                          accepted
+                            ? "text-emerald-400"
+                            : rejected
+                              ? "text-rose-400"
+                              : "text-zinc-500",
+                        )}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-mono text-[11px] text-zinc-200">
+                          {entry.file.test}
+                        </span>
+                        <span className="block truncate text-[10px] text-zinc-500">
+                          {entry.file.source} · {entry.file.model}
+                        </span>
+                      </span>
+                      <span className="hidden sm:block">
+                        <CheckChips checks={CHECKS} />
+                      </span>
+                      <Badge
+                        variant={accepted ? "success" : rejected ? "danger" : "warning"}
+                        className="hidden md:inline-flex"
+                      >
+                        {entry.state}
+                      </Badge>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => setReviewPath(entry.file.source)}
+                        disabled={rank < 5}
+                      >
+                        <FileDiff className="size-3.5" />
+                        Diff
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() =>
+                          setReview(entry.file.source, accepted ? "pending" : "accepted")
+                        }
+                        disabled={rank < 5}
+                        title={accepted ? "Withdraw acceptance" : "Accept this test"}
+                        aria-label={accepted ? "Withdraw acceptance" : "Accept this test"}
+                      >
+                        <Check
+                          className={cn(
+                            "size-3.5",
+                            accepted ? "text-emerald-400" : "text-zinc-500",
+                          )}
+                        />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() =>
+                          setReview(entry.file.source, rejected ? "pending" : "rejected")
+                        }
+                        disabled={rank < 5}
+                        title={rejected ? "Restore this test" : "Reject this test"}
+                        aria-label={rejected ? "Restore this test" : "Reject this test"}
+                      >
+                        <X
+                          className={cn("size-3.5", rejected ? "text-rose-400" : "text-zinc-500")}
+                        />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        aria-label={`Download ${entry.file.test}`}
+                        onClick={() =>
+                          downloadFile(
+                            entry.file.test.split("/").pop() ?? "test.ts",
+                            (DIFFS[entry.file.source] ?? []).join("\n"),
+                            "text/typescript",
+                          )
+                        }
+                      >
+                        <Download className="size-3.5" />
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
 
-              {rank >= 5 ? (
+              {rejectedCount > 0 && (
+                <Collapsible defaultOpen>
+                  <CollapsibleTrigger className="group flex w-full items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/[0.04] px-2.5 py-1.5 text-[10px] text-rose-300">
+                    <TriangleAlert className="size-3" />
+                    <span className="font-semibold">Rejected · stay out of the PR</span>
+                    <span className="ml-auto font-mono">{rejectedCount} file(s)</span>
+                    <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-1.5 space-y-1">
+                      {entries
+                        .filter((entry) => entry.state === "rejected")
+                        .map((entry) => (
+                          <div
+                            key={entry.file.source}
+                            className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5"
+                          >
+                            <FileCode2 className="size-3.5 shrink-0 text-rose-400" />
+                            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-zinc-300">
+                              {entry.file.test}
+                            </span>
+                            <span className="hidden text-[10px] text-zinc-500 sm:block">
+                              excluded from the PR package
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              onClick={() => setReview(entry.file.source, "pending")}
+                            >
+                              <RotateCcw className="size-3.5" />
+                              Restore
+                            </Button>
+                          </div>
+                        ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {phase === "dispatched" ? (
                 <Alert variant="success">
-                  <ShieldCheck />
+                  <GitPullRequest />
                   <div>
-                    <AlertTitle>Verified on Docker · 8/8 passed</AlertTitle>
-                    <AlertDescription>
-                      The suite executed in 412ms, exit 0. This is a real run, not a static check.
+                    <AlertTitle>Pull request #128 opened</AlertTitle>
+                    <AlertDescription className="flex flex-wrap items-center gap-2">
+                      {acceptedCount} test files on edgespec/tests-2026-10-25.
+                      <span className="inline-flex items-center gap-1 font-mono text-[10px] text-emerald-300 underline-offset-2">
+                        github.com/acme/edge-api/pull/128
+                        <ExternalLink className="size-3" />
+                      </span>
                     </AlertDescription>
                   </div>
                 </Alert>
               ) : (
-                <Alert variant="warning">
-                  <TriangleAlert />
+                <Alert variant={rank >= 5 ? "success" : "warning"}>
+                  {rank >= 5 ? <ShieldCheck /> : <TriangleAlert />}
                   <div>
-                    <AlertTitle>Not verified yet</AlertTitle>
+                    <AlertTitle>
+                      {rank >= 5
+                        ? `Verified on Docker · ${GENERATED.length}/${GENERATED.length} passed`
+                        : "Not verified yet"}
+                    </AlertTitle>
                     <AlertDescription>
-                      No runner has executed this suite. A static check is not a pass.
+                      {rank >= 5
+                        ? "format, lint, typecheck and the suite executed. Only accepted tests go to the PR; the app source is untouched."
+                        : "No runner has executed this suite yet. A static check is not a pass."}
                     </AlertDescription>
                   </div>
                 </Alert>
@@ -1011,10 +1246,10 @@ export function AgentWorkspaceDraft() {
                       : "bg-zinc-600",
                 )}
               />
-              <span className="truncate">{STATUS_TEXT[phase]}</span>
-              {rank >= 5 && (
+              <span className="truncate">{statusText}</span>
+              {rank >= 5 && phase !== "dispatched" && (
                 <Badge variant="success" className="ml-1 hidden sm:inline-flex">
-                  {accepted ? "8 accepted" : `${selection.length} ready`}
+                  {acceptedCount}/{GENERATED.length} in the PR
                 </Badge>
               )}
             </div>
@@ -1037,46 +1272,39 @@ export function AgentWorkspaceDraft() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Keep running</AlertDialogCancel>
-                      <AlertDialogAction variant="danger" onClick={reset}>
+                      <AlertDialogAction variant="danger" onClick={resetRun}>
                         Stop run
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
               ) : (
-                <Button variant="ghost" size="sm" onClick={reset} disabled={phase === "idle"}>
+                <Button variant="ghost" size="sm" onClick={resetRun} disabled={phase === "idle"}>
                   <X className="size-3.5" />
                   Cancel
                 </Button>
               )}
-              <Button
-                onClick={() => {
-                  setAccepted(true);
-                  setPhase("dispatched");
-                }}
-                disabled={rank < 5 || (!accepted && mode === "review") || phase === "dispatched"}
-                title={
-                  rank < 5
-                    ? "A run has to finish first"
-                    : !accepted && mode === "review"
-                      ? "Accept a diff, or switch to Fully Autonomous"
-                      : "Open one pull request with the accepted tests"
-                }
-                className="bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-950/30"
-              >
-                {phase === "dispatched" ? (
-                  <>
-                    <CheckCircle2 />
-                    PR #128 opened
-                  </>
-                ) : (
-                  <>
-                    <GitPullRequest />
-                    Dispatch Pull Request
-                    <ArrowUpRight className="size-3.5" />
-                  </>
-                )}
-              </Button>
+              {phase === "dispatched" ? (
+                <Button variant="outline" size="sm" onClick={start}>
+                  <RefreshCw className="size-3.5" />
+                  Run again
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => setPrOpen(true)}
+                  disabled={rank < 5}
+                  title={
+                    rank < 5
+                      ? "The run has to reach review first"
+                      : "See exactly what goes into the pull request"
+                  }
+                  className="bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-950/30"
+                >
+                  <GitPullRequest />
+                  Review & dispatch
+                  <ArrowUpRight className="size-3.5" />
+                </Button>
+              )}
             </div>
             {phase === "dispatched" && (
               <span className="success-burst pointer-events-none absolute right-10 bottom-12 flex gap-1.5">
@@ -1088,113 +1316,79 @@ export function AgentWorkspaceDraft() {
           </div>
         </div>
 
-        <Sheet open={logOpen} onOpenChange={setLogOpen}>
-          <SheetContent side="right">
-            <SheetHeader>
-              <SheetTitle>Run log</SheetTitle>
-              <SheetDescription>Every event names the stage that produced it.</SheetDescription>
-            </SheetHeader>
-            <SheetBody>
-              <div className="space-y-1.5 font-mono text-[11px]">
-                {LOG_LINES.map((entry, index) => (
-                  <p key={index} className="flex gap-2">
-                    <span className="shrink-0 text-zinc-600">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <span
-                      className={cn(
-                        entry.level === "success" && "text-emerald-400",
-                        entry.level === "warn" && "text-amber-400",
-                        entry.level === "ai" && "text-violet-300",
-                        entry.level === "info" && "text-zinc-400",
-                      )}
-                    >
-                      {entry.text}
-                    </span>
-                  </p>
-                ))}
-              </div>
-            </SheetBody>
-            <SheetFooter>
-              <Button variant="outline" size="sm" onClick={() => setLogOpen(false)}>
-                Close
-              </Button>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
-
-        <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <SheetContent side="right">
-            <SheetHeader>
-              <SheetTitle>Settings</SheetTitle>
-              <SheetDescription>Draft only — the shipped dialog is unchanged.</SheetDescription>
-            </SheetHeader>
-            <SheetBody className="space-y-4">
-              <div>
-                <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
-                  Appearance
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {ACCENTS.map((accent) => (
-                    <button
-                      key={accent.id}
-                      type="button"
-                      onClick={() => setAccent(accent.base)}
-                      title={accent.name}
-                      aria-label={accent.name}
-                      style={{ background: accent.base }}
-                      className={cn(
-                        "size-6 rounded-full ring-2 ring-offset-2 ring-offset-zinc-950 transition hover:scale-110",
-                        appearance.accentId === accent.id ? "ring-white/80" : "ring-transparent",
-                      )}
-                    />
-                  ))}
-                </div>
-                <Button variant="outline" size="sm" className="mt-3" onClick={toggleMode}>
-                  {appearance.mode === "dark" ? <Sun /> : <Moon />}
-                  {appearance.mode === "dark" ? "Light" : "Dark"} mode
-                </Button>
-              </div>
-              <Separator />
-              <div className="space-y-1.5">
-                {[
-                  { icon: Bot, label: "AI provider", value: "Workers AI · llama-4-scout" },
-                  { icon: Boxes, label: "Sandbox", value: "Docker · verified runs" },
-                  { icon: KeyRound, label: "Keys", value: "sent as headers, never stored" },
-                  { icon: Wrench, label: "Pipeline", value: "3 retries · 6 files · strict types" },
-                ].map((row) => (
-                  <div
-                    key={row.label}
-                    className="flex items-center gap-2.5 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2"
-                  >
-                    <row.icon className="size-3.5 shrink-0 text-zinc-500" />
-                    <span className="text-[11px] font-medium text-zinc-300">{row.label}</span>
-                    <span className="ml-auto truncate font-mono text-[10px] text-zinc-500">
-                      {row.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <Alert variant="info">
-                <Sparkles />
-                <div>
-                  <AlertTitle>Fixtures, not a live run</AlertTitle>
-                  <AlertDescription>
-                    This page exists to review layout and motion. The real dashboard still runs at
-                    the root URL.
-                  </AlertDescription>
-                </div>
-              </Alert>
-            </SheetBody>
-            <SheetFooter>
-              <Button size="sm" onClick={() => setSettingsOpen(false)}>
-                Done
-              </Button>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
+        <SettingsSheet
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          value={settings}
+          onChange={setSettings}
+        />
+        <LogDialog
+          open={logOpen}
+          onClose={() => setLogOpen(false)}
+          stage={logStage}
+          onStage={setLogStage}
+        />
+        <ReviewDialog
+          open={Boolean(activeEntry)}
+          entry={activeEntry}
+          onClose={() => setReviewPath(undefined)}
+          onState={(state) => {
+            if (activeEntry) setReview(activeEntry.file.source, state);
+          }}
+          onRegenerate={() => {
+            if (activeEntry) setRegenerating(activeEntry.file.source);
+          }}
+          regenerating={Boolean(regenerating)}
+          onPrev={() => cycleReview(-1)}
+          onNext={() => cycleReview(1)}
+        />
+        <EndpointDialog
+          open={Boolean(endpointRow)}
+          row={endpointRow}
+          onClose={() => setEndpointKey(undefined)}
+          onOpenSpec={() => {
+            setEndpointKey(undefined);
+            setSpecOpen(true);
+          }}
+        />
+        <SpecDialog open={specOpen} onClose={() => setSpecOpen(false)} />
+        <FactsDialog open={factsOpen} onClose={() => setFactsOpen(false)} />
+        <PullsDialog open={pullsOpen} onClose={() => setPullsOpen(false)} />
+        <PrDialog
+          open={prOpen}
+          onClose={() => setPrOpen(false)}
+          onDispatch={dispatch}
+          entries={entries}
+          endpoints={rows}
+          settings={settings}
+        />
       </div>
     </TooltipProvider>
+  );
+}
+
+function LogPreview({ rank }: { rank: number }) {
+  const lines = rank === 0 ? [] : LOGS.slice(0, Math.min(LOGS.length, Math.max(2, rank * 4)));
+  return (
+    <div className="space-y-1 font-mono text-[10px] leading-relaxed">
+      {lines.length === 0 && <p className="text-zinc-600">waiting for the first event</p>}
+      {lines.map((entry, index) => (
+        <p key={index} className="flex gap-2">
+          <span className="w-8 shrink-0 text-zinc-600">{entry.at}</span>
+          <span
+            className={cn(
+              entry.level === "success" && "text-emerald-400",
+              entry.level === "warn" && "text-amber-400",
+              entry.level === "error" && "text-rose-400",
+              entry.level === "ai" && "text-violet-300",
+              entry.level === "info" && "text-zinc-400",
+            )}
+          >
+            {entry.text}
+          </span>
+        </p>
+      ))}
+    </div>
   );
 }
 
@@ -1245,23 +1439,28 @@ function StageNode({
   tone,
   state,
   pct,
-  id,
+  position,
+  onOpen,
 }: {
-  id: number;
+  position: number;
   label: string;
   sub: string;
   icon: typeof FolderGit2;
   tone: Tone;
   state: StageState;
   pct: number;
+  onOpen: () => void;
 }) {
   const palette = TONES[tone];
   const running = state === "running";
   const done = state === "done";
   return (
-    <div
+    <button
+      type="button"
+      onClick={onOpen}
+      title={`Open ${STAGE_LABEL[tone as StageId] ?? label} events`}
       className={cn(
-        "pipeline-node relative min-w-0 flex-1 rounded-xl border px-2.5 py-2 transition-all",
+        "pipeline-node group relative min-w-0 flex-1 rounded-xl border px-2.5 py-2 text-left transition-all hover:-translate-y-0.5",
         done
           ? cn(palette.border, "bg-zinc-900/70")
           : running
@@ -1292,7 +1491,10 @@ function StageNode({
           <p className="truncate text-[11px] font-semibold text-zinc-200">{label}</p>
           <p className="truncate font-mono text-[10px] text-zinc-500">{sub}</p>
         </div>
-        <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-600">0{id}</span>
+        <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-600">
+          {String(position).padStart(2, "0")}
+          <ChevronRight className="ml-0.5 inline size-3 text-zinc-700 transition group-hover:text-zinc-400" />
+        </span>
       </div>
       <Progress
         value={pct}
@@ -1300,72 +1502,6 @@ function StageNode({
         className="mt-2 h-1"
         indicatorClassName={done ? "bg-emerald-500" : palette.bar}
       />
-    </div>
-  );
-}
-
-function StatusBadge({
-  row,
-}: {
-  row: DraftEndpoint & { visible: boolean; wasHttp: number; http: number };
-}) {
-  if (row.outcome === "fixed") {
-    return (
-      <Badge variant="success" className="gap-1">
-        <Wrench className="size-3" />
-        {row.wasHttp} → {row.http}
-      </Badge>
-    );
-  }
-  if (row.outcome === "skipped") {
-    return (
-      <Badge variant="warning" className="gap-1">
-        <TriangleAlert className="size-3" />
-        skipped
-      </Badge>
-    );
-  }
-  if (row.http >= 500) {
-    return (
-      <Badge variant="danger" className="gap-1">
-        <X className="size-3" />
-        {row.http} error
-      </Badge>
-    );
-  }
-  if (row.http >= 400) {
-    return (
-      <Badge variant="warning" className="gap-1">
-        <TriangleAlert className="size-3" />
-        {row.http}
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="success" className="gap-1">
-      <Check className="size-3" />
-      {row.http} ok
-    </Badge>
-  );
-}
-
-function DiffRow({ line, index }: { line: string; index: number }) {
-  const blank = line.trim() === "";
-  return (
-    <div
-      className={cn(
-        "diff-line flex gap-3 px-3 font-mono text-[11px] leading-5",
-        !blank && "bg-emerald-500/[0.06]",
-      )}
-      style={{ animationDelay: `${Math.min(index, 30) * 12}ms` }}
-    >
-      <span className="w-6 shrink-0 text-right text-[10px] text-zinc-500 select-none">
-        {index + 1}
-      </span>
-      <span className={cn("w-2 shrink-0", blank ? "text-zinc-600" : "text-emerald-400")}>
-        {blank ? "" : "+"}
-      </span>
-      <span className="min-w-0 whitespace-pre-wrap break-words text-zinc-300">{line || " "}</span>
-    </div>
+    </button>
   );
 }
