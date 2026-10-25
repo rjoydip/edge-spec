@@ -120,7 +120,7 @@ export function EndpointStatus({ result }: { result?: ApiTestResult }) {
   if (!result) {
     return (
       <Badge variant="neutral" className="gap-1">
-        not run
+        Not run
       </Badge>
     );
   }
@@ -148,7 +148,7 @@ export function EndpointStatus({ result }: { result?: ApiTestResult }) {
       </Badge>
     );
   }
-  return <Badge variant="neutral">not run</Badge>;
+  return <Badge variant="neutral">Not run</Badge>;
 }
 
 function checkStatus(check: CheckResult): "passed" | "failed" | "warning" {
@@ -261,6 +261,12 @@ export function outputSummary(output: string, max = 320): string {
     .filter(Boolean)
     .join(" · ");
   return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+export function coverageLabel(status?: "not-run" | "unavailable" | "measured"): string {
+  if (status === "measured") return "Measured";
+  if (status === "unavailable") return "Unavailable";
+  return "Not run";
 }
 
 export function verificationLabel(validation: Validation): string {

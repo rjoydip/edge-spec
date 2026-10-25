@@ -45,6 +45,9 @@ import {
   Dialog,
   Hint,
   Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Select,
   SelectContent,
   SelectItem,
@@ -64,11 +67,11 @@ import { HighlightedCode } from "./highlight";
 import {
   CheckSummary,
   EndpointStatus,
+  coverageLabel,
   ICON_GRADIENT,
   MethodChip,
   downloadFile,
   failedChecks,
-  outputSummary,
   skippedChecks,
   verificationLabel,
   type AgentTest,
@@ -91,10 +94,10 @@ export interface PrDraft {
 }
 
 const STEP_LABEL: Record<StepId, string> = {
-  scan: "Scan & parse",
-  generate: "Generate",
-  validate: "Contract tests",
-  correct: "Fix",
+  scan: "Cloned Repo",
+  generate: "Fixing & Generating",
+  validate: "Testing OpenSpec",
+  correct: "Self-correct",
   "pull-request": "Pull request",
 };
 
@@ -186,7 +189,7 @@ export function LogDialog({
       >
         <TabsList className="flex flex-wrap">
           <TabsTrigger value="all">All · {logs.length}</TabsTrigger>
-          {STEP_ORDER.map((id) => (
+          {STEP_ORDER.filter((id) => logs.some((line) => line.step === id)).map((id) => (
             <TabsTrigger key={id} value={id}>
               {STEP_LABEL[id]} · {logs.filter((line) => line.step === id).length}
             </TabsTrigger>
@@ -336,6 +339,57 @@ export function SourceDialog({
             {providerById(generation.provider)?.name ?? generation.provider} · {generation.model}
           </Badge>
           <CheckSummary validation={validation} />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                aria-label="Verification details"
+              >
+                {validation.ok ? (
+                  validation.verified ? (
+                    <ShieldCheck className="size-3.5 text-emerald-400" />
+                  ) : (
+                    <TriangleAlert className="size-3.5 text-amber-400" />
+                  )
+                ) : (
+                  <X className="size-3.5 text-rose-400" />
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-80">
+              <div className="flex items-center gap-1.5">
+                {validation.ok ? (
+                  validation.verified ? (
+                    <ShieldCheck className="size-3.5 text-emerald-400" />
+                  ) : (
+                    <TriangleAlert className="size-3.5 text-amber-400" />
+                  )
+                ) : (
+                  <X className="size-3.5 text-rose-400" />
+                )}
+                <p className="text-[11px] font-semibold text-zinc-200">
+                  {verificationLabel(validation)}
+                </p>
+              </div>
+              <p className="mt-1.5 text-[10px] leading-relaxed text-zinc-500">
+                {validation.ok
+                  ? validation.verified
+                    ? "The suite executed in the runner."
+                    : "No runner executed the suite; this is a static check, not a pass."
+                  : "The suite did not pass. Regenerate it or reject the file."}
+              </p>
+              <p className="mt-1 font-mono text-[9px] text-zinc-500">
+                {validation.durationMs}ms · {validation.checks?.length ?? 0} check(s)
+              </p>
+              {validation.output && (
+                <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-zinc-800/70 bg-zinc-950/60 p-2 font-mono text-[9px] leading-relaxed whitespace-pre-wrap text-zinc-400">
+                  {validation.output}
+                </pre>
+              )}
+            </PopoverContent>
+          </Popover>
           <span className="ml-auto text-[10px] text-zinc-500">
             {validation.durationMs}ms validation
           </span>
@@ -358,10 +412,10 @@ export function SourceDialog({
               <HighlightedCode
                 code={generation.source}
                 language={languageForPath(generation.sourcePath)}
-                className="max-h-[44vh]"
+                className="h-[42vh] max-h-[42vh]"
               />
             ) : (
-              <p className="rounded-xl border border-zinc-800/70 bg-zinc-950/40 px-3 py-6 text-center text-[10px] text-zinc-500">
+              <p className="flex h-[42vh] items-center justify-center rounded-xl border border-zinc-800/70 bg-zinc-950/40 px-3 text-center text-[10px] text-zinc-500">
                 The source was not included. Open the spec for a contract test.
               </p>
             )}
@@ -396,34 +450,10 @@ export function SourceDialog({
             <HighlightedCode
               code={generation.code}
               language={languageForPath(generation.testPath)}
-              className="max-h-[44vh]"
+              className="h-[42vh] max-h-[42vh]"
             />
           </div>
         </div>
-
-        <Alert variant={validation.ok ? (validation.verified ? "success" : "warning") : "danger"}>
-          {validation.ok ? <ShieldCheck /> : <TriangleAlert />}
-          <div>
-            <AlertTitle>
-              {verificationLabel(validation)}
-              {validation.durationMs ? ` · ${validation.durationMs}ms` : ""}
-            </AlertTitle>
-            <AlertDescription className="space-y-1">
-              <span className="block">
-                {validation.ok
-                  ? validation.verified
-                    ? "The suite executed in the runner."
-                    : "No runner executed the suite; this is a static check, not a pass."
-                  : "The suite did not pass. Regenerate it or reject the file."}
-              </span>
-              {validation.output && (
-                <span className="block font-mono text-[10px] text-zinc-400">
-                  {outputSummary(validation.output, 400)}
-                </span>
-              )}
-            </AlertDescription>
-          </div>
-        </Alert>
       </div>
     </Dialog>
   );
@@ -842,7 +872,7 @@ export function FactsDialog({
               <Badge variant="neutral">formatter · {overview.formatter}</Badge>
             )}
             <Badge variant={coverageStatus === "measured" ? "success" : "warning"}>
-              coverage · {coverageStatus ?? "not-run"}
+              Coverage · {coverageLabel(coverageStatus)}
               {coverageReason ? ` · ${coverageReason}` : ""}
             </Badge>
             <Badge variant="neutral">

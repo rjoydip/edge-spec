@@ -116,6 +116,7 @@ import { toggleMode, useAppearance } from "@/lib/theme";
 import {
   CheckSummary,
   EndpointStatus,
+  coverageLabel,
   ICON_GRADIENT,
   IconGradientDefs,
   INITIAL_STEPS,
@@ -124,7 +125,6 @@ import {
   type AgentTest,
   type LogEntry,
   type ReviewState,
-  type StageKey,
   type StepStatus,
   type Tone,
 } from "./shared";
@@ -419,14 +419,23 @@ export function AgentWorkspace({
   const allLogs = [...logs, ...gapLogs].sort((a, b) => a.time.localeCompare(b.time));
   const scanStatus = steps.scan.status;
 
+  const checksTotal = generated.reduce(
+    (count, item) => count + (item.validation.checks?.length ?? 0),
+    0,
+  );
+  const validated = generated.filter((item) => item.validation.ok || item.validation.output).length;
+  const hasSpec = specs.length > 0;
+
   const stages: Array<{
-    id: StageKey;
+    id: string;
     label: string;
     sub: string;
     icon: typeof FolderGit2;
     tone: Tone;
     state: StepStatus;
     pct: number;
+    step?: StepId;
+    disabled?: boolean;
   }> = [
     {
       id: "clone",
@@ -434,12 +443,13 @@ export function AgentWorkspace({
       sub: overview
         ? `${overview.totalFiles.toLocaleString()} files · ${overview.sourceFiles} source`
         : scanning
-          ? "cloning…"
-          : "waiting for a repository",
+          ? "Cloning…"
+          : "Waiting for a repository",
       icon: FolderGit2,
       tone: "clone",
       state: scanStatus,
       pct: scanStatus === "running" ? 55 : scanStatus === "done" ? 100 : 0,
+      step: "scan",
     },
     {
       id: "analyze",
@@ -447,8 +457,8 @@ export function AgentWorkspace({
       sub: gaps.length
         ? `${gaps.length} gaps · ${counts.missing} missing`
         : scanning
-          ? "reading the tree"
-          : "not scanned",
+          ? "Reading the tree"
+          : "Not scanned",
       icon: Search,
       tone: "analyze",
       state:
@@ -464,28 +474,52 @@ export function AgentWorkspace({
     {
       id: "test",
       label: "Testing OpenSpec",
-      sub:
-        specs.length === 0
-          ? "no OpenAPI document"
-          : project.localPath
-            ? "needs a GitHub run"
-            : apiResults.length
-              ? `${apiPassed}/${apiResults.length} endpoints · ${apiFailed} failed`
-              : steps.validate.status === "running"
-                ? "executing contract tests"
-                : "waiting for a run",
+      sub: !hasSpec
+        ? "Not applicable · no OpenAPI spec"
+        : project.localPath
+          ? "Needs a GitHub run"
+          : apiResults.length
+            ? `${apiPassed}/${apiResults.length} endpoints · ${apiFailed} failed`
+            : steps.validate.status === "running"
+              ? "Executing contract tests"
+              : "Waiting for a run",
       icon: Zap,
       tone: "test",
-      state:
-        steps.validate.status === "running"
+      state: !hasSpec
+        ? "idle"
+        : steps.validate.status === "running"
           ? "running"
           : apiResults.length
             ? "done"
-            : specs.length === 0
-              ? "idle"
-              : "idle",
-      pct: apiResults.length
-        ? (apiPassed / apiResults.length) * 100
+            : "idle",
+      pct: !hasSpec
+        ? 0
+        : apiResults.length
+          ? (apiPassed / apiResults.length) * 100
+          : steps.validate.status === "running"
+            ? 40
+            : 0,
+      ...(hasSpec ? { step: "validate" as StepId } : {}),
+      disabled: !hasSpec,
+    },
+    {
+      id: "static",
+      label: "Static checks",
+      sub: checksTotal
+        ? `${checksTotal} check${checksTotal === 1 ? "" : "s"}`
+        : settings.sandboxUrl.trim()
+          ? "Repo checks · runner"
+          : "Static check only",
+      icon: ShieldCheck,
+      tone: "review",
+      state:
+        steps.validate.status === "running"
+          ? "running"
+          : checksTotal > 0 || steps.validate.status === "done"
+            ? "done"
+            : "idle",
+      pct: generated.length
+        ? (validated / generated.length) * 100
         : steps.validate.status === "running"
           ? 40
           : 0,
@@ -505,15 +539,9 @@ export function AgentWorkspace({
               ? "done"
               : "idle",
       pct: Math.min(100, (generated.length / Math.max(1, settings.maxFiles)) * 100),
+      step: "generate",
     },
   ];
-
-  const stepForStage: Record<StageKey, StepId> = {
-    clone: "scan",
-    analyze: "scan",
-    test: "validate",
-    fix: "generate",
-  };
 
   const projectMatches = Boolean(project.repo || project.localPath);
   const busy = running || scanning || generating;
@@ -993,7 +1021,7 @@ export function AgentWorkspace({
                     );
                   })}
                 </RadioGroup>
-                <div className="flex items-start gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5 text-[10px] leading-relaxed text-zinc-500">
+                <div className="flex items-start gap-2 rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] px-2.5 py-1.5 text-[10px] leading-relaxed text-zinc-400">
                   <Info className="mt-0.5 size-3.5 shrink-0 text-zinc-500" />
                   {mode === "review"
                     ? "You decide file by file. Nothing reaches the pull request until you accept it."
@@ -1031,16 +1059,17 @@ export function AgentWorkspace({
                   </>
                 }
               />
-              <div className="flex flex-col gap-2 md:flex-row md:items-center">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                 {stages.map((stage, index) => (
                   <Fragment key={stage.id}>
                     {index > 0 && (
-                      <ChevronRight className="hidden size-3.5 shrink-0 text-zinc-600 md:block" />
+                      <ChevronRight className="hidden size-3.5 shrink-0 text-zinc-600 lg:block" />
                     )}
                     <StageNode
                       {...stage}
                       position={index + 1}
-                      onOpen={() => openLog(stepForStage[stage.id])}
+                      onOpen={stage.step ? () => openLog(stage.step as StepId) : undefined}
+                      disabled={stage.disabled}
                     />
                   </Fragment>
                 ))}
@@ -1087,8 +1116,7 @@ export function AgentWorkspace({
                 <div className="overflow-hidden rounded-xl border border-zinc-800/70 bg-zinc-950/30">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 px-3 py-2">
                     <span className="text-[10px] font-semibold text-zinc-400">
-                      File tree / gaps{" "}
-                      <span className="text-zinc-600">({filteredGaps.length})</span>
+                      Gap tree <span className="text-zinc-600">({filteredGaps.length})</span>
                     </span>
                     <div className="flex items-center gap-1.5">
                       <Badge variant="neutral">{selection.length} selected</Badge>
@@ -1219,6 +1247,13 @@ export function AgentWorkspace({
                                           {gap.reason}
                                         </span>
                                       </span>
+                                      {generated.some(
+                                        (item) => item.generation.sourcePath === gap.path,
+                                      ) && (
+                                        <Hint label="Test generated">
+                                          <CheckCircle2 className="size-3.5 shrink-0 text-emerald-400" />
+                                        </Hint>
+                                      )}
                                       <Badge
                                         variant={
                                           gap.risk === "high"
@@ -1251,7 +1286,7 @@ export function AgentWorkspace({
                       )}
                       {gapKind === "coverage" && (
                         <p className="mt-2 rounded-md border border-zinc-800/70 bg-zinc-900/40 px-2 py-1.5 text-[9px] leading-relaxed text-zinc-500">
-                          Coverage · {coverageStatus ?? "not-run"}
+                          Coverage · {coverageLabel(coverageStatus)}
                           {coverageReason ? ` · ${coverageReason}` : ""}. A percentage is shown only
                           when a runner measured it.
                         </p>
@@ -1291,7 +1326,7 @@ export function AgentWorkspace({
                         </Select>
                       ) : (
                         <Badge variant="neutral" className="font-mono">
-                          {currentSpec?.path ?? "no spec"}
+                          {currentSpec?.path ?? "No spec"}
                         </Badge>
                       )}
                     </span>
@@ -1304,10 +1339,10 @@ export function AgentWorkspace({
                       ) : steps.validate.status === "running" ? (
                         <>
                           <Loader2 className="size-3 animate-spin text-amber-400" />
-                          live
+                          Live
                         </>
                       ) : (
-                        "not run"
+                        "Not run"
                       )}
                       <Button
                         variant="ghost"
@@ -1384,8 +1419,8 @@ export function AgentWorkspace({
                     {apiResults.length
                       ? "contract suite executed"
                       : settings.sandboxUrl.trim()
-                        ? "runner configured · contract suite not run yet"
-                        : "no runner · static checks only"}
+                        ? "Runner configured · contract suite not run yet"
+                        : "No runner · static checks only"}
                     <span className="ml-auto font-mono">
                       {apiPassed}/{apiResults.length || 0} · {apiFailed} failed · {apiSkipped}{" "}
                       skipped
@@ -1436,17 +1471,14 @@ export function AgentWorkspace({
                   disabled={!generated.some((item) => item.validation.ok)}
                 >
                   <Check className="size-3.5 text-emerald-400" />
-                  Accept all verified
+                  Accept all passed
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => openSpec()}
-                  disabled={!currentSpec}
-                >
-                  <FileJson className="size-3.5" />
-                  Spec & contract
-                </Button>
+                {specs.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => openSpec()}>
+                    <FileJson className="size-3.5" />
+                    Spec & contract
+                  </Button>
+                )}
                 <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-500">
                   <Sparkles className="size-3 text-violet-400" />
                   {provider?.name ?? settings.provider} · {settings.model}
@@ -1889,6 +1921,7 @@ function StageNode({
   pct,
   position,
   onOpen,
+  disabled,
 }: {
   position: number;
   label: string;
@@ -1897,63 +1930,69 @@ function StageNode({
   tone: Tone;
   state: StepStatus;
   pct: number;
-  onOpen: () => void;
+  onOpen?: () => void;
+  disabled?: boolean;
 }) {
   const palette = TONES[tone];
   const running = state === "running";
   const done = state === "done";
-  return (
-    <Hint label={`Open ${label} events`}>
-      <button
-        type="button"
-        onClick={onOpen}
-        style={
-          {
-            "--stage-progress": `${Math.max(0, Math.min(100, pct))}%`,
-            "--stage-tone": `var(--stage-${tone})`,
-          } as React.CSSProperties
-        }
-        className={cn(
-          "pipeline-node group relative min-w-0 flex-1 rounded-xl border border-transparent px-2.5 py-2.5 text-left transition-all hover:-translate-y-0.5",
-          done
-            ? "bg-zinc-900/70"
-            : running
-              ? cn("bg-zinc-900/40 shadow-lg", palette.glow)
-              : "bg-zinc-900/40",
-        )}
-      >
-        <span className="stage-ring" aria-hidden="true" />
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "relative flex size-7 shrink-0 items-center justify-center rounded-lg border bg-zinc-950/40",
-              done
-                ? "border-emerald-500/40 text-emerald-400"
-                : running
-                  ? cn(palette.border, palette.text, "stage-ping")
-                  : "border-zinc-800 text-zinc-500",
-            )}
-          >
-            {done ? (
-              <Check className="size-3.5" strokeWidth={3} />
-            ) : running ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Icon className="size-3.5" />
-            )}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-[11px] font-semibold text-zinc-200">{label}</p>
-            <p className="truncate font-mono text-[10px] text-zinc-500">{sub}</p>
-          </div>
-          <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-600">
-            {String(position).padStart(2, "0")}
-            <ChevronRight className="ml-0.5 inline size-3 text-zinc-700 transition group-hover:text-zinc-400" />
-          </span>
+  const interactive = Boolean(onOpen) && !disabled;
+  const card = (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={!interactive}
+      style={
+        {
+          "--stage-progress": `${Math.max(0, Math.min(100, pct))}%`,
+          "--stage-tone": `var(--stage-${tone})`,
+        } as React.CSSProperties
+      }
+      className={cn(
+        "pipeline-node group relative min-w-0 flex-1 rounded-xl border border-transparent px-2.5 py-2.5 text-left transition-all",
+        interactive ? "hover:-translate-y-0.5" : "cursor-default",
+        disabled && "opacity-60",
+        done
+          ? "bg-zinc-900/70"
+          : running
+            ? cn("bg-zinc-900/40 shadow-lg", palette.glow)
+            : "bg-zinc-900/40",
+      )}
+    >
+      <span className="stage-ring" aria-hidden="true" />
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "relative flex size-7 shrink-0 items-center justify-center rounded-lg border bg-zinc-950/40",
+            done
+              ? "border-emerald-500/40 text-emerald-400"
+              : running
+                ? cn(palette.border, palette.text, "stage-ping")
+                : "border-zinc-800 text-zinc-500",
+          )}
+        >
+          {done ? (
+            <Check className="size-3.5" strokeWidth={3} />
+          ) : running ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Icon className="size-3.5" />
+          )}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[11px] font-semibold text-zinc-200">{label}</p>
+          <p className="truncate font-mono text-[10px] text-zinc-500">{sub}</p>
         </div>
-      </button>
-    </Hint>
+        <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-600">
+          {String(position).padStart(2, "0")}
+          {interactive && (
+            <ChevronRight className="ml-0.5 inline size-3 text-zinc-700 transition group-hover:text-zinc-400" />
+          )}
+        </span>
+      </div>
+    </button>
   );
+  return interactive ? <Hint label={`Open ${label} events`}>{card}</Hint> : card;
 }
 
 function StepHead({
