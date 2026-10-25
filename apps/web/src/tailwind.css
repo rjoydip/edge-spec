@@ -612,14 +612,7 @@ html.light {
     linear-gradient(#000 0 0);
   mask-composite: exclude;
   pointer-events: none;
-  transition:
-    --stage-progress 0.6s ease,
-    padding 0.3s ease;
-}
-
-/* The active stage is a little thicker; once it completes it settles to 1px. */
-.stage-ring[data-state="running"] {
-  padding: 2px;
+  transition: --stage-progress 0.6s ease;
 }
 
 /* A row that is being generated pulses its outline, not its background tint. */
