@@ -167,6 +167,7 @@ export function ReviewDialog({
   regenerating,
   onPrev,
   onNext,
+  initialTab = "test",
 }: {
   open: boolean;
   onClose: () => void;
@@ -176,14 +177,18 @@ export function ReviewDialog({
   regenerating: boolean;
   onPrev: () => void;
   onNext: () => void;
+  /** "source" opens the metadata/source view straight away. */
+  initialTab?: "test" | "source";
 }) {
-  const [tab, setTab] = useState("test");
-  useEffect(() => setTab("test"), [entry?.file.source]);
+  const [tab, setTab] = useState(initialTab);
+  useEffect(() => setTab(initialTab), [entry?.file.source, initialTab]);
 
   if (!entry) return null;
   const diff = DIFFS[entry.file.source] ?? [];
   const source = SOURCES[entry.file.source] ?? [];
   const state = entry.state;
+  const warned = CHECKS.filter((check) => check.status === "warning");
+  const failed = CHECKS.filter((check) => check.status === "failed");
 
   return (
     <Dialog
@@ -249,18 +254,17 @@ export function ReviewDialog({
             {entry.file.source}
           </Badge>
           <CheckSummary checks={CHECKS} />
-          <Badge
-            variant={state === "accepted" ? "success" : state === "rejected" ? "danger" : "warning"}
-          >
-            {state}
-          </Badge>
           <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-500">
             <Sparkles className="size-3 text-violet-400" />
             {entry.file.model} · 2.4s
           </span>
         </div>
 
-        <Tabs value={tab} onValueChange={setTab} className="space-y-2">
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(value as "test" | "source")}
+          className="space-y-2"
+        >
           <TabsList>
             <TabsTrigger value="test">
               <FileCode2 className="size-3.5 text-violet-400" />
@@ -288,33 +292,40 @@ export function ReviewDialog({
             {CHECKS.map((check) => {
               const meta = CHECK_META[check.kind] ?? {
                 icon: FlaskConical,
-                tone: "text-emerald-300",
+                tone: "text-zinc-500",
               };
               const Icon = meta.icon;
+              const status = CHECK_STATUS[check.status];
+              const StatusIcon = status.icon;
               return (
                 <div
                   key={check.kind}
                   className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5"
                 >
-                  <Icon className={cn("size-3.5 shrink-0", meta.tone)} />
+                  <Icon className="size-3.5 shrink-0 text-zinc-500" />
                   <span className="min-w-0">
                     <span className="block truncate text-[10px] text-zinc-300">{check.kind}</span>
-                    <span className="block font-mono text-[9px] text-zinc-500">{check.ms}ms</span>
+                    <span className="block truncate font-mono text-[9px] text-zinc-500">
+                      {check.ms}ms{check.note ? ` · ${check.note}` : ""}
+                    </span>
                   </span>
-                  <CheckCircle2 className="ml-auto size-3.5 shrink-0 text-emerald-400" />
+                  <StatusIcon className={cn("ml-auto size-3.5 shrink-0", status.tone)} />
                 </div>
               );
             })}
           </div>
         </div>
 
-        <Alert variant="success">
-          <ShieldCheck />
+        <Alert variant={failed.length ? "danger" : "success"}>
+          {failed.length ? <TriangleAlert /> : <ShieldCheck />}
           <div>
             <AlertTitle>Executed on Docker · exit 0</AlertTitle>
             <AlertDescription>
-              format, lint, typecheck and the suite passed in 412ms. The source file was not
-              modified.
+              format, typecheck and the suite passed in 412ms.
+              {warned.length
+                ? ` Lint reported ${warned[0]?.note ?? "non-blocking warnings"}.`
+                : " Lint is clean."}{" "}
+              The source file was not modified.
             </AlertDescription>
           </div>
         </Alert>
@@ -967,12 +978,18 @@ export function PrDialog({
 }
 
 const CHECK_META: Record<string, { icon: typeof AlignLeft; tone: string }> = {
-  format: { icon: AlignLeft, tone: "text-sky-300" },
-  lint: { icon: ListChecks, tone: "text-violet-300" },
-  typecheck: { icon: Type, tone: "text-amber-300" },
-  test: { icon: FlaskConical, tone: "text-emerald-300" },
-  build: { icon: ShieldCheck, tone: "text-indigo-300" },
+  format: { icon: AlignLeft, tone: "text-zinc-500" },
+  lint: { icon: ListChecks, tone: "text-zinc-500" },
+  typecheck: { icon: Type, tone: "text-zinc-500" },
+  test: { icon: FlaskConical, tone: "text-zinc-500" },
+  build: { icon: ShieldCheck, tone: "text-zinc-500" },
 };
+
+const CHECK_STATUS = {
+  passed: { icon: CheckCircle2, tone: "text-emerald-400" },
+  warning: { icon: TriangleAlert, tone: "text-amber-400" },
+  failed: { icon: X, tone: "text-rose-400" },
+} as const;
 
 const CI_TONE: Record<string, string> = {
   format: "text-sky-300",

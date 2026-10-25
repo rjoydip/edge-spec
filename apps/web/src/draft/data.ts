@@ -253,12 +253,19 @@ export const LOGS: LogLine[] = [
   },
 ];
 
-export const CHECKS = [
-  { kind: "format", ok: true, ms: 110 },
-  { kind: "lint", ok: true, ms: 240 },
-  { kind: "typecheck", ok: true, ms: 820 },
-  { kind: "test", ok: true, ms: 412 },
-] as const;
+export interface DraftCheck {
+  kind: "format" | "lint" | "typecheck" | "test";
+  status: "passed" | "failed" | "warning";
+  ms: number;
+  note?: string;
+}
+
+export const CHECKS: DraftCheck[] = [
+  { kind: "format", status: "passed", ms: 110 },
+  { kind: "lint", status: "warning", ms: 240, note: "2 warnings" },
+  { kind: "typecheck", status: "passed", ms: 820 },
+  { kind: "test", status: "passed", ms: 412 },
+];
 
 export interface GeneratedFile {
   source: string;

@@ -1,7 +1,7 @@
 /** Shared atoms for the draft: stage tones, badges, checks, downloads. */
 import { Check, CheckCircle2, TriangleAlert, Wrench, X } from "lucide-react";
 import { Badge, cn, type BadgeProps } from "@edge-spec/ui";
-import type { DraftEndpoint, EndpointLog, LogLine } from "./data";
+import type { DraftCheck, DraftEndpoint, EndpointLog, LogLine } from "./data";
 
 export const TONES = {
   clone: {
@@ -92,65 +92,23 @@ export function MethodChip({
   );
 }
 
-const CHECK_TONE: Record<string, string> = {
-  format: "border-sky-500/25 bg-sky-500/10 text-sky-300",
-  lint: "border-violet-500/25 bg-violet-500/10 text-violet-300",
-  typecheck: "border-amber-500/25 bg-amber-500/10 text-amber-300",
-  test: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
-  build: "border-indigo-500/25 bg-indigo-500/10 text-indigo-300",
+const CHECK_STATUS_DOT: Record<DraftCheck["status"], string> = {
+  passed: "bg-emerald-400",
+  failed: "bg-rose-500",
+  warning: "bg-amber-400",
 };
 
-export function CheckChips({ checks }: { checks: ReadonlyArray<{ kind: string; ok: boolean }> }) {
+/** Four status dots, nothing else. Detail lives in the diff modal. */
+export function CheckSummary({ checks }: { checks: DraftCheck[] }) {
   return (
-    <span className="flex flex-wrap items-center gap-1">
+    <span className="inline-flex items-center gap-1" aria-label="Check results">
       {checks.map((check) => (
         <span
           key={check.kind}
-          title={`${check.kind}: ${check.ok ? "passed" : "failed"}`}
-          className={cn(
-            "inline-flex items-center gap-0.5 rounded border px-1 py-0.5 font-mono text-[9px]",
-            check.ok
-              ? (CHECK_TONE[check.kind] ?? "border-zinc-700 bg-zinc-800/60 text-zinc-300")
-              : "border-rose-500/30 bg-rose-500/10 text-rose-400",
-          )}
-        >
-          {check.ok ? <Check className="size-2.5" /> : <X className="size-2.5" />}
-          {check.kind}
-        </span>
+          title={`${check.kind}: ${check.status}${check.note ? ` · ${check.note}` : ""}`}
+          className={cn("size-2 rounded-full", CHECK_STATUS_DOT[check.status])}
+        />
       ))}
-    </span>
-  );
-}
-
-/** Compact four-dot check summary for dense rows. Detail lives in the modal. */
-export function CheckSummary({ checks }: { checks: ReadonlyArray<{ kind: string; ok: boolean }> }) {
-  const passed = checks.filter((check) => check.ok).length;
-  const dots: Record<string, string> = {
-    format: "bg-sky-400",
-    lint: "bg-violet-400",
-    typecheck: "bg-amber-400",
-    test: "bg-emerald-400",
-    build: "bg-indigo-400",
-  };
-  return (
-    <span
-      title={checks.map((check) => `${check.kind}: ${check.ok ? "passed" : "failed"}`).join(" · ")}
-      className="inline-flex items-center gap-1.5 rounded-md border border-zinc-800/70 bg-zinc-950/40 px-1.5 py-0.5"
-    >
-      <span className="flex items-center gap-0.5">
-        {checks.map((check) => (
-          <span
-            key={check.kind}
-            className={cn(
-              "size-1.5 rounded-full",
-              check.ok ? (dots[check.kind] ?? "bg-zinc-500") : "bg-rose-500",
-            )}
-          />
-        ))}
-      </span>
-      <span className="font-mono text-[9px] text-zinc-500">
-        {passed}/{checks.length} checks
-      </span>
     </span>
   );
 }

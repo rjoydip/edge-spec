@@ -17,6 +17,7 @@ import {
   Clock,
   Download,
   ExternalLink,
+  Eye,
   FileCode2,
   FileDiff,
   FileJson,
@@ -24,6 +25,7 @@ import {
   FolderGit2,
   GitBranch,
   GitPullRequest,
+  Info,
   KeyRound,
   Loader2,
   Moon,
@@ -201,6 +203,7 @@ export function AgentWorkspaceDraft() {
   const [logOpen, setLogOpen] = useState(false);
   const [logStage, setLogStage] = useState<StageId | "all">("all");
   const [reviewPath, setReviewPath] = useState<string | undefined>(undefined);
+  const [reviewTab, setReviewTab] = useState<"test" | "source">("test");
   const [endpointKey, setEndpointKey] = useState<string | undefined>(undefined);
   const [specOpen, setSpecOpen] = useState(false);
   const [factsOpen, setFactsOpen] = useState(false);
@@ -236,7 +239,10 @@ export function AgentWorkspaceDraft() {
       setSettingsOpen(true);
     }
     if (modal === "log") setLogOpen(true);
-    if (modal === "diff") setReviewPath(GENERATED[0]?.source);
+    if (modal === "diff") {
+      setReviewTab("test");
+      setReviewPath(GENERATED[0]?.source);
+    }
     if (modal === "endpoint") setEndpointKey("POST /api/v1/sync");
     if (modal === "spec") setSpecOpen(true);
     if (modal === "facts") setFactsOpen(true);
@@ -332,6 +338,11 @@ export function AgentWorkspaceDraft() {
   const start = () => {
     resetRun();
     setPhase("scanning");
+  };
+
+  const openReview = (source: string, tab: "test" | "source" = "test") => {
+    setReviewTab(tab);
+    setReviewPath(source);
   };
 
   const openSettings = (section?: SettingsSection) => {
@@ -1099,9 +1110,9 @@ export function AgentWorkspaceDraft() {
                       className={cn(
                         "flex flex-wrap items-center gap-2 rounded-xl border px-2.5 py-2 transition",
                         accepted
-                          ? "border-zinc-800/70 border-l-2 border-l-emerald-500/70 bg-zinc-900/40"
+                          ? "border-emerald-500/25 bg-emerald-500/[0.06]"
                           : rejected
-                            ? "border-zinc-800/70 border-l-2 border-l-rose-500/70 bg-zinc-900/40"
+                            ? "border-rose-500/25 bg-rose-500/[0.06]"
                             : "border-zinc-800/70 bg-zinc-900/40",
                       )}
                     >
@@ -1126,20 +1137,40 @@ export function AgentWorkspaceDraft() {
                       <span className="hidden sm:block">
                         <CheckSummary checks={CHECKS} />
                       </span>
-                      <Badge
-                        variant={accepted ? "success" : rejected ? "danger" : "warning"}
-                        className="hidden md:inline-flex"
-                      >
-                        {entry.state}
-                      </Badge>
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="xs"
-                        onClick={() => setReviewPath(entry.file.source)}
+                        onClick={() => openReview(entry.file.source, "test")}
                         disabled={rank < 5}
+                        title="Preview diff"
+                        aria-label="Preview diff"
                       >
-                        <FileDiff className="size-3.5 text-violet-400" />
-                        Diff
+                        <Eye className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => setRegenerating(entry.file.source)}
+                        disabled={rank < 5 || regenerating === entry.file.source}
+                        title="Regenerate this test"
+                        aria-label="Regenerate this test"
+                      >
+                        <RefreshCw
+                          className={cn(
+                            "size-3.5",
+                            regenerating === entry.file.source && "animate-spin",
+                          )}
+                        />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => openReview(entry.file.source, "source")}
+                        disabled={rank < 5}
+                        title="Metadata and source"
+                        aria-label="Metadata and source"
+                      >
+                        <Info className="size-3.5" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -1171,20 +1202,6 @@ export function AgentWorkspaceDraft() {
                         <X
                           className={cn("size-3.5", rejected ? "text-rose-400" : "text-zinc-500")}
                         />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        aria-label={`Download ${entry.file.test}`}
-                        onClick={() =>
-                          downloadFile(
-                            entry.file.test.split("/").pop() ?? "test.ts",
-                            (DIFFS[entry.file.source] ?? []).join("\n"),
-                            "text/typescript",
-                          )
-                        }
-                      >
-                        <Download className="size-3.5" />
                       </Button>
                     </div>
                   );
@@ -1374,6 +1391,7 @@ export function AgentWorkspaceDraft() {
           regenerating={Boolean(regenerating)}
           onPrev={() => cycleReview(-1)}
           onNext={() => cycleReview(1)}
+          initialTab={reviewTab}
         />
         <EndpointDialog
           open={Boolean(endpointRow)}
