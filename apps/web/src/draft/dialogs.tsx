@@ -62,6 +62,7 @@ import {
 } from "./data";
 import {
   CheckSummary,
+  ICON_GRADIENT,
   EndpointStatus,
   LogLines,
   MethodChip,
@@ -144,7 +145,7 @@ export function LogDialog({
               )
             }
           >
-            <Download className="size-4" />
+            <Download className="size-4" stroke={ICON_GRADIENT} />
           </Button>
         </Hint>
       }
@@ -234,7 +235,7 @@ export function DiffDialog({
               )
             }
           >
-            <Download className="size-4" />
+            <Download className="size-4" stroke={ICON_GRADIENT} />
           </Button>
         </Hint>
       }
@@ -300,7 +301,7 @@ export function SourceDialog({
       footer={
         <>
           <Button variant="outline" size="sm" className="mr-auto" onClick={onViewDiff}>
-            <FileDiff className="size-3.5" />
+            <FileDiff className="size-3.5" stroke={ICON_GRADIENT} />
             View diff
           </Button>
           <Button variant="outline" size="sm" onClick={onGenerate} disabled={regenerating}>
@@ -372,7 +373,7 @@ function CheckGrid() {
         return (
           <div
             key={check.kind}
-            className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5"
+            className="flex items-center gap-2 rounded-lg border border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.06] to-violet-500/[0.06] px-2.5 py-1.5"
           >
             <Icon className="size-3.5 shrink-0 text-zinc-500" />
             <span className="min-w-0">
@@ -586,7 +587,7 @@ export function SpecDialog({
               )
             }
           >
-            <Download className="size-4" />
+            <Download className="size-4" stroke={ICON_GRADIENT} />
           </Button>
         </Hint>
       }

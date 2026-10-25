@@ -131,6 +131,8 @@ import {
 } from "./settings-sheet";
 import {
   CheckSummary,
+  ICON_GRADIENT,
+  IconGradientDefs,
   EndpointStatus,
   MethodChip,
   RISK,
@@ -512,6 +514,7 @@ export function AgentWorkspaceDraft() {
 
   return (
     <TooltipProvider delayDuration={180}>
+      <IconGradientDefs />
       <div className="no-scrollbar relative min-h-dvh overflow-x-hidden">
         <div className="app-backdrop" aria-hidden="true">
           <div className="app-aurora app-aurora-a" />
@@ -1222,7 +1225,7 @@ export function AgentWorkspaceDraft() {
                           disabled={rank < 5}
                           aria-label="Preview diff"
                         >
-                          <FileDiff className="size-3.5" />
+                          <FileDiff className="size-3.5" stroke={ICON_GRADIENT} />
                         </Button>
                       </Hint>
                       <Hint label="Generate test">
@@ -1249,7 +1252,7 @@ export function AgentWorkspaceDraft() {
                           disabled={rank < 5}
                           aria-label="Metadata and source"
                         >
-                          <FileSearch className="size-3.5" />
+                          <FileSearch className="size-3.5" stroke={ICON_GRADIENT} />
                         </Button>
                       </Hint>
                       <Hint label={accepted ? "Withdraw acceptance" : "Accept this test"}>

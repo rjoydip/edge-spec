@@ -3,6 +3,22 @@ import { Check, CheckCircle2, TriangleAlert, Wrench, X } from "lucide-react";
 import { Badge, Hint, cn, type BadgeProps } from "@edge-spec/ui";
 import type { DraftCheck, DraftEndpoint, EndpointLog, LogLine } from "./data";
 
+export const ICON_GRADIENT = "url(#edge-icon-gradient)";
+
+/** One document-level gradient so icon strokes can use it. */
+export function IconGradientDefs() {
+  return (
+    <svg aria-hidden="true" focusable="false" width="0" height="0" className="absolute">
+      <defs>
+        <linearGradient id="edge-icon-gradient" x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="var(--color-indigo-400, #818cf8)" />
+          <stop offset="1" stopColor="var(--color-violet-400, #a78bfa)" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 export const TONES = {
   clone: {
     text: "text-stage-clone",
