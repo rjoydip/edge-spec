@@ -4,7 +4,7 @@
  * Fixtures only: no Worker, no GitHub, no keys. Mounted at `?draft` so the
  * shipped dashboard is untouched while the layout is reviewed.
  */
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -74,7 +74,6 @@ import {
   DropdownMenuTrigger,
   Hint,
   Input,
-  Progress,
   ProviderIcon,
   RadioGroup,
   RadioGroupItem,
@@ -1596,15 +1595,22 @@ function StageNode({
       <button
         type="button"
         onClick={onOpen}
+        style={
+          {
+            "--stage-progress": `${pct}%`,
+            "--stage-tone": `var(--stage-${tone})`,
+          } as CSSProperties
+        }
         className={cn(
-          "pipeline-node group relative min-w-0 flex-1 rounded-xl border px-2.5 py-2 text-left transition-all hover:-translate-y-0.5",
+          "pipeline-node group relative min-w-0 flex-1 rounded-xl border border-transparent px-2.5 py-2.5 text-left transition-all hover:-translate-y-0.5",
           done
-            ? cn(palette.border, "bg-zinc-900/70")
+            ? "bg-zinc-900/70"
             : running
-              ? cn(palette.border, palette.soft, "shadow-lg", palette.glow)
-              : "border-zinc-800/80 bg-zinc-900/40",
+              ? cn("bg-zinc-900/40 shadow-lg", palette.glow)
+              : "bg-zinc-900/40",
         )}
       >
+        <span className="stage-ring" aria-hidden="true" />
         <div className="flex items-center gap-2">
           <span
             className={cn(
@@ -1633,12 +1639,6 @@ function StageNode({
             <ChevronRight className="ml-0.5 inline size-3 text-zinc-700 transition group-hover:text-zinc-400" />
           </span>
         </div>
-        <Progress
-          value={pct}
-          aria-label={`${label} progress`}
-          className="mt-2 h-1"
-          indicatorClassName={done ? "bg-emerald-500" : palette.bar}
-        />
       </button>
     </Hint>
   );
