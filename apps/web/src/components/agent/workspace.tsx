@@ -1069,7 +1069,7 @@ export function AgentWorkspace({
                       {...stage}
                       position={index + 1}
                       onOpen={stage.step ? () => openLog(stage.step as StepId) : undefined}
-                      disabled={stage.disabled}
+                      disabled={stage.disabled || scanStatus === "idle"}
                     />
                   </Fragment>
                 ))}
