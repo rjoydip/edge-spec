@@ -106,15 +106,15 @@ Honesty rules baked into the UI:
 +-------------------------------------------------------------------------+
 | [EdgeSpec]                    [Quota] [Settings] [Avatar ▾]             |
 +-------------------------------------------------------------------------+
-| Step 1 · Target Repository                                              |
+| Step 1 · Repository                                              |
 | [ https://github.com/org/repo.git            ] [main ▾]                 |
 | Mode: (•) Interactive Review   ( ) Fully Autonomous     [ Start Scan ]  |
 +-------------------------------------------------------------------------+
-| Step 2 · Live Pipeline Telemetry                                        |
+| Step 2 · Agent Activity                                        |
 | [✓] Cloned Repo -> [✓] Scanned AST -> [>] Testing OpenSpec (12/14)      |
 | [▸ Live log & repo facts]                                               |
 +-------------------------------------------------------------------------+
-| Step 3 · Triage & Findings                                              |
+| Step 3 · Gap Analysis                                              |
 | +-----------------------+ +-------------------------------------------+ |
 | | File Tree / Gaps (14) | | OpenAPI Endpoint Health                    | |
 | | 📄 src/auth.ts (No t.)| | GET  /api/v1/users   [200 OK]             | |

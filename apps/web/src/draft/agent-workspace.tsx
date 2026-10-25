@@ -22,8 +22,10 @@ import {
   FolderGit2,
   GitBranch,
   GitPullRequest,
+  Info,
   KeyRound,
   Loader2,
+  Lock,
   Moon,
   Play,
   RefreshCw,
@@ -144,13 +146,15 @@ const MODES = [
   {
     id: "review",
     label: "Interactive Review",
-    desc: "Pause at every diff; open the pull request by hand.",
+    desc: "You approve each diff before the pull request.",
+    outcome: "one decision per file",
     icon: ShieldCheck,
   },
   {
     id: "auto",
     label: "Fully Autonomous",
-    desc: "Auto-accept, then review the pull request.",
+    desc: "The agent accepts verified tests for you.",
+    outcome: "one final PR review",
     icon: Zap,
   },
 ] as const;
@@ -630,11 +634,11 @@ export function AgentWorkspaceDraft() {
             <CardContent className="space-y-3 p-4">
               <StepHead
                 n="01"
-                title="Target Repository"
+                title="Repository"
                 icon={FolderGit2}
                 tone="clone"
                 iconClass="text-zinc-400"
-                hint="clone · parse the AST · read the tree"
+                hint="pick a repo, a branch and how much control you keep"
                 aside={
                   <Badge
                     variant={invalid ? "danger" : localDraft ? "accent" : "neutral"}
@@ -719,19 +723,32 @@ export function AgentWorkspaceDraft() {
                 </p>
               ) : null}
 
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-                <span className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
-                  Mode
-                </span>
+              <div className="space-y-2 pt-0.5">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+                    Review mode
+                  </span>
+                  <span className="text-[10px] text-zinc-600">
+                    how much the agent decides for you
+                  </span>
+                </div>
                 <RadioGroup
                   value={mode}
                   onValueChange={(value) => setMode(value as "review" | "auto")}
-                  className="grid gap-2 sm:grid-cols-2 lg:flex-1"
+                  className="grid gap-2 sm:grid-cols-2"
                 >
                   {MODES.map((option) => {
                     const Icon = option.icon;
                     const active = mode === option.id;
                     const needsGitHub = option.id === "auto" && localDraft;
+                    const tile =
+                      option.id === "review"
+                        ? active
+                          ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
+                          : "border-zinc-800 bg-zinc-950/50 text-emerald-400/60"
+                        : active
+                          ? "border-amber-500/35 bg-amber-500/10 text-amber-300"
+                          : "border-zinc-800 bg-zinc-950/50 text-amber-400/60";
                     return (
                       <div
                         key={option.id}
@@ -739,41 +756,68 @@ export function AgentWorkspaceDraft() {
                           if (!needsGitHub) setMode(option.id);
                         }}
                         className={cn(
-                          "flex items-start gap-2 rounded-xl border px-3 py-2 transition",
+                          "relative flex items-start gap-2.5 rounded-xl border p-2.5 transition",
                           needsGitHub
-                            ? "cursor-not-allowed border-zinc-800 bg-zinc-900/20 opacity-50"
-                            : "cursor-pointer",
-                          !needsGitHub &&
-                            (active
-                              ? "border-indigo-500/40 bg-indigo-500/10 shadow-lg shadow-indigo-950/20"
-                              : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"),
+                            ? "cursor-not-allowed border-zinc-800 bg-zinc-900/20 opacity-55"
+                            : active
+                              ? "cursor-pointer border-indigo-500/50 bg-indigo-500/[0.08] shadow-lg shadow-indigo-950/20"
+                              : "cursor-pointer border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/60",
                         )}
                       >
+                        <span
+                          className={cn(
+                            "flex size-8 shrink-0 items-center justify-center rounded-lg border",
+                            needsGitHub ? "border-zinc-800 bg-zinc-950/50 text-zinc-600" : tile,
+                          )}
+                        >
+                          <Icon className="size-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-zinc-100">
+                              {option.label}
+                            </span>
+                            {active && (
+                              <Badge variant="accent" className="px-1.5 py-0 text-[9px]">
+                                selected
+                              </Badge>
+                            )}
+                            {needsGitHub && (
+                              <Badge variant="warning" className="gap-0.5 px-1.5 py-0 text-[9px]">
+                                <Lock className="size-2.5" />
+                                needs GitHub
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
+                            {needsGitHub
+                              ? "Local folders cannot open a pull request."
+                              : option.desc}
+                          </p>
+                          <p
+                            className={cn(
+                              "mt-1 font-mono text-[9px]",
+                              active ? "text-indigo-300" : "text-zinc-600",
+                            )}
+                          >
+                            {needsGitHub ? "switch to a GitHub repository" : option.outcome}
+                          </p>
+                        </div>
                         <RadioGroupItem
                           value={option.id}
                           disabled={needsGitHub}
-                          className="mt-0.5"
+                          className="mt-1.5"
                         />
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-200">
-                            <Icon
-                              className={cn(
-                                "size-3.5",
-                                active ? "text-indigo-300" : "text-zinc-500",
-                              )}
-                            />
-                            {option.label}
-                          </span>
-                          <span className="block text-[10px] text-zinc-500">
-                            {needsGitHub
-                              ? "Needs a GitHub repository for the pull request."
-                              : option.desc}
-                          </span>
-                        </span>
                       </div>
                     );
                   })}
                 </RadioGroup>
+                <div className="flex items-start gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5 text-[10px] leading-relaxed text-zinc-500">
+                  <Info className="mt-0.5 size-3.5 shrink-0 text-zinc-500" />
+                  {mode === "review"
+                    ? "You decide file by file. Nothing reaches the pull request until you accept it."
+                    : "The agent accepts verified tests; you still review the pull request once before it opens."}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -783,10 +827,10 @@ export function AgentWorkspaceDraft() {
             <CardContent className="space-y-3 p-4">
               <StepHead
                 n="02"
-                title="Live Pipeline Telemetry"
+                title="Agent Activity"
                 icon={Activity}
                 tone="analyze"
-                hint="click a stage to read its events; counters come from events"
+                hint="stages stream their own events · click one to inspect"
                 aside={
                   <>
                     <Badge variant="neutral" className="gap-1">
@@ -829,7 +873,7 @@ export function AgentWorkspaceDraft() {
             <CardContent className="space-y-3 p-4">
               <StepHead
                 n="03"
-                title="Triage & Findings"
+                title="Gap Analysis"
                 icon={ShieldCheck}
                 tone="test"
                 hint="missing tests and coverage gaps are counted apart"
