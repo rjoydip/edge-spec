@@ -15,7 +15,7 @@ export interface AgentTest {
 }
 
 export type ReviewState = "pending" | "accepted" | "rejected";
-export type ReviewFilter = "all" | ReviewState | "passed" | "failed" | "static";
+export type ValidationFilter = "all" | "passed" | "failed" | "static";
 export type StageKey = "clone" | "analyze" | "test" | "fix";
 export type StepStatus = "idle" | "running" | "done" | "failed";
 export type Steps = Record<StepId, { status: StepStatus; note?: string }>;
