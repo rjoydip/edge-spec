@@ -648,6 +648,7 @@ export function AgentWorkspaceDraft() {
                 <Button
                   onClick={running ? resetRun : start}
                   disabled={!repo.trim()}
+                  variant={running ? "danger" : "default"}
                   className="sm:w-36"
                 >
                   {running ? (
