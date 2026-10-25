@@ -740,7 +740,7 @@ export function PullsDialog({ open, onClose }: { open: boolean; onClose: () => v
       <Alert variant="info" className="mt-3">
         <ListChecks />
         <div>
-          <AlertTitle>One PR per review</AlertTitle>
+          <AlertTitle>One pull request per review</AlertTitle>
           <AlertDescription>
             A dispatched run opens a single pull request with every accepted test file.
           </AlertDescription>
@@ -844,7 +844,8 @@ export function PrDialog({
             <div>
               <AlertTitle>{pending.length} file(s) still pending</AlertTitle>
               <AlertDescription>
-                Accept or reject them before opening the PR, so nothing is dropped silently.
+                Accept or reject them before opening the pull request, so nothing is dropped
+                silently.
               </AlertDescription>
             </div>
           </Alert>
@@ -933,7 +934,7 @@ export function PrDialog({
                 Open as a draft pull request
               </span>
               <span className="block text-[10px] text-zinc-500">
-                Reviewers can comment before the PR is ready.
+                Reviewers can comment before it is ready.
               </span>
             </span>
             <Switch

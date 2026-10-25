@@ -143,13 +143,13 @@ const MODES = [
   {
     id: "review",
     label: "Interactive Review",
-    desc: "Pause at every diff; dispatch by hand.",
+    desc: "Pause at every diff; open the pull request by hand.",
     icon: ShieldCheck,
   },
   {
     id: "auto",
     label: "Fully Autonomous",
-    desc: "Auto-accept, then show the PR package.",
+    desc: "Auto-accept, then review the pull request.",
     icon: Zap,
   },
 ] as const;
@@ -279,7 +279,7 @@ export function AgentWorkspaceDraft() {
     return () => clearTimeout(timer);
   }, [phase, written]);
 
-  // Autonomous: accept the pending files, then open the package for a look.
+  // Autonomous: accept the pending files, then open the pull request screen.
   useEffect(() => {
     if (phase !== "review" || mode !== "auto") return;
     const accept = setTimeout(
@@ -476,7 +476,7 @@ export function AgentWorkspaceDraft() {
     phase === "review"
       ? `${acceptedCount} accepted · ${rejectedCount} rejected · ${pendingCount} pending`
       : phase === "dispatched"
-        ? "PR #128 opened on acme/edge-api"
+        ? "Pull request #128 opened on acme/edge-api"
         : phase === "idle"
           ? `Ready · acme/edge-api · ${branch}`
           : phase === "scanning"
@@ -520,7 +520,9 @@ export function AgentWorkspaceDraft() {
               </Hint>
               <div className="min-w-0 leading-tight">
                 <h1 className="truncate text-sm font-bold tracking-tight text-zinc-50">EdgeSpec</h1>
-                <p className="hidden text-[10px] text-zinc-500 sm:block">Agentic Test Engineer</p>
+                <p className="hidden text-[10px] text-zinc-500 sm:block">
+                  Agentic test coverage — scan, test, fix, ship.
+                </p>
               </div>
 
               <div className="ml-auto flex items-center gap-1.5">
@@ -1279,7 +1281,7 @@ export function AgentWorkspaceDraft() {
               <span className="truncate">{statusText}</span>
               {rank >= 5 && phase !== "dispatched" && (
                 <Badge variant="success" className="ml-1 hidden sm:inline-flex">
-                  {acceptedCount}/{GENERATED.length} in the PR
+                  {acceptedCount}/{GENERATED.length} included
                 </Badge>
               )}
             </div>
@@ -1334,7 +1336,7 @@ export function AgentWorkspaceDraft() {
                       className="bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-950/30"
                     >
                       <GitPullRequest />
-                      Review & dispatch
+                      Review pull request
                       <ArrowUpRight className="size-3.5" />
                     </Button>
                   </span>

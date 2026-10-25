@@ -17,7 +17,7 @@ review, then gates the PR on per-file decisions.
 
 - `apps/web/src/draft/agent-workspace.tsx` — the four steps, header, footer.
 - `apps/web/src/draft/dialogs.tsx` — event log, diff review, endpoint detail,
-  spec/contract, repository facts, PR package, pull requests.
+  spec/contract, repository facts, pull request screen, pull requests.
 - `apps/web/src/draft/settings-sheet.tsx` — editable provider, sandbox, keys,
   pipeline and appearance (Accordion + inputs).
 - `apps/web/src/draft/shared.tsx` — stage tones, badges, downloads, log lines.
@@ -30,18 +30,18 @@ review, then gates the PR on per-file decisions.
 
 Interactions covered by the draft:
 
-| Flow         | Where                                                                                                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Stage events | click a rail node, or "Event log" → modal with stage tabs                                                                                              |
-| Diff review  | "Diff" per file → modal with generated test, source, checks, accept/reject, download                                                                   |
-| Decisions    | per-file accept/reject, "Accept all", rejected tray with Restore                                                                                       |
-| PR gate      | footer → package modal with editable title, branch, commit message, description, draft toggle and AI copy; dispatch is blocked while a file is pending |
-| Endpoints    | click a matrix row → request, highlighted response, execution log, copy cURL, re-test, open spec                                                       |
-| Spec         | "Spec" → raw YAML + generated contract, download                                                                                                       |
-| Gaps         | tabs: Missing 11 · Coverage 2 · Contract 1, coverage labelled from `lcov.info`                                                                         |
-| Facts        | repository languages, runtime, CI checks, coverage source                                                                                              |
-| Settings     | Accordion sections with editable provider/model, runner, keys, retries, strict mode, accent                                                            |
-| Autonomous   | auto-accepts, then opens the PR package instead of dispatching silently                                                                                |
+| Flow         | Where                                                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Stage events | click a rail node, or "Event log" → modal with stage tabs                                                                                                    |
+| Diff review  | "Diff" per file → modal with generated test, source, checks, accept/reject, download                                                                         |
+| Decisions    | per-file accept/reject, "Accept all", rejected tray with Restore                                                                                             |
+| PR gate      | footer → pull request screen with editable title, branch, commit message, description, draft toggle and AI copy; dispatch is blocked while a file is pending |
+| Endpoints    | click a matrix row → request, highlighted response, execution log, copy cURL, re-test, open spec                                                             |
+| Spec         | "Spec" → raw YAML + generated contract, download                                                                                                             |
+| Gaps         | tabs: Missing 11 · Coverage 2 · Contract 1, coverage labelled from `lcov.info`                                                                               |
+| Facts        | repository languages, runtime, CI checks, coverage source                                                                                                    |
+| Settings     | Accordion sections with editable provider/model, runner, keys, retries, strict mode, accent                                                                  |
+| Autonomous   | auto-accepts, then opens the pull request screen instead of dispatching silently                                                                             |
 
 What is real in the draft: tokens, layout, motion, primitives, keyboard/focus
 behaviour, light/dark, downloads. What is mocked: every number, command and
@@ -122,7 +122,7 @@ Honesty rules baked into the UI:
 | +-----------------------+ +-------------------------------------------+ |
 +-------------------------------------------------------------------------+
 | Step 4 · Code Diff Review                                               |
-| 📂 src/auth.test.ts (Generated)          [Regenerate] [Accept]          |
+| 📂 src/auth.test.ts (Generated)          [Generate test] [Accept]          |
 | +---------------------------------------------------------------------+ |
 | | + describe('Auth Edge Runtime', ...)                                | |
 | +---------------------------------------------------------------------+ |
@@ -347,7 +347,7 @@ Each phase is a commit that typechecks, builds and is manually reviewable.
 | P0    | 17 primitives, exports, Radix deps, stage tokens, keyframes                                                                        | `bun run check`, `bun run build`, exports test                                          |
 | P1    | Slim header, `step-repo`, `step-rail`, `stages.ts`, footer skeleton; old tabs still reachable behind a dev-only flag for visual QA | `bun run dev` + `dev:worker`: empty state, local path, invalid repo, light/dark, 375 px |
 | P2    | Step 3 triage: `apiResults` state, `mode: "both"`, matrix, sheets                                                                  | scan a repo with an OpenAPI spec; verify `12/14` matches `api` events                   |
-| P3    | Step 4 review: `Preview` wrapper, Accept/Regenerate, static-only `Alert`, sticky footer, Dispatch PR                               | run without sandbox → must say "static check only"                                      |
+| P3    | Step 4 review: `Preview` wrapper, Accept/Generate test, static-only `Alert`, sticky footer, Dispatch PR                            | run without sandbox → must say "static check only"                                      |
 | P4    | Delete tabs/`SHOW_PULLS_TAB`, rehome Pulls to header dialog, autonomous mode, motion polish, mobile                                | full run + autonomous run opens exactly one PR                                          |
 | P5    | Retest for the "→ Fixed" chip (optional, core + one event field)                                                                   | failure with sandbox shows `→ test fixed`; without sandbox shows `not verified`         |
 | P6    | Docs: `apps/docs/ui.md` page anatomy, motion table, one line in `AGENTS.md` if the tab invariant changes                           | `bun run check`                                                                         |
