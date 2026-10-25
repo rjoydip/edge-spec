@@ -1,6 +1,6 @@
 /** Shared atoms for the draft: stage tones, badges, checks, downloads. */
 import { Check, CheckCircle2, TriangleAlert, Wrench, X } from "lucide-react";
-import { Badge, cn, type BadgeProps } from "@edge-spec/ui";
+import { Badge, Hint, cn, type BadgeProps } from "@edge-spec/ui";
 import type { DraftCheck, DraftEndpoint, EndpointLog, LogLine } from "./data";
 
 export const TONES = {
@@ -98,18 +98,22 @@ const CHECK_STATUS_DOT: Record<DraftCheck["status"], string> = {
   warning: "bg-amber-400",
 };
 
-/** Four status dots, nothing else. Detail lives in the diff modal. */
+/** Four status dots, nothing else. Detail lives in the source view. */
 export function CheckSummary({ checks }: { checks: DraftCheck[] }) {
+  const label = checks
+    .map((check) => `${check.kind}: ${check.status}${check.note ? ` · ${check.note}` : ""}`)
+    .join(" · ");
   return (
-    <span className="inline-flex items-center gap-1" aria-label="Check results">
-      {checks.map((check) => (
-        <span
-          key={check.kind}
-          title={`${check.kind}: ${check.status}${check.note ? ` · ${check.note}` : ""}`}
-          className={cn("size-2 rounded-full", CHECK_STATUS_DOT[check.status])}
-        />
-      ))}
-    </span>
+    <Hint label={label}>
+      <span className="inline-flex items-center gap-1" aria-label="Check results">
+        {checks.map((check) => (
+          <span
+            key={check.kind}
+            className={cn("size-2 rounded-full", CHECK_STATUS_DOT[check.status])}
+          />
+        ))}
+      </span>
+    </Hint>
   );
 }
 

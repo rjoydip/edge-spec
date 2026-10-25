@@ -17,15 +17,14 @@ import {
   Clock,
   Download,
   ExternalLink,
-  Eye,
   FileCode2,
   FileDiff,
   FileJson,
+  FileSearch,
   Folder,
   FolderGit2,
   GitBranch,
   GitPullRequest,
-  Info,
   KeyRound,
   Loader2,
   Moon,
@@ -114,12 +113,13 @@ import {
 } from "./data";
 import {
   DEFAULT_PR_DRAFT,
+  DiffDialog,
   EndpointDialog,
   FactsDialog,
   LogDialog,
   PrDialog,
   PullsDialog,
-  ReviewDialog,
+  SourceDialog,
   SpecDialog,
   type PrDraft,
   type ReviewEntry,
@@ -136,7 +136,6 @@ import {
   EndpointStatus,
   MethodChip,
   RISK,
-  STAGE_LABEL,
   TONES,
   downloadFile,
   type EndpointRow,
@@ -202,8 +201,9 @@ export function AgentWorkspaceDraft() {
   const [prDraft, setPrDraft] = useState<PrDraft>(DEFAULT_PR_DRAFT);
   const [logOpen, setLogOpen] = useState(false);
   const [logStage, setLogStage] = useState<StageId | "all">("all");
-  const [reviewPath, setReviewPath] = useState<string | undefined>(undefined);
-  const [reviewTab, setReviewTab] = useState<"test" | "source">("test");
+  const [diffPath, setDiffPath] = useState<string | undefined>(undefined);
+  const [sourcePath, setSourcePath] = useState<string | undefined>(undefined);
+  const [specFocus, setSpecFocus] = useState<EndpointRow | undefined>(undefined);
   const [endpointKey, setEndpointKey] = useState<string | undefined>(undefined);
   const [specOpen, setSpecOpen] = useState(false);
   const [factsOpen, setFactsOpen] = useState(false);
@@ -239,10 +239,8 @@ export function AgentWorkspaceDraft() {
       setSettingsOpen(true);
     }
     if (modal === "log") setLogOpen(true);
-    if (modal === "diff") {
-      setReviewTab("test");
-      setReviewPath(GENERATED[0]?.source);
-    }
+    if (modal === "diff") setDiffPath(GENERATED[0]?.source);
+    if (modal === "source") setSourcePath(GENERATED[0]?.source);
     if (modal === "endpoint") setEndpointKey("POST /api/v1/sync");
     if (modal === "spec") setSpecOpen(true);
     if (modal === "facts") setFactsOpen(true);
@@ -330,7 +328,8 @@ export function AgentWorkspaceDraft() {
     setReviews(
       Object.fromEntries(GENERATED.map((file) => [file.source, "pending" as ReviewState])),
     );
-    setReviewPath(undefined);
+    setDiffPath(undefined);
+    setSourcePath(undefined);
     setEndpointKey(undefined);
     setPrOpen(false);
   };
@@ -340,9 +339,11 @@ export function AgentWorkspaceDraft() {
     setPhase("scanning");
   };
 
-  const openReview = (source: string, tab: "test" | "source" = "test") => {
-    setReviewTab(tab);
-    setReviewPath(source);
+  const openDiff = (source: string) => setDiffPath(source);
+  const openSource = (source: string) => setSourcePath(source);
+  const openSpec = (focus?: EndpointRow) => {
+    setSpecFocus(focus);
+    setSpecOpen(true);
   };
 
   const openSettings = (section?: SettingsSection) => {
@@ -376,8 +377,8 @@ export function AgentWorkspaceDraft() {
     file,
     state: reviews[file.source] ?? "pending",
   }));
-  const activeEntry = entries.find((entry) => entry.file.source === reviewPath);
-  const activeIndex = GENERATED.findIndex((file) => file.source === reviewPath);
+  const diffEntry = entries.find((entry) => entry.file.source === diffPath);
+  const sourceEntry = entries.find((entry) => entry.file.source === sourcePath);
 
   const stages: Array<{
     id: StageId;
@@ -450,12 +451,7 @@ export function AgentWorkspaceDraft() {
     window.setTimeout(() => setQueued("done"), 1200);
   };
 
-  const cycleReview = (direction: 1 | -1) => {
-    if (GENERATED.length === 0) return;
-    const next =
-      activeIndex === -1 ? 0 : (activeIndex + direction + GENERATED.length) % GENERATED.length;
-    setReviewPath(GENERATED[next]?.source);
-  };
+  const generateTest = (source: string) => setRegenerating(source);
 
   const downloadAccepted = () => {
     const accepted = entries.filter((entry) => entry.state === "accepted");
@@ -499,24 +495,25 @@ export function AgentWorkspaceDraft() {
         <div className="relative z-10 mx-auto max-w-7xl space-y-3 px-3 pt-3 pb-28 sm:px-6">
           <header className="app-reveal glass-panel sticky top-0 z-30 rounded-2xl px-3 py-2.5 sm:px-4">
             <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={resetRun}
-                title="Reset this draft run"
-                aria-label="Reset this draft run"
-                className="relative shrink-0 rounded-xl transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:outline-none"
-              >
-                <img
-                  src="/favicon.svg"
-                  alt=""
-                  width={32}
-                  height={32}
-                  className="brand-mark size-8"
-                />
-                {running && (
-                  <span className="absolute -top-0.5 -right-0.5 size-2 animate-pulse rounded-full bg-emerald-400 ring-2 ring-zinc-950" />
-                )}
-              </button>
+              <Hint label="Reset this run">
+                <button
+                  type="button"
+                  onClick={resetRun}
+                  aria-label="Reset this draft run"
+                  className="relative shrink-0 rounded-xl transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:outline-none"
+                >
+                  <img
+                    src="/favicon.svg"
+                    alt=""
+                    width={32}
+                    height={32}
+                    className="brand-mark size-8"
+                  />
+                  {running && (
+                    <span className="absolute -top-0.5 -right-0.5 size-2 animate-pulse rounded-full bg-emerald-400 ring-2 ring-zinc-950" />
+                  )}
+                </button>
+              </Hint>
               <div className="min-w-0 leading-tight">
                 <h1 className="truncate text-sm font-bold tracking-tight text-zinc-50">
                   EdgeSpec <span className="text-zinc-400">Agentic Test Engineer</span>
@@ -894,48 +891,48 @@ export function AgentWorkspaceDraft() {
                                     : [...new Set([...current, gap.path])],
                                 );
                               return (
-                                <div
-                                  key={gap.path}
-                                  role="button"
-                                  tabIndex={0}
-                                  title={gap.path}
-                                  onClick={toggle}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter" || event.key === " ") {
-                                      event.preventDefault();
-                                      toggle();
-                                    }
-                                  }}
-                                  className="flex w-full cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 pl-6 text-left transition hover:bg-zinc-800/40"
-                                >
-                                  <Checkbox
-                                    checked={checked}
-                                    onClick={(event) => event.stopPropagation()}
-                                    onCheckedChange={toggle}
-                                    aria-label={`Select ${gap.path}`}
-                                  />
-                                  <FileCode2
-                                    className={cn(
-                                      "size-3.5 shrink-0",
-                                      gap.kind === "api"
-                                        ? "text-amber-400"
-                                        : gap.kind === "coverage"
-                                          ? "text-sky-400"
-                                          : "text-zinc-500",
-                                    )}
-                                  />
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate font-mono text-[11px] text-zinc-300">
-                                      {gap.path.split("/").pop()}
+                                <Hint key={gap.path} label={gap.path}>
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={toggle}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter" || event.key === " ") {
+                                        event.preventDefault();
+                                        toggle();
+                                      }
+                                    }}
+                                    className="flex w-full cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 pl-6 text-left transition hover:bg-zinc-800/40"
+                                  >
+                                    <Checkbox
+                                      checked={checked}
+                                      onClick={(event) => event.stopPropagation()}
+                                      onCheckedChange={toggle}
+                                      aria-label={`Select ${gap.path}`}
+                                    />
+                                    <FileCode2
+                                      className={cn(
+                                        "size-3.5 shrink-0",
+                                        gap.kind === "api"
+                                          ? "text-amber-400"
+                                          : gap.kind === "coverage"
+                                            ? "text-sky-400"
+                                            : "text-zinc-500",
+                                      )}
+                                    />
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate font-mono text-[11px] text-zinc-300">
+                                        {gap.path.split("/").pop()}
+                                      </span>
+                                      <span className="block truncate text-[10px] text-zinc-600">
+                                        {gap.note}
+                                      </span>
                                     </span>
-                                    <span className="block truncate text-[10px] text-zinc-600">
-                                      {gap.note}
-                                    </span>
-                                  </span>
-                                  <Badge variant={RISK[gap.risk].variant}>
-                                    {RISK[gap.risk].label}
-                                  </Badge>
-                                </div>
+                                    <Badge variant={RISK[gap.risk].variant}>
+                                      {RISK[gap.risk].label}
+                                    </Badge>
+                                  </div>
+                                </Hint>
                               );
                             })}
                           </CollapsibleContent>
@@ -975,7 +972,7 @@ export function AgentWorkspaceDraft() {
                       ) : (
                         "not run"
                       )}
-                      <Button variant="ghost" size="xs" onClick={() => setSpecOpen(true)}>
+                      <Button variant="ghost" size="xs" onClick={() => openSpec()}>
                         <FileJson className="size-3" />
                         Spec
                       </Button>
@@ -1048,10 +1045,11 @@ export function AgentWorkspaceDraft() {
             <CardContent className="space-y-3 p-4">
               <StepHead
                 n="04"
-                title="Review & Code Diff"
+                title="Review Queue"
                 icon={FileDiff}
                 tone="review"
-                hint="accept or reject each file; open the diff in a modal"
+                iconClass="text-stage-analyze"
+                hint="accept or reject each file; preview the diff or the source"
                 aside={
                   <>
                     <Badge variant="success">{acceptedCount} accepted</Badge>
@@ -1090,7 +1088,7 @@ export function AgentWorkspaceDraft() {
                   <Download className="size-3.5" />
                   Download accepted
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setSpecOpen(true)}>
+                <Button variant="ghost" size="sm" onClick={() => openSpec()}>
                   <FileJson className="size-3.5" />
                   Spec & contract
                 </Button>
@@ -1114,6 +1112,7 @@ export function AgentWorkspaceDraft() {
                           : rejected
                             ? "border-rose-500/25 bg-rose-500/[0.06]"
                             : "border-zinc-800/70 bg-zinc-900/40",
+                        regenerating === entry.file.source && "row-flash",
                       )}
                     >
                       <FileCode2
@@ -1137,72 +1136,77 @@ export function AgentWorkspaceDraft() {
                       <span className="hidden sm:block">
                         <CheckSummary checks={CHECKS} />
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        onClick={() => openReview(entry.file.source, "test")}
-                        disabled={rank < 5}
-                        title="Preview diff"
-                        aria-label="Preview diff"
-                      >
-                        <Eye className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        onClick={() => setRegenerating(entry.file.source)}
-                        disabled={rank < 5 || regenerating === entry.file.source}
-                        title="Regenerate this test"
-                        aria-label="Regenerate this test"
-                      >
-                        <RefreshCw
-                          className={cn(
-                            "size-3.5",
-                            regenerating === entry.file.source && "animate-spin",
-                          )}
-                        />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        onClick={() => openReview(entry.file.source, "source")}
-                        disabled={rank < 5}
-                        title="Metadata and source"
-                        aria-label="Metadata and source"
-                      >
-                        <Info className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        onClick={() =>
-                          setReview(entry.file.source, accepted ? "pending" : "accepted")
-                        }
-                        disabled={rank < 5}
-                        title={accepted ? "Withdraw acceptance" : "Accept this test"}
-                        aria-label={accepted ? "Withdraw acceptance" : "Accept this test"}
-                      >
-                        <Check
-                          className={cn(
-                            "size-3.5",
-                            accepted ? "text-emerald-400" : "text-zinc-500",
-                          )}
-                        />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        onClick={() =>
-                          setReview(entry.file.source, rejected ? "pending" : "rejected")
-                        }
-                        disabled={rank < 5}
-                        title={rejected ? "Restore this test" : "Reject this test"}
-                        aria-label={rejected ? "Restore this test" : "Reject this test"}
-                      >
-                        <X
-                          className={cn("size-3.5", rejected ? "text-rose-400" : "text-zinc-500")}
-                        />
-                      </Button>
+                      <Hint label="Preview diff">
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => openDiff(entry.file.source)}
+                          disabled={rank < 5}
+                          aria-label="Preview diff"
+                        >
+                          <FileDiff className="size-3.5" />
+                        </Button>
+                      </Hint>
+                      <Hint label="Generate test">
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => generateTest(entry.file.source)}
+                          disabled={rank < 5 || regenerating === entry.file.source}
+                          aria-label="Generate test"
+                        >
+                          <RefreshCw
+                            className={cn(
+                              "size-3.5",
+                              regenerating === entry.file.source && "animate-spin",
+                            )}
+                          />
+                        </Button>
+                      </Hint>
+                      <Hint label="Metadata and source">
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => openSource(entry.file.source)}
+                          disabled={rank < 5}
+                          aria-label="Metadata and source"
+                        >
+                          <FileSearch className="size-3.5" />
+                        </Button>
+                      </Hint>
+                      <Hint label={accepted ? "Withdraw acceptance" : "Accept this test"}>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() =>
+                            setReview(entry.file.source, accepted ? "pending" : "accepted")
+                          }
+                          disabled={rank < 5}
+                          aria-label={accepted ? "Withdraw acceptance" : "Accept this test"}
+                        >
+                          <Check
+                            className={cn(
+                              "size-3.5",
+                              accepted ? "text-emerald-400" : "text-zinc-500",
+                            )}
+                          />
+                        </Button>
+                      </Hint>
+                      <Hint label={rejected ? "Restore this test" : "Reject this test"}>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() =>
+                            setReview(entry.file.source, rejected ? "pending" : "rejected")
+                          }
+                          disabled={rank < 5}
+                          aria-label={rejected ? "Restore this test" : "Reject this test"}
+                        >
+                          <X
+                            className={cn("size-3.5", rejected ? "text-rose-400" : "text-zinc-500")}
+                          />
+                        </Button>
+                      </Hint>
                     </div>
                   );
                 })}
@@ -1261,23 +1265,17 @@ export function AgentWorkspaceDraft() {
                     </AlertDescription>
                   </div>
                 </Alert>
-              ) : (
-                <Alert variant={rank >= 5 ? "success" : "warning"}>
-                  {rank >= 5 ? <ShieldCheck /> : <TriangleAlert />}
+              ) : rank < 5 ? (
+                <Alert variant="warning">
+                  <TriangleAlert />
                   <div>
-                    <AlertTitle>
-                      {rank >= 5
-                        ? `Verified on Docker · ${GENERATED.length}/${GENERATED.length} passed`
-                        : "Not verified yet"}
-                    </AlertTitle>
+                    <AlertTitle>Not verified yet</AlertTitle>
                     <AlertDescription>
-                      {rank >= 5
-                        ? "format, lint, typecheck and the suite executed. Only accepted tests go to the PR; the app source is untouched."
-                        : "No runner has executed this suite yet. A static check is not a pass."}
+                      No runner has executed this suite yet. A static check is not a pass.
                     </AlertDescription>
                   </div>
                 </Alert>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         </div>
@@ -1339,20 +1337,25 @@ export function AgentWorkspaceDraft() {
                   Run again
                 </Button>
               ) : (
-                <Button
-                  onClick={() => setPrOpen(true)}
-                  disabled={rank < 5}
-                  title={
+                <Hint
+                  label={
                     rank < 5
                       ? "The run has to reach review first"
                       : "See exactly what goes into the pull request"
                   }
-                  className="bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-950/30"
                 >
-                  <GitPullRequest />
-                  Review & dispatch
-                  <ArrowUpRight className="size-3.5" />
-                </Button>
+                  <span className="inline-flex">
+                    <Button
+                      onClick={() => setPrOpen(true)}
+                      disabled={rank < 5}
+                      className="bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg shadow-indigo-950/30"
+                    >
+                      <GitPullRequest />
+                      Review & dispatch
+                      <ArrowUpRight className="size-3.5" />
+                    </Button>
+                  </span>
+                </Hint>
               )}
             </div>
             {phase === "dispatched" && (
@@ -1378,31 +1381,37 @@ export function AgentWorkspaceDraft() {
           stage={logStage}
           onStage={setLogStage}
         />
-        <ReviewDialog
-          open={Boolean(activeEntry)}
-          entry={activeEntry}
-          onClose={() => setReviewPath(undefined)}
+        <DiffDialog
+          open={Boolean(diffEntry)}
+          entry={diffEntry}
+          onClose={() => setDiffPath(undefined)}
+        />
+        <SourceDialog
+          open={Boolean(sourceEntry)}
+          entry={sourceEntry}
+          onClose={() => setSourcePath(undefined)}
           onState={(state) => {
-            if (activeEntry) setReview(activeEntry.file.source, state);
+            if (sourceEntry) setReview(sourceEntry.file.source, state);
           }}
-          onRegenerate={() => {
-            if (activeEntry) setRegenerating(activeEntry.file.source);
+          onGenerate={() => {
+            if (sourceEntry) generateTest(sourceEntry.file.source);
           }}
           regenerating={Boolean(regenerating)}
-          onPrev={() => cycleReview(-1)}
-          onNext={() => cycleReview(1)}
-          initialTab={reviewTab}
+          onViewDiff={() => {
+            if (sourceEntry) {
+              const source = sourceEntry.file.source;
+              setSourcePath(undefined);
+              setDiffPath(source);
+            }
+          }}
         />
         <EndpointDialog
           open={Boolean(endpointRow)}
           row={endpointRow}
           onClose={() => setEndpointKey(undefined)}
-          onOpenSpec={() => {
-            setEndpointKey(undefined);
-            setSpecOpen(true);
-          }}
+          onOpenSpec={() => openSpec(endpointRow)}
         />
-        <SpecDialog open={specOpen} onClose={() => setSpecOpen(false)} />
+        <SpecDialog open={specOpen} onClose={() => setSpecOpen(false)} focus={specFocus} />
         <FactsDialog open={factsOpen} onClose={() => setFactsOpen(false)} />
         <PullsDialog open={pullsOpen} onClose={() => setPullsOpen(false)} />
         <PrDialog
@@ -1510,53 +1519,54 @@ function StageNode({
   const running = state === "running";
   const done = state === "done";
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title={`Open ${STAGE_LABEL[tone as StageId] ?? label} events`}
-      className={cn(
-        "pipeline-node group relative min-w-0 flex-1 rounded-xl border px-2.5 py-2 text-left transition-all hover:-translate-y-0.5",
-        done
-          ? cn(palette.border, "bg-zinc-900/70")
-          : running
-            ? cn(palette.border, palette.soft, "shadow-lg", palette.glow)
-            : "border-zinc-800/80 bg-zinc-900/40",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "relative flex size-7 shrink-0 items-center justify-center rounded-lg border bg-zinc-950/40",
-            done
-              ? "border-emerald-500/40 text-emerald-400"
-              : running
-                ? cn(palette.border, palette.text, "stage-ping")
-                : "border-zinc-800 text-zinc-500",
-          )}
-        >
-          {done ? (
-            <Check className="size-3.5" strokeWidth={3} />
-          ) : running ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Icon className="size-3.5" />
-          )}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-[11px] font-semibold text-zinc-200">{label}</p>
-          <p className="truncate font-mono text-[10px] text-zinc-500">{sub}</p>
+    <Hint label={`Open ${label} events`}>
+      <button
+        type="button"
+        onClick={onOpen}
+        className={cn(
+          "pipeline-node group relative min-w-0 flex-1 rounded-xl border px-2.5 py-2 text-left transition-all hover:-translate-y-0.5",
+          done
+            ? cn(palette.border, "bg-zinc-900/70")
+            : running
+              ? cn(palette.border, palette.soft, "shadow-lg", palette.glow)
+              : "border-zinc-800/80 bg-zinc-900/40",
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "relative flex size-7 shrink-0 items-center justify-center rounded-lg border bg-zinc-950/40",
+              done
+                ? "border-emerald-500/40 text-emerald-400"
+                : running
+                  ? cn(palette.border, palette.text, "stage-ping")
+                  : "border-zinc-800 text-zinc-500",
+            )}
+          >
+            {done ? (
+              <Check className="size-3.5" strokeWidth={3} />
+            ) : running ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Icon className="size-3.5" />
+            )}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[11px] font-semibold text-zinc-200">{label}</p>
+            <p className="truncate font-mono text-[10px] text-zinc-500">{sub}</p>
+          </div>
+          <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-600">
+            {String(position).padStart(2, "0")}
+            <ChevronRight className="ml-0.5 inline size-3 text-zinc-700 transition group-hover:text-zinc-400" />
+          </span>
         </div>
-        <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-600">
-          {String(position).padStart(2, "0")}
-          <ChevronRight className="ml-0.5 inline size-3 text-zinc-700 transition group-hover:text-zinc-400" />
-        </span>
-      </div>
-      <Progress
-        value={pct}
-        aria-label={`${label} progress`}
-        className="mt-2 h-1"
-        indicatorClassName={done ? "bg-emerald-500" : palette.bar}
-      />
-    </button>
+        <Progress
+          value={pct}
+          aria-label={`${label} progress`}
+          className="mt-2 h-1"
+          indicatorClassName={done ? "bg-emerald-500" : palette.bar}
+        />
+      </button>
+    </Hint>
   );
 }

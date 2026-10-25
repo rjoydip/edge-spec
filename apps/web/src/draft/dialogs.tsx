@@ -2,13 +2,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   AlignLeft,
-  ArrowLeft,
-  ArrowRight,
   Check,
   CheckCircle2,
   Clipboard,
   Download,
   FileCode2,
+  FileDiff,
   FileJson,
   FlaskConical,
   FolderGit2,
@@ -33,6 +32,7 @@ import {
   Badge,
   Button,
   Dialog,
+  Hint,
   Input,
   Separator,
   Switch,
@@ -158,73 +158,116 @@ export function LogDialog({
   );
 }
 
-export function ReviewDialog({
+export function DiffDialog({
+  open,
+  onClose,
+  entry,
+}: {
+  open: boolean;
+  onClose: () => void;
+  entry?: ReviewEntry;
+}) {
+  if (!entry) return null;
+  const diff = DIFFS[entry.file.source] ?? [];
+  const added = diff.filter((line) => line.trim() !== "").length;
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={entry.file.test}
+      description={`New test file generated from ${entry.file.source}`}
+      className="max-w-4xl"
+      footer={
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mr-auto"
+            onClick={() =>
+              downloadFile(
+                entry.file.test.split("/").pop() ?? "test.ts",
+                diff.join("\n"),
+                "text/typescript",
+              )
+            }
+          >
+            <Download className="size-3.5" />
+            Download
+          </Button>
+          <Button size="sm" onClick={onClose}>
+            Close
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="success">+{added} additions</Badge>
+          <Badge variant="neutral">−0 deletions</Badge>
+          <Badge variant="neutral">new file</Badge>
+          <span className="ml-auto truncate font-mono text-[10px] text-zinc-500">
+            {entry.file.source} → {entry.file.test}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5 font-mono text-[10px] text-zinc-500">
+          <FileDiff className="size-3.5 text-zinc-400" />
+          @@ -0,0 +1,{diff.length} @@
+          <span className="ml-auto">{added} lines added</span>
+        </div>
+
+        <CodeBlock lines={diff} kind="add" />
+
+        <p className="text-[10px] leading-relaxed text-zinc-500">
+          Diff view only. Checks, acceptance and file metadata live in the row and in the source
+          view.
+        </p>
+      </div>
+    </Dialog>
+  );
+}
+
+export function SourceDialog({
   open,
   onClose,
   entry,
   onState,
-  onRegenerate,
+  onGenerate,
   regenerating,
-  onPrev,
-  onNext,
-  initialTab = "test",
+  onViewDiff,
 }: {
   open: boolean;
   onClose: () => void;
   entry?: ReviewEntry;
   onState: (state: ReviewState) => void;
-  onRegenerate: () => void;
+  onGenerate: () => void;
   regenerating: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-  /** "source" opens the metadata/source view straight away. */
-  initialTab?: "test" | "source";
+  onViewDiff: () => void;
 }) {
-  const [tab, setTab] = useState(initialTab);
-  useEffect(() => setTab(initialTab), [entry?.file.source, initialTab]);
-
   if (!entry) return null;
-  const diff = DIFFS[entry.file.source] ?? [];
-  const source = SOURCES[entry.file.source] ?? [];
+  const sourceCode =
+    entry.file.source === "openapi.yaml"
+      ? SPEC_YAML
+      : (SOURCES[entry.file.source] ?? []).join("\n");
   const state = entry.state;
-  const warned = CHECKS.filter((check) => check.status === "warning");
-  const failed = CHECKS.filter((check) => check.status === "failed");
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
       title={entry.file.test}
-      description={`Generated from ${entry.file.source} with ${entry.file.provider} · ${entry.file.model}`}
-      className="max-w-5xl"
+      description={`Metadata and source for ${entry.file.source}`}
+      className="max-w-4xl"
       footer={
         <>
-          <div className="mr-auto flex flex-wrap items-center gap-1.5">
-            <Button variant="ghost" size="xs" onClick={onPrev} aria-label="Previous file">
-              <ArrowLeft className="size-3.5" />
-            </Button>
-            <Button variant="ghost" size="xs" onClick={onNext} aria-label="Next file">
-              <ArrowRight className="size-3.5" />
-            </Button>
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() =>
-                downloadFile(
-                  entry.file.test.split("/").pop() ?? "test.ts",
-                  diff.join("\n"),
-                  "text/typescript",
-                )
-              }
-            >
-              <Download className="size-3.5" />
-              Download
-            </Button>
-            <Button variant="outline" size="xs" onClick={onRegenerate} disabled={regenerating}>
-              <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
-              {regenerating ? "Writing…" : "Regenerate"}
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" className="mr-auto" onClick={onViewDiff}>
+            <FileDiff className="size-3.5" />
+            View diff
+          </Button>
+          <Button variant="outline" size="sm" onClick={onGenerate} disabled={regenerating}>
+            <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
+            {regenerating ? "Generating…" : "Generate test"}
+          </Button>
           {state === "rejected" ? (
             <Button variant="outline" size="sm" onClick={() => onState("pending")}>
               <RotateCcw className="size-3.5" />
@@ -253,96 +296,57 @@ export function ReviewDialog({
           <Badge variant="neutral" className="font-mono">
             {entry.file.source}
           </Badge>
+          <Badge variant="neutral">
+            {entry.file.provider} · {entry.file.model}
+          </Badge>
           <CheckSummary checks={CHECKS} />
-          <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-500">
-            <Sparkles className="size-3 text-violet-400" />
-            {entry.file.model} · 2.4s
-          </span>
+          <span className="ml-auto text-[10px] text-zinc-500">2.4s generation</span>
         </div>
-
-        <Tabs
-          value={tab}
-          onValueChange={(value) => setTab(value as "test" | "source")}
-          className="space-y-2"
-        >
-          <TabsList>
-            <TabsTrigger value="test">
-              <FileCode2 className="size-3.5 text-violet-400" />
-              Generated test
-            </TabsTrigger>
-            <TabsTrigger value="source">
-              <FileJson className="size-3.5 text-amber-400" />
-              {entry.file.source === "openapi.yaml" ? "Spec source" : "Source file"}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="test">
-            <CodeBlock lines={diff} kind="add" />
-          </TabsContent>
-          <TabsContent value="source">
-            <HighlightedCode
-              code={entry.file.source === "openapi.yaml" ? SPEC_YAML : source.join("\n")}
-              language={entry.file.source === "openapi.yaml" ? "yaml" : "typescript"}
-            />
-          </TabsContent>
-        </Tabs>
 
         <div className="space-y-1.5">
           <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">Checks</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {CHECKS.map((check) => {
-              const meta = CHECK_META[check.kind] ?? {
-                icon: FlaskConical,
-                tone: "text-zinc-500",
-              };
-              const Icon = meta.icon;
-              const status = CHECK_STATUS[check.status];
-              const StatusIcon = status.icon;
-              return (
-                <div
-                  key={check.kind}
-                  className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5"
-                >
-                  <Icon className="size-3.5 shrink-0 text-zinc-500" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[10px] text-zinc-300">{check.kind}</span>
-                    <span className="block truncate font-mono text-[9px] text-zinc-500">
-                      {check.ms}ms{check.note ? ` · ${check.note}` : ""}
-                    </span>
-                  </span>
-                  <StatusIcon className={cn("ml-auto size-3.5 shrink-0", status.tone)} />
-                </div>
-              );
-            })}
-          </div>
+          <CheckGrid />
         </div>
 
-        <Alert variant={failed.length ? "danger" : "success"}>
-          {failed.length ? <TriangleAlert /> : <ShieldCheck />}
-          <div>
-            <AlertTitle>Executed on Docker · exit 0</AlertTitle>
-            <AlertDescription>
-              format, typecheck and the suite passed in 412ms.
-              {warned.length
-                ? ` Lint reported ${warned[0]?.note ?? "non-blocking warnings"}.`
-                : " Lint is clean."}{" "}
-              The source file was not modified.
-            </AlertDescription>
-          </div>
-        </Alert>
-
-        {state === "rejected" && (
-          <Alert variant="warning">
-            <TriangleAlert />
-            <div>
-              <AlertTitle>Excluded from the pull request</AlertTitle>
-              <AlertDescription>
-                This test stays in the session. Restore it to put it back in the PR package.
-              </AlertDescription>
-            </div>
-          </Alert>
-        )}
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+            {entry.file.source === "openapi.yaml" ? "Spec source" : "Source file"}
+          </p>
+          <HighlightedCode
+            code={sourceCode}
+            language={entry.file.source === "openapi.yaml" ? "yaml" : "typescript"}
+          />
+        </div>
       </div>
     </Dialog>
+  );
+}
+
+function CheckGrid() {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {CHECKS.map((check) => {
+        const meta = CHECK_META[check.kind] ?? { icon: FlaskConical, tone: "text-zinc-500" };
+        const Icon = meta.icon;
+        const status = CHECK_STATUS[check.status];
+        const StatusIcon = status.icon;
+        return (
+          <div
+            key={check.kind}
+            className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5"
+          >
+            <Icon className="size-3.5 shrink-0 text-zinc-500" />
+            <span className="min-w-0">
+              <span className="block truncate text-[10px] text-zinc-300">{check.kind}</span>
+              <span className="block truncate font-mono text-[9px] text-zinc-500">
+                {check.ms}ms{check.note ? ` · ${check.note}` : ""}
+              </span>
+            </span>
+            <StatusIcon className={cn("ml-auto size-3.5 shrink-0", status.tone)} />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -413,21 +417,26 @@ export function EndpointDialog({
             {copied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}
             {copied ? "Copied" : "Copy cURL"}
           </Button>
-          <Button
-            size="sm"
-            onClick={startRetest}
-            disabled={retest === "running" || row.outcome === "skipped"}
-            title={
+          <Hint
+            label={
               row.outcome === "skipped" ? "Needs a token fixture first" : "Run this operation again"
             }
           >
-            {retest === "running" ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="size-3.5" />
-            )}
-            {retest === "done" ? "Passed again" : "Re-test"}
-          </Button>
+            <span className="inline-flex">
+              <Button
+                size="sm"
+                onClick={startRetest}
+                disabled={retest === "running" || row.outcome === "skipped"}
+              >
+                {retest === "running" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3.5" />
+                )}
+                {retest === "done" ? "Passed again" : "Re-test"}
+              </Button>
+            </span>
+          </Hint>
         </>
       }
     >
@@ -500,9 +509,22 @@ export function EndpointDialog({
   );
 }
 
-export function SpecDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [tab, setTab] = useState("spec");
+export function SpecDialog({
+  open,
+  onClose,
+  focus,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Opened from an endpoint: start on that operation's exact spec section. */
+  focus?: EndpointRow;
+}) {
+  const [tab, setTab] = useState(focus ? "operation" : "spec");
   const contract = DIFFS["openapi.yaml"] ?? [];
+
+  useEffect(() => {
+    if (open) setTab(focus ? "operation" : "spec");
+  }, [open, focus]);
 
   return (
     <Dialog
@@ -519,13 +541,13 @@ export function SpecDialog({ open, onClose }: { open: boolean; onClose: () => vo
             className="mr-auto"
             onClick={() =>
               downloadFile(
-                tab === "spec" ? "openapi.yaml" : "openapi.contract.test.ts",
-                tab === "spec" ? SPEC_YAML : contract.join("\n"),
+                tab === "contract" ? "openapi.contract.test.ts" : "openapi.yaml",
+                tab === "contract" ? contract.join("\n") : SPEC_YAML,
               )
             }
           >
             <Download className="size-3.5" />
-            Download {tab === "spec" ? "spec" : "contract test"}
+            Download {tab === "contract" ? "contract test" : "spec"}
           </Button>
           <Button size="sm" onClick={onClose}>
             Close
@@ -533,17 +555,50 @@ export function SpecDialog({ open, onClose }: { open: boolean; onClose: () => vo
         </>
       }
     >
-      <Tabs value={tab} onValueChange={setTab} className="space-y-2">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as "operation" | "spec" | "contract")}
+        className="space-y-2"
+      >
         <TabsList>
+          {focus && (
+            <TabsTrigger value="operation">
+              <MethodChip method={focus.method} />
+              Operation
+            </TabsTrigger>
+          )}
           <TabsTrigger value="spec">
             <FileJson className="size-3.5" />
-            Spec source
+            Full spec
           </TabsTrigger>
           <TabsTrigger value="contract">
             <FileCode2 className="size-3.5 text-violet-400" />
             Generated contract
           </TabsTrigger>
         </TabsList>
+
+        {focus && (
+          <TabsContent value="operation">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <MethodChip method={focus.method} />
+                <span className="font-mono text-[11px] text-zinc-200">{focus.path}</span>
+                <EndpointStatus row={focus} />
+                {focus.operationId && (
+                  <Badge variant="neutral" className="font-mono">
+                    {focus.operationId}
+                  </Badge>
+                )}
+              </div>
+              <HighlightedCode code={specSection(SPEC_YAML, focus.path)} language="yaml" />
+              <p className="text-[10px] leading-relaxed text-zinc-500">
+                The exact section of openapi.yaml for this operation. The full document and the
+                generated contract are one tab away.
+              </p>
+            </div>
+          </TabsContent>
+        )}
+
         <TabsContent value="spec">
           <HighlightedCode code={SPEC_YAML} language="yaml" />
         </TabsContent>
@@ -554,15 +609,24 @@ export function SpecDialog({ open, onClose }: { open: boolean; onClose: () => vo
       <Alert variant="info" className="mt-3">
         <ShieldCheck />
         <div>
-          <AlertTitle>Deterministic, not AI-written</AlertTitle>
+          <AlertTitle>Generated from the spec itself</AlertTitle>
           <AlertDescription>
-            The contract suite is built from the spec. Only the source file is downloaded or
-            committed; the app is never edited.
+            EdgeSpec reads openapi.yaml and builds this contract test automatically, without calling
+            a model. It only adds test files — your application code is never modified.
           </AlertDescription>
         </div>
       </Alert>
     </Dialog>
   );
+}
+
+/** The YAML slice for one path, so "Open spec" can land on the exact operation. */
+function specSection(spec: string, path: string): string {
+  const lines = spec.split("\n");
+  const start = lines.findIndex((line) => line.trim() === `${path}:`);
+  if (start === -1) return spec;
+  const end = lines.findIndex((line, index) => index > start && /^ {2}\/[\w./{}]+:$/.test(line));
+  return lines.slice(start, end === -1 ? undefined : end).join("\n");
 }
 
 export function FactsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -782,10 +846,8 @@ export function PrDialog({
           <Button variant="ghost" size="sm" className="mr-auto" onClick={onClose}>
             Back to review
           </Button>
-          <Button
-            onClick={onDispatch}
-            disabled={blocked}
-            title={
+          <Hint
+            label={
               accepted.length === 0
                 ? "Accept at least one test"
                 : pending.length > 0
@@ -793,10 +855,14 @@ export function PrDialog({
                   : "Open one pull request with the accepted tests"
             }
           >
-            <GitPullRequest className="size-3.5" />
-            Open {value.draft ? "draft " : ""}pull request · {accepted.length} file
-            {accepted.length === 1 ? "" : "s"}
-          </Button>
+            <span className="inline-flex">
+              <Button onClick={onDispatch} disabled={blocked}>
+                <GitPullRequest className="size-3.5" />
+                Open {value.draft ? "draft " : ""}pull request · {accepted.length} file
+                {accepted.length === 1 ? "" : "s"}
+              </Button>
+            </span>
+          </Hint>
         </>
       }
     >

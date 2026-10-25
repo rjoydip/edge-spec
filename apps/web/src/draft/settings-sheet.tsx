@@ -25,6 +25,7 @@ import {
   AlertTitle,
   Badge,
   Button,
+  Hint,
   Input,
   Select,
   SelectContent,
@@ -436,18 +437,18 @@ export function SettingsSheet({
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {ACCENTS.map((accent) => (
-                    <button
-                      key={accent.id}
-                      type="button"
-                      onClick={() => setAccent(accent.base)}
-                      title={accent.name}
-                      aria-label={accent.name}
-                      style={{ background: accent.base }}
-                      className={cn(
-                        "size-5 rounded-full ring-2 ring-offset-2 ring-offset-zinc-950 transition hover:scale-110",
-                        appearance.accentId === accent.id ? "ring-white/80" : "ring-transparent",
-                      )}
-                    />
+                    <Hint key={accent.id} label={accent.name}>
+                      <button
+                        type="button"
+                        onClick={() => setAccent(accent.base)}
+                        aria-label={accent.name}
+                        style={{ background: accent.base }}
+                        className={cn(
+                          "size-5 rounded-full ring-2 ring-offset-2 ring-offset-zinc-950 transition hover:scale-110",
+                          appearance.accentId === accent.id ? "ring-white/80" : "ring-transparent",
+                        )}
+                      />
+                    </Hint>
                   ))}
                 </div>
               </div>
