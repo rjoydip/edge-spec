@@ -110,13 +110,14 @@ export function LogDialog({
       onClose={onClose}
       title={stage === "all" ? "Pipeline event log" : `${STAGE_LABEL[stage]} events`}
       description={`${lines.length} events · timestamps are relative to the run start.`}
-      className="max-w-4xl"
-      footer={
-        <>
+      className="max-w-3xl"
+      actions={
+        <Hint label="Download log">
           <Button
-            variant="outline"
-            size="sm"
-            className="mr-auto"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label="Download log"
             onClick={() =>
               downloadFile(
                 `edgespec-run-${stage}.log`,
@@ -126,13 +127,9 @@ export function LogDialog({
               )
             }
           >
-            <Download className="size-3.5" />
-            Download log
+            <Download className="size-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Close
-          </Button>
-        </>
+        </Hint>
       }
     >
       <Tabs
@@ -176,13 +173,14 @@ export function DiffDialog({
       onClose={onClose}
       title={entry.file.test}
       description={`New test file generated from ${entry.file.source}`}
-      className="max-w-4xl"
-      footer={
-        <>
+      className="max-w-3xl"
+      actions={
+        <Hint label="Download test">
           <Button
-            variant="outline"
-            size="sm"
-            className="mr-auto"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label="Download test"
             onClick={() =>
               downloadFile(
                 entry.file.test.split("/").pop() ?? "test.ts",
@@ -191,16 +189,12 @@ export function DiffDialog({
               )
             }
           >
-            <Download className="size-3.5" />
-            Download
+            <Download className="size-4" />
           </Button>
-          <Button size="sm" onClick={onClose}>
-            Close
-          </Button>
-        </>
+        </Hint>
       }
     >
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="success">+{added} additions</Badge>
           <Badge variant="neutral">−0 deletions</Badge>
@@ -257,7 +251,7 @@ export function SourceDialog({
       onClose={onClose}
       title={entry.file.test}
       description={`Metadata and source for ${entry.file.source}`}
-      className="max-w-4xl"
+      className="max-w-3xl"
       footer={
         <>
           <Button variant="outline" size="sm" className="mr-auto" onClick={onViewDiff}>
@@ -406,7 +400,7 @@ export function EndpointDialog({
       onClose={onClose}
       title={`${row.method} ${row.path}`}
       description={`${row.operationId ?? "operation"} · openapi.yaml`}
-      className="max-w-3xl"
+      className="max-w-2xl"
       footer={
         <>
           <Button variant="ghost" size="sm" className="mr-auto" onClick={onOpenSpec}>
@@ -532,13 +526,14 @@ export function SpecDialog({
       onClose={onClose}
       title="openapi.yaml"
       description="14 operations · 3 documented paths · server http://127.0.0.1:3000"
-      className="max-w-4xl"
-      footer={
-        <>
+      className="max-w-3xl"
+      actions={
+        <Hint label={tab === "contract" ? "Download contract test" : "Download spec"}>
           <Button
-            variant="outline"
-            size="sm"
-            className="mr-auto"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label={tab === "contract" ? "Download contract test" : "Download spec"}
             onClick={() =>
               downloadFile(
                 tab === "contract" ? "openapi.contract.test.ts" : "openapi.yaml",
@@ -546,15 +541,23 @@ export function SpecDialog({
               )
             }
           >
-            <Download className="size-3.5" />
-            Download {tab === "contract" ? "contract test" : "spec"}
+            <Download className="size-4" />
           </Button>
-          <Button size="sm" onClick={onClose}>
-            Close
-          </Button>
-        </>
+        </Hint>
       }
     >
+      <div className="mb-2.5 flex items-start gap-2.5 rounded-xl border border-indigo-500/25 bg-indigo-500/[0.06] px-3 py-2">
+        <Sparkles className="mt-0.5 size-4 shrink-0 text-indigo-300" />
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold text-zinc-200">
+            Built from openapi.yaml — no model call
+          </p>
+          <p className="mt-0.5 text-[10px] leading-relaxed text-zinc-500">
+            EdgeSpec reads the spec and writes this contract test itself. Only test files are added;
+            your application code is never modified.
+          </p>
+        </div>
+      </div>
       <Tabs
         value={tab}
         onValueChange={(value) => setTab(value as "operation" | "spec" | "contract")}
@@ -594,18 +597,6 @@ export function SpecDialog({
           <HighlightedCode code={contract.join("\n")} language="typescript" />
         </TabsContent>
       </Tabs>
-      <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-indigo-500/25 bg-indigo-500/[0.06] px-3 py-2.5">
-        <Sparkles className="mt-0.5 size-4 shrink-0 text-indigo-300" />
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold text-zinc-200">
-            Built from openapi.yaml — no model call
-          </p>
-          <p className="mt-0.5 text-[10px] leading-relaxed text-zinc-500">
-            EdgeSpec reads the spec and writes this contract test itself. Only test files are added;
-            your application code is never modified.
-          </p>
-        </div>
-      </div>
     </Dialog>
   );
 }
@@ -627,12 +618,7 @@ export function FactsDialog({ open, onClose }: { open: boolean; onClose: () => v
       onClose={onClose}
       title="Repository facts"
       description={`${FACTS.repo}@${FACTS.ref} · ${FACTS.files.toLocaleString()} files`}
-      className="max-w-3xl"
-      footer={
-        <Button size="sm" onClick={onClose}>
-          Close
-        </Button>
-      }
+      className="max-w-2xl"
     >
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -729,11 +715,6 @@ export function PullsDialog({ open, onClose }: { open: boolean; onClose: () => v
       title="Pull requests"
       description={`${RECENT_PRS.length} recent pull requests on acme/edge-api`}
       className="max-w-2xl"
-      footer={
-        <Button size="sm" onClick={onClose}>
-          Close
-        </Button>
-      }
     >
       <div className="space-y-1.5">
         {RECENT_PRS.map((pull) => (
@@ -828,8 +809,8 @@ export function PrDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Pull request package"
-      description="Exactly what leaves this session. Nothing else is committed."
+      title="Create pull request"
+      description="Review the title, branch and files before opening it."
       className="max-w-3xl"
       footer={
         <>
@@ -856,7 +837,7 @@ export function PrDialog({
         </>
       }
     >
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {pending.length > 0 ? (
           <Alert variant="warning">
             <TriangleAlert />
@@ -940,7 +921,7 @@ export function PrDialog({
           </div>
           <PField label="Description">
             <Textarea
-              rows={5}
+              rows={4}
               value={value.description}
               onChange={(event) => onChange({ ...value, description: event.target.value })}
               className="font-mono text-[10px]"
@@ -1014,19 +995,13 @@ export function PrDialog({
           )}
         </Section>
 
-        <div className="rounded-xl border border-zinc-800/70 bg-zinc-950/40 p-3 text-[11px] text-zinc-400">
-          <p className="flex items-center gap-1.5 font-semibold text-zinc-200">
-            <Wrench className="size-3.5 text-stage-fix" />
-            What the commit contains
-          </p>
-          <ul className="mt-1.5 space-y-1 text-[10px]">
-            <li>· {accepted.length} generated test files, one commit, no app source changes.</li>
-            <li>· {fixed.length} contract test corrected from the spec, not the application.</li>
-            <li>· {skipped.length} operation skipped and named in the PR body.</li>
-            <li>
-              · Checks: format, lint, typecheck and the suite ran on {settings.sandboxProvider}.
-            </li>
-          </ul>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5 text-[10px] text-zinc-500">
+          <Wrench className="size-3.5 shrink-0 text-stage-fix" />
+          <span className="font-semibold text-zinc-300">One commit</span>
+          <span>{accepted.length} test files</span>
+          <span>· {fixed.length} contract corrected</span>
+          <span>· {skipped.length} skipped</span>
+          <span>· no app source changes</span>
         </div>
       </div>
     </Dialog>

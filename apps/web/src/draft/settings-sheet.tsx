@@ -471,13 +471,10 @@ export function SettingsSheet({
           </Alert>
         </SheetBody>
 
-        <SheetFooter className="justify-between">
+        <SheetFooter>
           <Button variant="ghost" size="sm" onClick={() => onChange(DEFAULT_DRAFT_SETTINGS)}>
             <RotateCcw className="size-3.5" />
             Reset
-          </Button>
-          <Button size="sm" onClick={() => onOpenChange(false)}>
-            Done
           </Button>
         </SheetFooter>
       </SheetContent>

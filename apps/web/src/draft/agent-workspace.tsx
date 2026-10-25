@@ -15,7 +15,6 @@ import {
   ChevronRight,
   Cloud,
   Clock,
-  Download,
   ExternalLink,
   FileCode2,
   FileDiff,
@@ -101,7 +100,6 @@ import { providerById } from "@edge-spec/core/catalog";
 import { toggleMode, useAppearance } from "@/lib/theme";
 import {
   CHECKS,
-  DIFFS,
   ENDPOINTS,
   GAPS,
   GENERATED,
@@ -136,7 +134,6 @@ import {
   MethodChip,
   RISK,
   TONES,
-  downloadFile,
   type EndpointRow,
   type Tone,
 } from "./shared";
@@ -460,16 +457,6 @@ export function AgentWorkspaceDraft() {
   };
 
   const generateTest = (source: string) => setRegenerating(source);
-
-  const downloadAccepted = () => {
-    const accepted = entries.filter((entry) => entry.state === "accepted");
-    downloadFile(
-      "edgespec-tests.txt",
-      accepted
-        .map((entry) => `// ${entry.file.test}\n${(DIFFS[entry.file.source] ?? []).join("\n")}`)
-        .join("\n\n"),
-    );
-  };
 
   const dispatch = () => {
     setPrOpen(false);
@@ -1034,7 +1021,7 @@ export function AgentWorkspaceDraft() {
                 aside={
                   <>
                     <Badge variant="success">{acceptedCount} accepted</Badge>
-                    <Badge variant={rejectedCount ? "danger" : "neutral"}>
+                    <Badge variant={rejectedCount ? "warning" : "neutral"}>
                       {rejectedCount} rejected
                     </Badge>
                     <Badge variant={pendingCount ? "warning" : "neutral"}>
@@ -1060,15 +1047,6 @@ export function AgentWorkspaceDraft() {
                   <Check className="size-3.5 text-emerald-400" />
                   Accept all
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={downloadAccepted}
-                  disabled={acceptedCount === 0}
-                >
-                  <Download className="size-3.5" />
-                  Download accepted
-                </Button>
                 <Button variant="ghost" size="sm" onClick={() => openSpec()}>
                   <FileJson className="size-3.5" />
                   Spec & contract
@@ -1088,11 +1066,7 @@ export function AgentWorkspaceDraft() {
                       key={entry.file.source}
                       className={cn(
                         "flex flex-wrap items-center gap-2 rounded-xl border px-2.5 py-2 transition",
-                        accepted
-                          ? "border-emerald-500/25 bg-emerald-500/[0.06]"
-                          : rejected
-                            ? "border-rose-500/25 bg-rose-500/[0.06]"
-                            : "border-zinc-800/70 bg-zinc-900/40",
+                        "border-zinc-800/70 bg-zinc-900/40",
                         regenerating === entry.file.source && "row-flash",
                       )}
                     >
@@ -1195,8 +1169,8 @@ export function AgentWorkspaceDraft() {
 
               {rejectedCount > 0 && (
                 <Collapsible defaultOpen>
-                  <CollapsibleTrigger className="group flex w-full items-center gap-1.5 rounded-lg border border-rose-500/20 bg-rose-500/[0.04] px-2.5 py-1.5 text-[10px] text-rose-300">
-                    <TriangleAlert className="size-3" />
+                  <CollapsibleTrigger className="group flex w-full items-center gap-1.5 rounded-lg border border-zinc-800/70 bg-zinc-900/40 px-2.5 py-1.5 text-[10px] text-zinc-300">
+                    <TriangleAlert className="size-3 text-amber-400" />
                     <span className="font-semibold">Rejected · stay out of the PR</span>
                     <span className="ml-auto font-mono">{rejectedCount} file(s)</span>
                     <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
