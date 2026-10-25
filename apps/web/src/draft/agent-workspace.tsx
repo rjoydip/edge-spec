@@ -11,9 +11,7 @@ import {
   Boxes,
   Check,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
-  Cloud,
   Clock,
   ExternalLink,
   FileCode2,
@@ -75,6 +73,7 @@ import {
   Hint,
   Input,
   Progress,
+  ProviderIcon,
   RadioGroup,
   RadioGroupItem,
   ScrollArea,
@@ -312,6 +311,16 @@ export function AgentWorkspaceDraft() {
     setReviews((current) => ({ ...current, [source]: state }));
   };
 
+  const restoreRejected = () => {
+    setReviews((current) => {
+      const next = { ...current };
+      for (const key of Object.keys(next)) {
+        if (next[key] === "rejected") next[key] = "pending";
+      }
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (!regenerating) return;
     const timer = setTimeout(() => {
@@ -526,7 +535,7 @@ export function AgentWorkspaceDraft() {
                     aria-label="Open AI provider settings"
                   >
                     <Badge variant="accent" className="h-9 items-center gap-1 px-2.5">
-                      <Cloud className="size-3.5 text-sky-400" />
+                      <ProviderIcon provider={settings.provider} />
                       1.2k
                     </Badge>
                   </button>
@@ -1168,42 +1177,61 @@ export function AgentWorkspaceDraft() {
               </div>
 
               {rejectedCount > 0 && (
-                <Collapsible defaultOpen>
-                  <CollapsibleTrigger className="group flex w-full items-center gap-1.5 rounded-lg border border-zinc-800/70 bg-zinc-900/40 px-2.5 py-1.5 text-[10px] text-zinc-300">
-                    <TriangleAlert className="size-3 text-amber-400" />
-                    <span className="font-semibold">Rejected · stay out of the PR</span>
-                    <span className="ml-auto font-mono">{rejectedCount} file(s)</span>
-                    <ChevronDown className="size-3 transition-transform group-data-[state=open]:rotate-180" />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="mt-1.5 space-y-1">
-                      {entries
-                        .filter((entry) => entry.state === "rejected")
-                        .map((entry) => (
-                          <div
-                            key={entry.file.source}
-                            className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5"
-                          >
-                            <FileCode2 className="size-3.5 shrink-0 text-rose-400" />
-                            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-zinc-300">
+                <div className="overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/[0.06]">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-amber-500/20 px-3 py-2">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-500/15">
+                      <TriangleAlert className="size-3.5 text-amber-300" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold text-amber-200">
+                        Rejected · kept out of the pull request
+                      </p>
+                      <p className="text-[10px] text-amber-300/60">
+                        {rejectedCount} file(s) stay in this session. Restore any before
+                        dispatching.
+                      </p>
+                    </div>
+                    <Badge variant="warning">{rejectedCount}</Badge>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="text-amber-200 hover:bg-amber-500/10"
+                      onClick={restoreRejected}
+                    >
+                      <RotateCcw className="size-3.5" />
+                      Restore all
+                    </Button>
+                  </div>
+                  <div className="space-y-1 p-2">
+                    {entries
+                      .filter((entry) => entry.state === "rejected")
+                      .map((entry) => (
+                        <div
+                          key={entry.file.source}
+                          className="flex flex-wrap items-center gap-2 rounded-lg bg-zinc-950/40 px-2.5 py-1.5"
+                        >
+                          <FileCode2 className="size-3.5 shrink-0 text-rose-400" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-mono text-[10px] text-zinc-200">
                               {entry.file.test}
                             </span>
-                            <span className="hidden text-[10px] text-zinc-500 sm:block">
-                              excluded from the PR package
+                            <span className="block truncate text-[10px] text-zinc-500">
+                              {entry.file.source}
                             </span>
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={() => setReview(entry.file.source, "pending")}
-                            >
-                              <RotateCcw className="size-3.5 text-emerald-400" />
-                              Restore
-                            </Button>
-                          </div>
-                        ))}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            className="text-emerald-300 hover:bg-emerald-500/10"
+                            onClick={() => setReview(entry.file.source, "pending")}
+                          >
+                            <RotateCcw className="size-3.5" />
+                            Restore
+                          </Button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
               )}
 
               {phase === "dispatched" ? (
