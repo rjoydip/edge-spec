@@ -8,12 +8,12 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   Activity,
   ArrowUpRight,
-  Bot,
   Boxes,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Cloud,
   Clock,
   Download,
   ExternalLink,
@@ -112,6 +112,7 @@ import {
   type StageId,
 } from "./data";
 import {
+  DEFAULT_PR_DRAFT,
   EndpointDialog,
   FactsDialog,
   LogDialog,
@@ -119,10 +120,16 @@ import {
   PullsDialog,
   ReviewDialog,
   SpecDialog,
+  type PrDraft,
   type ReviewEntry,
   type ReviewState,
 } from "./dialogs";
-import { DEFAULT_DRAFT_SETTINGS, SettingsSheet, type DraftSettings } from "./settings-sheet";
+import {
+  DEFAULT_DRAFT_SETTINGS,
+  SettingsSheet,
+  type DraftSettings,
+  type SettingsSection,
+} from "./settings-sheet";
 import {
   CheckChips,
   EndpointStatus,
@@ -190,6 +197,8 @@ export function AgentWorkspaceDraft() {
   const [queuedCount, setQueuedCount] = useState(0);
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>();
+  const [prDraft, setPrDraft] = useState<PrDraft>(DEFAULT_PR_DRAFT);
   const [logOpen, setLogOpen] = useState(false);
   const [logStage, setLogStage] = useState<StageId | "all">("all");
   const [reviewPath, setReviewPath] = useState<string | undefined>(undefined);
@@ -211,9 +220,22 @@ export function AgentWorkspaceDraft() {
 
   // `?draft&modal=…` deep-links a modal for design review.
   useEffect(() => {
-    const modal = new URLSearchParams(window.location.search).get("modal");
+    const params = new URLSearchParams(window.location.search);
+    const modal = params.get("modal");
     if (!modal) return;
-    if (modal === "settings") setSettingsOpen(true);
+    if (modal === "settings") {
+      const section = params.get("section");
+      if (
+        section === "provider" ||
+        section === "sandbox" ||
+        section === "keys" ||
+        section === "pipeline" ||
+        section === "appearance"
+      ) {
+        setSettingsSection(section);
+      }
+      setSettingsOpen(true);
+    }
     if (modal === "log") setLogOpen(true);
     if (modal === "diff") setReviewPath(GENERATED[0]?.source);
     if (modal === "endpoint") setEndpointKey("POST /api/v1/sync");
@@ -311,6 +333,11 @@ export function AgentWorkspaceDraft() {
   const start = () => {
     resetRun();
     setPhase("scanning");
+  };
+
+  const openSettings = (section?: SettingsSection) => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
   };
 
   const rows: EndpointRow[] = ENDPOINTS.map((endpoint, index) => {
@@ -493,30 +520,41 @@ export function AgentWorkspaceDraft() {
                 <Badge variant="warning" className="hidden h-9 items-center px-2 sm:inline-flex">
                   DRAFT
                 </Badge>
-                <Hint label={`${providerName} · 1.2k calls left`}>
-                  <Badge variant="accent" className="h-9 items-center gap-1 px-2.5">
-                    <Bot className="size-3.5" />
-                    1.2k
-                  </Badge>
-                </Hint>
-                <Hint label={`${settings.sandboxProvider} sandbox · runs are verified`}>
-                  <Badge
-                    variant="neutral"
-                    className="hidden h-9 items-center gap-1 px-2.5 sm:inline-flex"
+                <Hint label={`${providerName} · 1.2k calls left · open provider settings`}>
+                  <button
+                    type="button"
+                    onClick={() => openSettings("provider")}
+                    className="rounded-xl focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none"
+                    aria-label="Open AI provider settings"
                   >
-                    <Boxes className="size-3.5 text-sky-400" />
-                    {SANDBOX_PROVIDERS.find((item) => item.id === settings.sandboxProvider)
-                      ?.label ?? settings.sandboxProvider}
-                  </Badge>
+                    <Badge variant="accent" className="h-9 items-center gap-1 px-2.5">
+                      <Cloud className="size-3.5 text-sky-400" />
+                      1.2k
+                    </Badge>
+                  </button>
+                </Hint>
+                <Hint label={`${settings.sandboxProvider} sandbox · open sandbox settings`}>
+                  <button
+                    type="button"
+                    onClick={() => openSettings("sandbox")}
+                    className="hidden rounded-xl focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none sm:block"
+                    aria-label="Open sandbox settings"
+                  >
+                    <Badge variant="neutral" className="h-9 items-center gap-1 px-2.5">
+                      <Boxes className="size-3.5 text-violet-400" />
+                      {SANDBOX_PROVIDERS.find((item) => item.id === settings.sandboxProvider)
+                        ?.label ?? settings.sandboxProvider}
+                    </Badge>
+                  </button>
                 </Hint>
                 <Hint label="Settings">
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => setSettingsOpen(true)}
+                    onClick={() => openSettings()}
                     aria-label="Open settings"
                   >
-                    <Settings />
+                    <Settings className="text-indigo-300" />
                   </Button>
                 </Hint>
                 <DropdownMenu>
@@ -537,7 +575,7 @@ export function AgentWorkspaceDraft() {
                       {appearance.mode === "dark" ? <Sun /> : <Moon />}
                       {appearance.mode === "dark" ? "Light" : "Dark"} mode
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+                    <DropdownMenuItem onSelect={() => openSettings("provider")}>
                       <KeyRound />
                       Provider & keys
                     </DropdownMenuItem>
@@ -559,7 +597,6 @@ export function AgentWorkspaceDraft() {
 
           {/* Step 1 */}
           <Card className="app-reveal overflow-hidden" style={{ animationDelay: "60ms" }}>
-            <div className="h-0.5 w-full bg-gradient-to-r from-stage-clone via-stage-clone/40 to-transparent" />
             <CardContent className="space-y-3 p-4">
               <StepHead
                 n="01"
@@ -665,7 +702,6 @@ export function AgentWorkspaceDraft() {
 
           {/* Step 2 */}
           <Card className="app-reveal overflow-hidden" style={{ animationDelay: "120ms" }}>
-            <div className="h-0.5 w-full bg-gradient-to-r from-stage-analyze via-stage-analyze/40 to-transparent" />
             <CardContent className="space-y-3 p-4">
               <StepHead
                 n="02"
@@ -680,7 +716,7 @@ export function AgentWorkspaceDraft() {
                       {(rank * 2.4).toFixed(1)}s
                     </Badge>
                     <Button variant="ghost" size="xs" onClick={() => setFactsOpen(true)}>
-                      <FileJson className="size-3" />
+                      <FileJson className="size-3 text-sky-400" />
                       Facts
                     </Button>
                     <Button
@@ -691,7 +727,7 @@ export function AgentWorkspaceDraft() {
                         setLogOpen(true);
                       }}
                     >
-                      <Terminal className="size-3" />
+                      <Terminal className="size-3 text-amber-400" />
                       Event log
                     </Button>
                   </>
@@ -735,7 +771,6 @@ export function AgentWorkspaceDraft() {
 
           {/* Step 3 */}
           <Card className="app-reveal overflow-hidden" style={{ animationDelay: "180ms" }}>
-            <div className="h-0.5 w-full bg-gradient-to-r from-stage-test via-stage-test/40 to-transparent" />
             <CardContent className="space-y-3 p-4">
               <StepHead
                 n="03"
@@ -826,7 +861,7 @@ export function AgentWorkspaceDraft() {
                       )}
                       {gapKind === "api" && (
                         <p className="mb-1.5 flex items-center gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/[0.05] px-2 py-1 text-[9px] text-amber-300">
-                          <FileJson className="size-3" />
+                          <FileJson className="size-3 text-sky-400" />
                           contract drift against openapi.yaml
                         </p>
                       )}
@@ -932,7 +967,7 @@ export function AgentWorkspaceDraft() {
                         "not run"
                       )}
                       <Button variant="ghost" size="xs" onClick={() => setSpecOpen(true)}>
-                        <FileJson className="size-3" />
+                        <FileJson className="size-3 text-sky-400" />
                         Spec
                       </Button>
                     </div>
@@ -986,7 +1021,7 @@ export function AgentWorkspaceDraft() {
                     </Table>
                   </ScrollArea>
                   <div className="flex items-center gap-1.5 border-t border-zinc-800/60 px-3 py-1.5 text-[10px] text-zinc-500">
-                    <Server className="size-3" />
+                    <Server className="size-3 text-sky-400" />
                     {rank >= 3
                       ? "executed on the Docker sandbox"
                       : "needs a runner · static check only"}
@@ -1001,7 +1036,6 @@ export function AgentWorkspaceDraft() {
 
           {/* Step 4 */}
           <Card className="app-reveal overflow-hidden" style={{ animationDelay: "240ms" }}>
-            <div className="h-0.5 w-full bg-gradient-to-r from-stage-review via-stage-review/40 to-transparent" />
             <CardContent className="space-y-3 p-4">
               <StepHead
                 n="04"
@@ -1035,7 +1069,7 @@ export function AgentWorkspaceDraft() {
                   }
                   disabled={rank < 5}
                 >
-                  <Check className="size-3.5" />
+                  <Check className="size-3.5 text-emerald-400" />
                   Accept all
                 </Button>
                 <Button
@@ -1044,11 +1078,11 @@ export function AgentWorkspaceDraft() {
                   onClick={downloadAccepted}
                   disabled={acceptedCount === 0}
                 >
-                  <Download className="size-3.5" />
+                  <Download className="size-3.5 text-sky-400" />
                   Download accepted
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setSpecOpen(true)}>
-                  <FileJson className="size-3.5" />
+                  <FileJson className="size-3.5 text-amber-400" />
                   Spec & contract
                 </Button>
                 <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-500">
@@ -1067,9 +1101,9 @@ export function AgentWorkspaceDraft() {
                       className={cn(
                         "flex flex-wrap items-center gap-2 rounded-xl border px-2.5 py-2 transition",
                         accepted
-                          ? "border-emerald-500/25 bg-emerald-500/[0.04]"
+                          ? "border-zinc-800/70 border-l-2 border-l-emerald-500/70 bg-zinc-900/40"
                           : rejected
-                            ? "border-rose-500/25 bg-rose-500/[0.04]"
+                            ? "border-zinc-800/70 border-l-2 border-l-rose-500/70 bg-zinc-900/40"
                             : "border-zinc-800/70 bg-zinc-900/40",
                       )}
                     >
@@ -1106,7 +1140,7 @@ export function AgentWorkspaceDraft() {
                         onClick={() => setReviewPath(entry.file.source)}
                         disabled={rank < 5}
                       >
-                        <FileDiff className="size-3.5" />
+                        <FileDiff className="size-3.5 text-violet-400" />
                         Diff
                       </Button>
                       <Button
@@ -1152,7 +1186,7 @@ export function AgentWorkspaceDraft() {
                           )
                         }
                       >
-                        <Download className="size-3.5" />
+                        <Download className="size-3.5 text-sky-400" />
                       </Button>
                     </div>
                   );
@@ -1188,7 +1222,7 @@ export function AgentWorkspaceDraft() {
                               size="xs"
                               onClick={() => setReview(entry.file.source, "pending")}
                             >
-                              <RotateCcw className="size-3.5" />
+                              <RotateCcw className="size-3.5 text-emerald-400" />
                               Restore
                             </Button>
                           </div>
@@ -1321,6 +1355,7 @@ export function AgentWorkspaceDraft() {
           onOpenChange={setSettingsOpen}
           value={settings}
           onChange={setSettings}
+          section={settingsSection}
         />
         <LogDialog
           open={logOpen}
@@ -1361,6 +1396,8 @@ export function AgentWorkspaceDraft() {
           entries={entries}
           endpoints={rows}
           settings={settings}
+          value={prDraft}
+          onChange={setPrDraft}
         />
       </div>
     </TooltipProvider>

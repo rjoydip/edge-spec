@@ -30,11 +30,14 @@ import {
   Badge,
   Button,
   Dialog,
+  Input,
   Separator,
+  Switch,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
+  Textarea,
   cn,
 } from "@edge-spec/ui";
 import {
@@ -58,6 +61,7 @@ import {
   type EndpointRow,
 } from "./shared";
 import type { DraftSettings } from "./settings-sheet";
+import { HighlightedCode } from "./highlight";
 
 export type ReviewState = "pending" | "accepted" | "rejected";
 
@@ -65,6 +69,23 @@ export interface ReviewEntry {
   file: GeneratedFile;
   state: ReviewState;
 }
+
+export interface PrDraft {
+  title: string;
+  branch: string;
+  commit: string;
+  description: string;
+  draft: boolean;
+}
+
+export const DEFAULT_PR_DRAFT: PrDraft = {
+  title: "test: cover the auth edge runtime and contract gaps",
+  branch: "edgespec/tests-2026-10-25",
+  commit: "test: add 2 generated test files",
+  description:
+    "## Summary\n\n- src/auth/session.test.ts\n- openapi.contract.test.ts\n\n## Verification\n\n- Docker sandbox · format, lint, typecheck, test\n- App source unchanged",
+  draft: true,
+};
 
 const STAGE_ORDER: StageId[] = ["clone", "analyze", "test", "fix"];
 
@@ -239,11 +260,11 @@ export function ReviewDialog({
         <Tabs value={tab} onValueChange={setTab} className="space-y-2">
           <TabsList>
             <TabsTrigger value="test">
-              <FileCode2 className="size-3.5" />
+              <FileCode2 className="size-3.5 text-violet-400" />
               Generated test
             </TabsTrigger>
             <TabsTrigger value="source">
-              <FileJson className="size-3.5" />
+              <FileJson className="size-3.5 text-amber-400" />
               {entry.file.source === "openapi.yaml" ? "Spec source" : "Source file"}
             </TabsTrigger>
           </TabsList>
@@ -251,7 +272,10 @@ export function ReviewDialog({
             <CodeBlock lines={diff} kind="add" />
           </TabsContent>
           <TabsContent value="source">
-            <CodeBlock lines={source} />
+            <HighlightedCode
+              code={entry.file.source === "openapi.yaml" ? SPEC_YAML : source.join("\n")}
+              language={entry.file.source === "openapi.yaml" ? "yaml" : "typescript"}
+            />
           </TabsContent>
         </Tabs>
 
@@ -372,7 +396,7 @@ export function EndpointDialog({
           <MethodChip method={row.method} />
           <EndpointStatus row={row} />
           <Badge variant="neutral" className="gap-1">
-            <Timer className="size-3" />
+            <Timer className="size-3 text-sky-400" />
             {row.ms}ms
           </Badge>
           <Badge variant="neutral" className="font-mono">
@@ -415,7 +439,11 @@ export function EndpointDialog({
             <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
               Response
             </p>
-            <CodeBlock lines={(row.response ?? `${row.http}\n# no recorded body`).split("\n")} />
+            {row.response ? (
+              <HighlightedCode code={row.response} language="json" className="max-h-40 min-h-24" />
+            ) : (
+              <CodeBlock lines={[String(row.http), "# no recorded body"]} />
+            )}
           </div>
         </div>
 
@@ -434,7 +462,6 @@ export function EndpointDialog({
 
 export function SpecDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [tab, setTab] = useState("spec");
-  const specLines = SPEC_YAML.split("\n");
   const contract = DIFFS["openapi.yaml"] ?? [];
 
   return (
@@ -469,19 +496,19 @@ export function SpecDialog({ open, onClose }: { open: boolean; onClose: () => vo
       <Tabs value={tab} onValueChange={setTab} className="space-y-2">
         <TabsList>
           <TabsTrigger value="spec">
-            <FileJson className="size-3.5" />
+            <FileJson className="size-3.5 text-sky-400" />
             Spec source
           </TabsTrigger>
           <TabsTrigger value="contract">
-            <FileCode2 className="size-3.5" />
+            <FileCode2 className="size-3.5 text-violet-400" />
             Generated contract
           </TabsTrigger>
         </TabsList>
         <TabsContent value="spec">
-          <CodeBlock lines={specLines} />
+          <HighlightedCode code={SPEC_YAML} language="yaml" />
         </TabsContent>
         <TabsContent value="contract">
-          <CodeBlock lines={contract} kind="add" />
+          <HighlightedCode code={contract.join("\n")} language="typescript" />
         </TabsContent>
       </Tabs>
       <Alert variant="info" className="mt-3">
@@ -572,7 +599,12 @@ export function FactsDialog({ open, onClose }: { open: boolean; onClose: () => v
               key={check.kind}
               className="flex items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5"
             >
-              <span className="w-20 shrink-0 font-mono text-[10px] text-indigo-300">
+              <span
+                className={cn(
+                  "w-20 shrink-0 font-mono text-[10px]",
+                  CI_TONE[check.kind] ?? "text-indigo-300",
+                )}
+              >
                 {check.kind}
               </span>
               <span className="truncate font-mono text-[10px] text-zinc-300">{check.command}</span>
@@ -650,6 +682,8 @@ export function PrDialog({
   entries,
   endpoints,
   settings,
+  value,
+  onChange,
 }: {
   open: boolean;
   onClose: () => void;
@@ -657,13 +691,44 @@ export function PrDialog({
   entries: ReviewEntry[];
   endpoints: EndpointRow[];
   settings: DraftSettings;
+  value: PrDraft;
+  onChange: (next: PrDraft) => void;
 }) {
+  const [generating, setGenerating] = useState(false);
   const accepted = entries.filter((entry) => entry.state === "accepted");
   const rejected = entries.filter((entry) => entry.state === "rejected");
   const pending = entries.filter((entry) => entry.state === "pending");
   const skipped = endpoints.filter((row) => row.outcome === "skipped");
   const fixed = endpoints.filter((row) => row.firstHttp !== undefined && row.outcome !== "skipped");
   const blocked = accepted.length === 0 || pending.length > 0;
+  const providerName = providerById(settings.provider)?.name ?? settings.provider;
+  const files = accepted.map((entry) => entry.file.test);
+
+  /** Draft copy only: the mockup never calls a provider. */
+  const generate = () => {
+    setGenerating(true);
+    window.setTimeout(() => {
+      onChange({
+        ...value,
+        title: `test: cover ${files.length || "the"} untested path${files.length === 1 ? "" : "s"}`,
+        commit: `test: add ${files.length} generated test file${files.length === 1 ? "" : "s"}`,
+        description: [
+          "## Summary",
+          "",
+          `Generated with ${providerName} · ${settings.model} and verified on ${settings.sandboxProvider}.`,
+          "",
+          ...files.map((file) => `- ${file}`),
+          "",
+          "## Verification",
+          "",
+          "- format, lint, typecheck and the suite passed",
+          `- ${fixed.length} contract test corrected from openapi.yaml`,
+          `- App source unchanged; ${skipped.length} operation skipped for a missing fixture`,
+        ].join("\n"),
+      });
+      setGenerating(false);
+    }, 900);
+  };
 
   return (
     <Dialog
@@ -689,7 +754,8 @@ export function PrDialog({
             }
           >
             <GitPullRequest className="size-3.5" />
-            Open pull request · {accepted.length} file{accepted.length === 1 ? "" : "s"}
+            Open {value.draft ? "draft " : ""}pull request · {accepted.length} file
+            {accepted.length === 1 ? "" : "s"}
           </Button>
         </>
       }
@@ -719,18 +785,92 @@ export function PrDialog({
         )}
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <Summary label="Repository" value={`${FACTS.repo} → main`} icon={FolderGit2} />
-          <Summary label="Branch" value="edgespec/tests-2026-10-25" icon={GitPullRequest} />
+          <Summary
+            label="Repository"
+            value={`${FACTS.repo} → main`}
+            icon={FolderGit2}
+            iconClass="text-sky-400"
+          />
+          <Summary
+            label="Base branch"
+            value="main"
+            icon={GitPullRequest}
+            iconClass="text-violet-400"
+          />
           <Summary
             label="Model"
-            value={`${providerById(settings.provider)?.name ?? settings.provider} · ${settings.model}`}
+            value={`${providerName} · ${settings.model}`}
             icon={Sparkles}
+            iconClass="text-fuchsia-400"
           />
           <Summary
             label="Verification"
             value={`${settings.sandboxProvider} · ${settings.strictTypes ? "strict" : "lenient"} · verified`}
             icon={ShieldCheck}
+            iconClass="text-emerald-400"
           />
+        </div>
+
+        <div className="space-y-2 rounded-xl border border-zinc-800/70 bg-zinc-950/40 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+              Pull request
+            </p>
+            <Button variant="outline" size="xs" onClick={generate} disabled={generating}>
+              {generating ? (
+                <Loader2 className="size-3.5 animate-spin text-fuchsia-400" />
+              ) : (
+                <Sparkles className="size-3.5 text-fuchsia-400" />
+              )}
+              {generating ? "Generating…" : "Generate with AI"}
+            </Button>
+          </div>
+          <PField label="Title">
+            <Input
+              value={value.title}
+              onChange={(event) => onChange({ ...value, title: event.target.value })}
+              placeholder="test: cover the auth edge runtime"
+            />
+          </PField>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <PField label="Branch name">
+              <Input
+                value={value.branch}
+                onChange={(event) => onChange({ ...value, branch: event.target.value })}
+                className="font-mono"
+              />
+            </PField>
+            <PField label="Commit message">
+              <Input
+                value={value.commit}
+                onChange={(event) => onChange({ ...value, commit: event.target.value })}
+              />
+            </PField>
+          </div>
+          <PField label="Description">
+            <Textarea
+              rows={5}
+              value={value.description}
+              onChange={(event) => onChange({ ...value, description: event.target.value })}
+              className="font-mono text-[10px]"
+            />
+          </PField>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800/70 bg-zinc-900/40 px-2.5 py-1.5">
+            <span>
+              <span className="block text-[11px] font-medium text-zinc-300">
+                Open as a draft pull request
+              </span>
+              <span className="block text-[10px] text-zinc-500">
+                Reviewers can comment before the PR is ready.
+              </span>
+            </span>
+            <Switch
+              checked={value.draft}
+              onCheckedChange={(draft) => onChange({ ...value, draft })}
+              size="sm"
+              aria-label="Open as a draft pull request"
+            />
+          </label>
         </div>
 
         <Section title={`Included (${accepted.length})`} tone="success">
@@ -802,23 +942,44 @@ export function PrDialog({
   );
 }
 
+const CI_TONE: Record<string, string> = {
+  format: "text-sky-300",
+  lint: "text-violet-300",
+  typecheck: "text-amber-300",
+  test: "text-emerald-300",
+  build: "text-indigo-300",
+};
+
 function Summary({
   label,
   value,
   icon: Icon,
+  iconClass,
 }: {
   label: string;
   value: string;
   icon: typeof FolderGit2;
+  iconClass?: string;
 }) {
   return (
     <div className="flex items-start gap-2 rounded-xl border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-2">
-      <Icon className="mt-0.5 size-3.5 shrink-0 text-zinc-500" />
+      <Icon className={cn("mt-0.5 size-3.5 shrink-0", iconClass ?? "text-zinc-500")} />
       <div className="min-w-0">
         <p className="text-[10px] text-zinc-500">{label}</p>
         <p className="truncate font-mono text-[10px] text-zinc-200">{value}</p>
       </div>
     </div>
+  );
+}
+
+function PField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block space-y-1">
+      <span className="block text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }
 

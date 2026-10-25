@@ -92,6 +92,14 @@ export function MethodChip({
   );
 }
 
+const CHECK_TONE: Record<string, string> = {
+  format: "border-sky-500/25 bg-sky-500/10 text-sky-300",
+  lint: "border-violet-500/25 bg-violet-500/10 text-violet-300",
+  typecheck: "border-amber-500/25 bg-amber-500/10 text-amber-300",
+  test: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
+  build: "border-indigo-500/25 bg-indigo-500/10 text-indigo-300",
+};
+
 export function CheckChips({ checks }: { checks: ReadonlyArray<{ kind: string; ok: boolean }> }) {
   return (
     <span className="flex flex-wrap items-center gap-1">
@@ -102,7 +110,7 @@ export function CheckChips({ checks }: { checks: ReadonlyArray<{ kind: string; o
           className={cn(
             "inline-flex items-center gap-0.5 rounded border px-1 py-0.5 font-mono text-[9px]",
             check.ok
-              ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
+              ? (CHECK_TONE[check.kind] ?? "border-zinc-700 bg-zinc-800/60 text-zinc-300")
               : "border-rose-500/30 bg-rose-500/10 text-rose-400",
           )}
         >

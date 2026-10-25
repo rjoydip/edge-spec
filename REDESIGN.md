@@ -8,7 +8,9 @@ unless a phase says so explicitly.
 
 A fixture-driven mockup of this layout is mounted at **`/?draft`** (and
 `/?draft&theme=light`). Every modal also has a deep link:
-`?draft&modal=log | diff | endpoint | spec | pr | facts | pulls | settings`.
+`?draft&modal=log | diff | endpoint | spec | pr | facts | pulls | settings`, and
+`&section=provider | sandbox | keys | pipeline | appearance` opens Settings at
+one section (the header badges do the same).
 
 The draft plays one staged run on load: clone → gaps → contract tests → fix →
 review, then gates the PR on per-file decisions.
@@ -28,18 +30,18 @@ review, then gates the PR on per-file decisions.
 
 Interactions covered by the draft:
 
-| Flow         | Where                                                                                                                 |
-| ------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Stage events | click a rail node, or "Event log" → modal with stage tabs                                                             |
-| Diff review  | "Diff" per file → modal with generated test, source, checks, accept/reject, download                                  |
-| Decisions    | per-file accept/reject, "Accept all", rejected tray with Restore                                                      |
-| PR gate      | footer → package modal (included, excluded, branch, model, verification); dispatch is blocked while a file is pending |
-| Endpoints    | click a matrix row → request, response, execution log, copy cURL, re-test, open spec                                  |
-| Spec         | "Spec" → raw YAML + generated contract, download                                                                      |
-| Gaps         | tabs: Missing 11 · Coverage 2 · Contract 1, coverage labelled from `lcov.info`                                        |
-| Facts        | repository languages, runtime, CI checks, coverage source                                                             |
-| Settings     | Accordion sections with editable provider/model, runner, keys, retries, strict mode, accent                           |
-| Autonomous   | auto-accepts, then opens the PR package instead of dispatching silently                                               |
+| Flow         | Where                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Stage events | click a rail node, or "Event log" → modal with stage tabs                                                                                              |
+| Diff review  | "Diff" per file → modal with generated test, source, checks, accept/reject, download                                                                   |
+| Decisions    | per-file accept/reject, "Accept all", rejected tray with Restore                                                                                       |
+| PR gate      | footer → package modal with editable title, branch, commit message, description, draft toggle and AI copy; dispatch is blocked while a file is pending |
+| Endpoints    | click a matrix row → request, highlighted response, execution log, copy cURL, re-test, open spec                                                       |
+| Spec         | "Spec" → raw YAML + generated contract, download                                                                                                       |
+| Gaps         | tabs: Missing 11 · Coverage 2 · Contract 1, coverage labelled from `lcov.info`                                                                         |
+| Facts        | repository languages, runtime, CI checks, coverage source                                                                                              |
+| Settings     | Accordion sections with editable provider/model, runner, keys, retries, strict mode, accent                                                            |
+| Autonomous   | auto-accepts, then opens the PR package instead of dispatching silently                                                                                |
 
 What is real in the draft: tokens, layout, motion, primitives, keyboard/focus
 behaviour, light/dark, downloads. What is mocked: every number, command and

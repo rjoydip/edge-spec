@@ -1,5 +1,5 @@
 /** Editable settings for the draft. Every control updates local state only. */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Bot,
   Boxes,
@@ -62,6 +62,8 @@ export interface DraftSettings {
   strictTypes: boolean;
 }
 
+export type SettingsSection = "provider" | "sandbox" | "keys" | "pipeline" | "appearance";
+
 export const DEFAULT_DRAFT_SETTINGS: DraftSettings = {
   provider: "anthropic",
   model: "claude-sonnet-5-5",
@@ -85,14 +87,29 @@ export function SettingsSheet({
   onOpenChange,
   value,
   onChange,
+  section,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   value: DraftSettings;
   onChange: (next: DraftSettings) => void;
+  section?: SettingsSection;
 }) {
   const appearance = useAppearance();
   const [health, setHealth] = useState<"idle" | "checking" | "ok">("idle");
+  const [openSections, setOpenSections] = useState<string[]>(["provider", "sandbox"]);
+
+  // The header badges open Settings at their own section.
+  useEffect(() => {
+    if (!open || !section) return;
+    setOpenSections((current) => (current.includes(section) ? current : [...current, section]));
+    const timer = window.setTimeout(() => {
+      document
+        .getElementById(`settings-${section}`)
+        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [open, section]);
   const update = (patch: Partial<DraftSettings>) => onChange({ ...value, ...patch });
   const provider = providerById(value.provider);
   const needsKey = provider?.needsKey ?? false;
@@ -113,12 +130,17 @@ export function SettingsSheet({
         </SheetHeader>
 
         <SheetBody className="space-y-3">
-          <Accordion type="multiple" defaultValue={["provider", "sandbox"]} className="space-y-2">
+          <Accordion
+            type="multiple"
+            value={openSections}
+            onValueChange={setOpenSections}
+            className="space-y-2"
+          >
             <Section
               id="provider"
               icon={Bot}
               title="AI provider"
-              summary={`${provider?.name ?? value.provider} · ${value.model}`}
+              summary={provider?.name ?? value.provider}
             >
               <Field label="Provider" hint="Controls which protocol and key the run uses.">
                 <Select
@@ -403,11 +425,16 @@ export function SettingsSheet({
               title="Appearance"
               summary={`${appearance.mode} · ${ACCENTS.find((item) => item.id === appearance.accentId)?.name ?? "accent"}`}
             >
-              <Field
-                label="Accent"
-                hint="Recolours the primary action, focus rings and the aurora."
-              >
-                <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-semibold tracking-wide text-zinc-400 uppercase">
+                    Accent
+                  </span>
+                  <span className="block text-[10px] leading-snug text-zinc-500">
+                    Recolours the primary action, focus rings and the aurora.
+                  </span>
+                </span>
+                <div className="flex shrink-0 items-center gap-1.5">
                   {ACCENTS.map((accent) => (
                     <button
                       key={accent.id}
@@ -417,13 +444,13 @@ export function SettingsSheet({
                       aria-label={accent.name}
                       style={{ background: accent.base }}
                       className={cn(
-                        "size-6 rounded-full ring-2 ring-offset-2 ring-offset-zinc-950 transition hover:scale-110",
+                        "size-5 rounded-full ring-2 ring-offset-2 ring-offset-zinc-950 transition hover:scale-110",
                         appearance.accentId === accent.id ? "ring-white/80" : "ring-transparent",
                       )}
                     />
                   ))}
                 </div>
-              </Field>
+              </div>
               <Button variant="outline" size="sm" onClick={toggleMode}>
                 {appearance.mode === "dark" ? <Sun /> : <Moon />}
                 {appearance.mode === "dark" ? "Light" : "Dark"} mode
@@ -457,6 +484,14 @@ export function SettingsSheet({
   );
 }
 
+const SECTION_TONE: Record<string, string> = {
+  provider: "text-violet-300",
+  sandbox: "text-sky-300",
+  keys: "text-amber-300",
+  pipeline: "text-indigo-300",
+  appearance: "text-fuchsia-300",
+};
+
 function Section({
   id,
   icon: Icon,
@@ -472,12 +507,13 @@ function Section({
 }) {
   return (
     <AccordionItem
+      id={`settings-${id}`}
       value={id}
-      className="overflow-hidden rounded-xl border border-zinc-800/70 bg-zinc-900/30 px-3"
+      className="scroll-mt-2 overflow-hidden rounded-xl border border-zinc-800/70 bg-zinc-900/30 px-3"
     >
       <AccordionTrigger className="hover:no-underline">
         <span className="flex min-w-0 items-center gap-2">
-          <Icon className="size-3.5 shrink-0 text-zinc-500" />
+          <Icon className={cn("size-3.5 shrink-0", SECTION_TONE[id] ?? "text-zinc-500")} />
           <span className="text-[11px] font-semibold text-zinc-200">{title}</span>
           <span className="ml-2 truncate font-mono text-[9px] text-zinc-500">{summary}</span>
         </span>
