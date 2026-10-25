@@ -244,6 +244,11 @@ export function AgentWorkspace({
   const [branchLoading, setBranchLoading] = useState(false);
   const [mode, setMode] = useState<Mode>("review");
   const [gapKind, setGapKind] = useState<GapKind>("missing");
+  const [gapQuery, setGapQuery] = useState("");
+  const [apiQuery, setApiQuery] = useState("");
+  const [apiMethods, setApiMethods] = useState<string[]>([]);
+  const [reviewQuery, setReviewQuery] = useState("");
+  const [reviewState, setReviewState] = useState<"all" | ReviewState>("all");
   const [selection, setSelection] = useState<string[]>([]);
   const [specPath, setSpecPath] = useState("");
   const [reviews, setReviews] = useState<Record<string, ReviewState>>({});
@@ -366,7 +371,12 @@ export function AgentWorkspace({
     unsupported: gaps.filter((gap) => gap.kind === "unsupported").length,
   };
   const orderedGaps = folderFirst(gaps, project.folder);
-  const filteredGaps = orderedGaps.filter((gap) => (gap.kind ?? "missing") === gapKind);
+  const query = (value: string) => value.trim().toLowerCase();
+  const filteredGaps = orderedGaps.filter(
+    (gap) =>
+      (gap.kind ?? "missing") === gapKind &&
+      (!gapQuery.trim() || gap.path.toLowerCase().includes(query(gapQuery))),
+  );
   const generationCapable = (gap: Gap) => gap.kind !== "api" && gap.kind !== "unsupported";
   const selectableGaps = filteredGaps.filter(generationCapable);
   const groups = filteredGaps.reduce<Record<string, Gap[]>>((all, gap) => {
@@ -390,6 +400,13 @@ export function AgentWorkspace({
   const contractTests = generated.filter((item) =>
     specs.some((spec) => spec.path === item.generation.sourcePath),
   );
+  const specEndpoints = currentSpec?.endpoints ?? [];
+  const specMethods = [...new Set(specEndpoints.map((item) => item.method.toUpperCase()))].sort();
+  const visibleEndpoints = specEndpoints.filter(
+    (item) =>
+      (apiMethods.length === 0 || apiMethods.includes(item.method.toUpperCase())) &&
+      (!apiQuery.trim() || `${item.method} ${item.path}`.toLowerCase().includes(query(apiQuery))),
+  );
   const endpointResult = (spec: string, endpoint: OpenApiEndpoint) =>
     apiResults.find(
       (result) =>
@@ -405,6 +422,14 @@ export function AgentWorkspace({
   const acceptedCount = entries.filter((entry) => entry.state === "accepted").length;
   const rejectedCount = entries.filter((entry) => entry.state === "rejected").length;
   const pendingCount = entries.filter((entry) => entry.state === "pending").length;
+  const visibleEntries = entries.filter(
+    (entry) =>
+      (reviewState === "all" || entry.state === reviewState) &&
+      (!reviewQuery.trim() ||
+        `${entry.item.generation.testPath} ${entry.item.generation.sourcePath}`
+          .toLowerCase()
+          .includes(query(reviewQuery))),
+  );
   const diffEntry = entries.find((entry) => entry.item.generation.sourcePath === diffPath);
   const sourceEntry = entries.find((entry) => entry.item.generation.sourcePath === sourcePath);
   const endpoint =
@@ -1171,12 +1196,23 @@ export function AgentWorkspace({
                     </TabsList>
                   </Tabs>
 
+                  <div className="border-b border-zinc-800/60 px-2 py-1.5">
+                    <SearchField
+                      value={gapQuery}
+                      onChange={setGapQuery}
+                      placeholder="Search gap paths…"
+                      label="Search gaps"
+                    />
+                  </div>
+
                   <ScrollArea className="h-[386px]">
                     <div className="p-1.5">
                       {filteredGaps.length === 0 ? (
                         <p className="px-2 py-6 text-center text-[11px] text-zinc-500">
                           {projectMatches
-                            ? "No gaps in this category."
+                            ? gapQuery.trim()
+                              ? "No gaps match this search."
+                              : "No gaps in this category."
                             : "Scan a repository to list gaps."}
                         </p>
                       ) : (
@@ -1355,6 +1391,42 @@ export function AgentWorkspace({
                       </Button>
                     </div>
                   </div>
+                  {currentSpec && (
+                    <div className="flex flex-wrap items-center gap-1.5 border-b border-zinc-800/60 px-2 py-1.5">
+                      <SearchField
+                        value={apiQuery}
+                        onChange={setApiQuery}
+                        placeholder="Search endpoints…"
+                        label="Search endpoints"
+                        className="min-w-0 flex-1"
+                      />
+                      {specMethods.map((method) => {
+                        const active = apiMethods.includes(method);
+                        return (
+                          <button
+                            key={method}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() =>
+                              setApiMethods((current) =>
+                                current.includes(method)
+                                  ? current.filter((item) => item !== method)
+                                  : [...current, method],
+                              )
+                            }
+                            className={cn(
+                              "rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold transition",
+                              active
+                                ? "border-sky-400/50 bg-sky-500/15 text-sky-200"
+                                : "border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300",
+                            )}
+                          >
+                            {method}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   <ScrollArea className="h-[430px]">
                     {currentSpec ? (
                       <Table>
@@ -1368,7 +1440,7 @@ export function AgentWorkspace({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {currentSpec.endpoints.map((item, index) => {
+                          {visibleEndpoints.map((item, index) => {
                             const result = endpointResult(currentSpec.path, item);
                             return (
                               <TableRow
@@ -1404,6 +1476,16 @@ export function AgentWorkspace({
                               </TableRow>
                             );
                           })}
+                          {visibleEndpoints.length === 0 && (
+                            <TableRow className="hover:bg-transparent">
+                              <TableCell
+                                colSpan={3}
+                                className="py-8 text-center text-[11px] text-zinc-500"
+                              >
+                                No endpoints match this search or method filter.
+                              </TableCell>
+                            </TableRow>
+                          )}
                         </TableBody>
                       </Table>
                     ) : (
@@ -1479,6 +1561,27 @@ export function AgentWorkspace({
                     Spec & contract
                   </Button>
                 )}
+                <SearchField
+                  value={reviewQuery}
+                  onChange={setReviewQuery}
+                  placeholder="Search tests…"
+                  label="Search review queue"
+                  className="w-44"
+                />
+                <Select
+                  value={reviewState}
+                  onValueChange={(value) => setReviewState(value as "all" | ReviewState)}
+                >
+                  <SelectTrigger className="h-8 w-32 text-[11px]" aria-label="Filter by status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="accepted">Accepted</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
                 <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-500">
                   <Sparkles className="size-3 text-violet-400" />
                   {provider?.name ?? settings.provider} · {settings.model}
@@ -1493,7 +1596,12 @@ export function AgentWorkspace({
                 </p>
               ) : (
                 <div className="space-y-1.5">
-                  {entries.map((entry) => {
+                  {visibleEntries.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-6 text-center text-[11px] text-zinc-500">
+                      No tests match this search or status filter.
+                    </p>
+                  )}
+                  {visibleEntries.map((entry) => {
                     const item = entry.item;
                     const path = item.generation.sourcePath;
                     const accepted = entry.state === "accepted";
@@ -1910,6 +2018,33 @@ function compactNumber(value: number): string {
   if (value >= 10000) return `${Math.round(value / 1000)}k`;
   if (value >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   return String(value);
+}
+
+function SearchField({
+  value,
+  onChange,
+  placeholder,
+  label,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("relative min-w-0", className)}>
+      <Search className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-zinc-500" />
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        aria-label={label}
+        className="h-7 pl-7 text-[10px]"
+      />
+    </div>
+  );
 }
 
 function StageNode({
