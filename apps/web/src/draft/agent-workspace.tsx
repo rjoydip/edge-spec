@@ -95,8 +95,9 @@ import {
   TooltipProvider,
   cn,
 } from "@edge-spec/ui";
-import { providerById } from "@edge-spec/core/catalog";
+import { parseRepoInput, providerById } from "@edge-spec/core/catalog";
 import { toggleMode, useAppearance } from "@/lib/theme";
+import { isLocalPathInput } from "@/lib/local-path";
 import {
   CHECKS,
   ENDPOINTS,
@@ -178,7 +179,10 @@ export function AgentWorkspaceDraft() {
   const [written, setWritten] = useState(0);
   const [fixed, setFixed] = useState(false);
   const [mode, setMode] = useState<"review" | "auto">("review");
-  const [repo, setRepo] = useState("https://github.com/acme/edge-api.git");
+  const [repo, setRepo] = useState(
+    new URLSearchParams(window.location.search).get("repo") ??
+      "https://github.com/acme/edge-api.git",
+  );
   const [branch, setBranch] = useState("main");
   const [settings, setSettings] = useState<DraftSettings>(DEFAULT_DRAFT_SETTINGS);
   const [reviews, setReviews] = useState<Record<string, ReviewState>>(SEED_REVIEWS);
@@ -472,13 +476,29 @@ export function AgentWorkspaceDraft() {
     setPhase("dispatched");
   };
 
+  const isLocalDev = import.meta.env.DEV;
+  const localDraft = isLocalPathInput(repo);
+  const parsedRepo = parseRepoInput(repo);
+  const invalid = repo.trim().length > 0 && !(localDraft ? isLocalDev : parsedRepo);
+  const repoLabel = localDraft
+    ? "local path"
+    : parsedRepo
+      ? `${parsedRepo.owner}/${parsedRepo.name}`
+      : repo.trim()
+        ? "invalid"
+        : "no repo";
+
+  useEffect(() => {
+    if (localDraft) setMode("review");
+  }, [localDraft]);
+
   const statusText =
     phase === "review"
       ? `${acceptedCount} accepted · ${rejectedCount} rejected · ${pendingCount} pending`
       : phase === "dispatched"
-        ? "Pull request #128 opened on acme/edge-api"
+        ? `Pull request #128 opened on ${repoLabel}`
         : phase === "idle"
-          ? `Ready · acme/edge-api · ${branch}`
+          ? `Ready · ${repoLabel}${localDraft ? "" : ` · ${branch}`}`
           : phase === "scanning"
             ? "Cloning and parsing the tree"
             : phase === "analyzing"
@@ -577,7 +597,10 @@ export function AgentWorkspaceDraft() {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-60">
-                    <DropdownMenuLabel>acme/edge-api · {branch}</DropdownMenuLabel>
+                    <DropdownMenuLabel>
+                      {repoLabel}
+                      {localDraft ? "" : ` · ${branch}`}
+                    </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={toggleMode}>
                       {appearance.mode === "dark" ? <Sun /> : <Moon />}
                       {appearance.mode === "dark" ? "Light" : "Dark"} mode
@@ -613,8 +636,11 @@ export function AgentWorkspaceDraft() {
                 iconClass="text-zinc-400"
                 hint="clone · parse the AST · read the tree"
                 aside={
-                  <Badge variant="neutral" className="font-mono">
-                    {repo.includes("acme") ? "acme/edge-api" : "invalid"}
+                  <Badge
+                    variant={invalid ? "danger" : localDraft ? "accent" : "neutral"}
+                    className="max-w-52 truncate font-mono"
+                  >
+                    {repoLabel}
                   </Badge>
                 }
               />
@@ -624,30 +650,45 @@ export function AgentWorkspaceDraft() {
                   <Input
                     value={repo}
                     onChange={(event) => setRepo(event.target.value)}
-                    aria-label="Repository URL"
+                    aria-label="Repository URL or local path"
                     spellCheck={false}
                     disabled={running}
-                    className="pl-8 font-mono"
+                    aria-invalid={invalid}
+                    placeholder={isLocalDev ? "owner/repo or ./local/path" : "owner/repo"}
+                    className={cn(
+                      "pl-8 font-mono",
+                      invalid && "border-rose-500/60 focus:border-rose-500/60",
+                    )}
                   />
                 </div>
-                <Select value={branch} onValueChange={setBranch} disabled={running}>
-                  <SelectTrigger aria-label="Branch" className="w-full font-mono sm:w-44">
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <GitBranch className="size-3.5 shrink-0 text-zinc-500" />
-                      <SelectValue />
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["main", "develop", "release/1.4"].map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {localDraft ? (
+                  <Badge
+                    variant="accent"
+                    className="h-9 w-full items-center justify-center gap-1.5 px-3 sm:w-44"
+                  >
+                    <GitBranch className="size-3.5" />
+                    local folder
+                  </Badge>
+                ) : (
+                  <Select value={branch} onValueChange={setBranch} disabled={running}>
+                    <SelectTrigger aria-label="Branch" className="w-full font-mono sm:w-44">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <GitBranch className="size-3.5 shrink-0 text-zinc-500" />
+                        <SelectValue />
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["main", "develop", "release/1.4"].map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Button
                   onClick={running ? resetRun : start}
-                  disabled={!repo.trim()}
+                  disabled={!repo.trim() || invalid}
                   variant={running ? "danger" : "default"}
                   className="sm:w-36"
                 >
@@ -665,6 +706,19 @@ export function AgentWorkspaceDraft() {
                 </Button>
               </div>
 
+              {invalid ? (
+                <p className="text-[10px] text-rose-300">
+                  {isLocalDev
+                    ? "Enter owner/repo, a GitHub URL, or a local folder path."
+                    : "Enter owner/repo or a GitHub URL."}
+                </p>
+              ) : localDraft ? (
+                <p className="text-[10px] text-zinc-500">
+                  Local folder · the scan reads the filesystem. Pull requests need a GitHub
+                  repository.
+                </p>
+              ) : null}
+
               <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                 <span className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
                   Mode
@@ -677,18 +731,29 @@ export function AgentWorkspaceDraft() {
                   {MODES.map((option) => {
                     const Icon = option.icon;
                     const active = mode === option.id;
+                    const needsGitHub = option.id === "auto" && localDraft;
                     return (
                       <div
                         key={option.id}
-                        onClick={() => setMode(option.id)}
+                        onClick={() => {
+                          if (!needsGitHub) setMode(option.id);
+                        }}
                         className={cn(
-                          "flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 transition",
-                          active
-                            ? "border-indigo-500/40 bg-indigo-500/10 shadow-lg shadow-indigo-950/20"
-                            : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700",
+                          "flex items-start gap-2 rounded-xl border px-3 py-2 transition",
+                          needsGitHub
+                            ? "cursor-not-allowed border-zinc-800 bg-zinc-900/20 opacity-50"
+                            : "cursor-pointer",
+                          !needsGitHub &&
+                            (active
+                              ? "border-indigo-500/40 bg-indigo-500/10 shadow-lg shadow-indigo-950/20"
+                              : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"),
                         )}
                       >
-                        <RadioGroupItem value={option.id} className="mt-0.5" />
+                        <RadioGroupItem
+                          value={option.id}
+                          disabled={needsGitHub}
+                          className="mt-0.5"
+                        />
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-200">
                             <Icon
@@ -699,7 +764,11 @@ export function AgentWorkspaceDraft() {
                             />
                             {option.label}
                           </span>
-                          <span className="block text-[10px] text-zinc-500">{option.desc}</span>
+                          <span className="block text-[10px] text-zinc-500">
+                            {needsGitHub
+                              ? "Needs a GitHub repository for the pull request."
+                              : option.desc}
+                          </span>
                         </span>
                       </div>
                     );

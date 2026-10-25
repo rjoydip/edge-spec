@@ -16,6 +16,7 @@ import {
   Loader2,
   RefreshCw,
   RotateCcw,
+  Search,
   ShieldCheck,
   Sparkles,
   Timer,
@@ -34,6 +35,11 @@ import {
   Dialog,
   Hint,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Separator,
   Switch,
   Tabs,
@@ -103,13 +109,24 @@ export function LogDialog({
   stage: StageId | "all";
   onStage: (stage: StageId | "all") => void;
 }) {
-  const lines = stage === "all" ? LOGS : LOGS.filter((line) => line.stage === stage);
+  const [query, setQuery] = useState("");
+  const [level, setLevel] = useState<"all" | "info" | "ai" | "warn" | "success" | "error">("all");
+  const inStage = stage === "all" ? LOGS : LOGS.filter((line) => line.stage === stage);
+  const needle = query.trim().toLowerCase();
+  const lines = inStage.filter(
+    (line) =>
+      (level === "all" || line.level === level) &&
+      (!needle ||
+        line.text.toLowerCase().includes(needle) ||
+        line.stage.includes(needle) ||
+        line.level.includes(needle)),
+  );
   return (
     <Dialog
       open={open}
       onClose={onClose}
       title={stage === "all" ? "Pipeline event log" : `${STAGE_LABEL[stage]} events`}
-      description={`${lines.length} events · timestamps are relative to the run start.`}
+      description={`${LOGS.length} events · filter by stage, level or text.`}
       className="max-w-3xl"
       actions={
         <Hint label="Download log">
@@ -132,6 +149,34 @@ export function LogDialog({
         </Hint>
       }
     >
+      <div className="mb-2.5 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-zinc-500" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search events, paths or messages…"
+            aria-label="Search log events"
+            className="h-8 pl-8 text-[11px]"
+          />
+        </div>
+        <Select value={level} onValueChange={(value) => setLevel(value as typeof level)}>
+          <SelectTrigger className="h-8 w-32 text-[11px]" aria-label="Filter by log level">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All levels</SelectItem>
+            <SelectItem value="info">info</SelectItem>
+            <SelectItem value="ai">ai</SelectItem>
+            <SelectItem value="warn">warn</SelectItem>
+            <SelectItem value="success">success</SelectItem>
+            <SelectItem value="error">error</SelectItem>
+          </SelectContent>
+        </Select>
+        <Badge variant="neutral" className="font-mono">
+          {lines.length}/{inStage.length}
+        </Badge>
+      </div>
       <Tabs
         value={stage}
         onValueChange={(value) => onStage(value as StageId | "all")}
@@ -147,7 +192,7 @@ export function LogDialog({
         </TabsList>
         <TabsContent value={stage}>
           <div className="rounded-xl border border-zinc-800/70 bg-zinc-950/60 p-3">
-            <LogLines lines={lines} />
+            <LogLines lines={lines} empty="No events match this search." />
           </div>
         </TabsContent>
       </Tabs>
