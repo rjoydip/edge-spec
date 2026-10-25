@@ -105,7 +105,6 @@ import {
   ENDPOINTS,
   GAPS,
   GENERATED,
-  LOGS,
   PHASE_RANK,
   type DraftGap,
   type DraftPhase,
@@ -242,7 +241,13 @@ export function AgentWorkspaceDraft() {
     if (modal === "diff") setDiffPath(GENERATED[0]?.source);
     if (modal === "source") setSourcePath(GENERATED[0]?.source);
     if (modal === "endpoint") setEndpointKey("POST /api/v1/sync");
-    if (modal === "spec") setSpecOpen(true);
+    if (modal === "spec") {
+      const key = params.get("endpoint");
+      setSpecFocus(
+        key ? ENDPOINTS.find((item) => `${item.method} ${item.path}` === key) : undefined,
+      );
+      setSpecOpen(true);
+    }
     if (modal === "facts") setFactsOpen(true);
     if (modal === "pulls") setPullsOpen(true);
     if (modal === "pr") setPrOpen(true);
@@ -340,7 +345,10 @@ export function AgentWorkspaceDraft() {
   };
 
   const openDiff = (source: string) => setDiffPath(source);
-  const openSource = (source: string) => setSourcePath(source);
+  const openSource = (source: string) => {
+    setDiffPath(undefined);
+    setSourcePath(source);
+  };
   const openSpec = (focus?: EndpointRow) => {
     setSpecFocus(focus);
     setSpecOpen(true);
@@ -515,12 +523,8 @@ export function AgentWorkspaceDraft() {
                 </button>
               </Hint>
               <div className="min-w-0 leading-tight">
-                <h1 className="truncate text-sm font-bold tracking-tight text-zinc-50">
-                  EdgeSpec <span className="text-zinc-400">Agentic Test Engineer</span>
-                </h1>
-                <p className="hidden text-[10px] text-zinc-500 sm:block">
-                  plans the gaps, runs the suite, fixes the tests and opens the PR
-                </p>
+                <h1 className="truncate text-sm font-bold tracking-tight text-zinc-50">EdgeSpec</h1>
+                <p className="hidden text-[10px] text-zinc-500 sm:block">Agentic Test Engineer</p>
               </div>
 
               <div className="ml-auto flex items-center gap-1.5">
@@ -749,29 +753,6 @@ export function AgentWorkspaceDraft() {
                   </Fragment>
                 ))}
               </div>
-
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <button
-                    type="button"
-                    className="group flex w-full items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-1.5 text-left text-[10px] text-zinc-500 transition hover:text-zinc-300"
-                  >
-                    <ChevronRight className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-                    <span className="truncate font-mono">
-                      {LOGS[Math.min(LOGS.length - 1, Math.max(0, rank * 4 - 1))]?.text ??
-                        "waiting for the first event"}
-                    </span>
-                    <span className="ml-auto shrink-0 font-mono text-zinc-600">
-                      {LOGS.length} events
-                    </span>
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="mt-2 rounded-lg border border-zinc-800/70 bg-zinc-950/60 p-2.5">
-                    <LogPreview rank={rank} />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
             </CardContent>
           </Card>
 
@@ -1381,11 +1362,6 @@ export function AgentWorkspaceDraft() {
           stage={logStage}
           onStage={setLogStage}
         />
-        <DiffDialog
-          open={Boolean(diffEntry)}
-          entry={diffEntry}
-          onClose={() => setDiffPath(undefined)}
-        />
         <SourceDialog
           open={Boolean(sourceEntry)}
           entry={sourceEntry}
@@ -1398,12 +1374,13 @@ export function AgentWorkspaceDraft() {
           }}
           regenerating={Boolean(regenerating)}
           onViewDiff={() => {
-            if (sourceEntry) {
-              const source = sourceEntry.file.source;
-              setSourcePath(undefined);
-              setDiffPath(source);
-            }
+            if (sourceEntry) setDiffPath(sourceEntry.file.source);
           }}
+        />
+        <DiffDialog
+          open={Boolean(diffEntry)}
+          entry={diffEntry}
+          onClose={() => setDiffPath(undefined)}
         />
         <EndpointDialog
           open={Boolean(endpointRow)}
@@ -1426,31 +1403,6 @@ export function AgentWorkspaceDraft() {
         />
       </div>
     </TooltipProvider>
-  );
-}
-
-function LogPreview({ rank }: { rank: number }) {
-  const lines = rank === 0 ? [] : LOGS.slice(0, Math.min(LOGS.length, Math.max(2, rank * 4)));
-  return (
-    <div className="space-y-1 font-mono text-[10px] leading-relaxed">
-      {lines.length === 0 && <p className="text-zinc-600">waiting for the first event</p>}
-      {lines.map((entry, index) => (
-        <p key={index} className="flex gap-2">
-          <span className="w-8 shrink-0 text-zinc-600">{entry.at}</span>
-          <span
-            className={cn(
-              entry.level === "success" && "text-emerald-400",
-              entry.level === "warn" && "text-amber-400",
-              entry.level === "error" && "text-rose-400",
-              entry.level === "ai" && "text-violet-300",
-              entry.level === "info" && "text-zinc-400",
-            )}
-          >
-            {entry.text}
-          </span>
-        </p>
-      ))}
-    </div>
   );
 }
 

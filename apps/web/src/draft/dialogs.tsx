@@ -579,23 +579,11 @@ export function SpecDialog({
 
         {focus && (
           <TabsContent value="operation">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <MethodChip method={focus.method} />
-                <span className="font-mono text-[11px] text-zinc-200">{focus.path}</span>
-                <EndpointStatus row={focus} />
-                {focus.operationId && (
-                  <Badge variant="neutral" className="font-mono">
-                    {focus.operationId}
-                  </Badge>
-                )}
-              </div>
-              <HighlightedCode code={specSection(SPEC_YAML, focus.path)} language="yaml" />
-              <p className="text-[10px] leading-relaxed text-zinc-500">
-                The exact section of openapi.yaml for this operation. The full document and the
-                generated contract are one tab away.
-              </p>
-            </div>
+            <HighlightedCode code={specSection(SPEC_YAML, focus.path)} language="yaml" />
+            <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">
+              Only this path from openapi.yaml. The full document and the generated contract are one
+              tab away.
+            </p>
           </TabsContent>
         )}
 
@@ -606,16 +594,18 @@ export function SpecDialog({
           <HighlightedCode code={contract.join("\n")} language="typescript" />
         </TabsContent>
       </Tabs>
-      <Alert variant="info" className="mt-3">
-        <ShieldCheck />
-        <div>
-          <AlertTitle>Generated from the spec itself</AlertTitle>
-          <AlertDescription>
-            EdgeSpec reads openapi.yaml and builds this contract test automatically, without calling
-            a model. It only adds test files — your application code is never modified.
-          </AlertDescription>
+      <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-indigo-500/25 bg-indigo-500/[0.06] px-3 py-2.5">
+        <Sparkles className="mt-0.5 size-4 shrink-0 text-indigo-300" />
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold text-zinc-200">
+            Built from openapi.yaml — no model call
+          </p>
+          <p className="mt-0.5 text-[10px] leading-relaxed text-zinc-500">
+            EdgeSpec reads the spec and writes this contract test itself. Only test files are added;
+            your application code is never modified.
+          </p>
         </div>
-      </Alert>
+      </div>
     </Dialog>
   );
 }
