@@ -6,7 +6,7 @@ import {
   CheckCircle2,
   Clipboard,
   Cpu,
-  ArrowDownToLine,
+  HardDriveDownload,
   FileCode2,
   FileDiff,
   FileJson,
@@ -148,7 +148,7 @@ export function LogDialog({
               )
             }
           >
-            <ArrowDownToLine className="size-4" stroke={ICON_GRADIENT} />
+            <HardDriveDownload className="size-4" stroke={ICON_GRADIENT} />
           </Button>
         </Hint>
       }
@@ -238,7 +238,7 @@ export function DiffDialog({
               )
             }
           >
-            <ArrowDownToLine className="size-4" stroke={ICON_GRADIENT} />
+            <HardDriveDownload className="size-4" stroke={ICON_GRADIENT} />
           </Button>
         </Hint>
       }
@@ -453,11 +453,15 @@ export function EndpointDialog({
       footer={
         <>
           <Button variant="ghost" size="sm" className="mr-auto" onClick={onOpenSpec}>
-            <FileJson className="size-3.5" />
+            <FileJson className="size-3.5" stroke={ICON_GRADIENT} />
             Open spec
           </Button>
           <Button variant="outline" size="sm" onClick={copy}>
-            {copied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}
+            {copied ? (
+              <Check className="size-3.5 text-emerald-400" />
+            ) : (
+              <Clipboard className="size-3.5 text-sky-300" />
+            )}
             {copied ? "Copied" : "Copy cURL"}
           </Button>
           <Hint
@@ -590,7 +594,7 @@ export function SpecDialog({
               )
             }
           >
-            <ArrowDownToLine className="size-4" stroke={ICON_GRADIENT} />
+            <HardDriveDownload className="size-4" stroke={ICON_GRADIENT} />
           </Button>
         </Hint>
       }
