@@ -1,5 +1,12 @@
 # UI guide
 
+> **Current implementation:** the dashboard is now the four-step agent
+> workspace — Repository, Agent Activity, Gap Analysis, Review Queue — at `/`.
+> The tab descriptions below describe the previous shell and are kept until
+> this guide is rewritten. The implementation lives in
+> `apps/web/src/components/agent/`; see `REDESIGN.md` for the layout and the
+> wiring status.
+
 The dashboard is a single page with a sticky header, five tabs, and a settings
 dialog. Overview is the first tab: it is what a run needs, and every other tab
 is a detail of it. Everything reads from a token-based dark/light theme with a

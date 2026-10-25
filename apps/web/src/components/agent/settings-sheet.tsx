@@ -1,4 +1,4 @@
-/** Editable settings for the draft. Every control updates local state only. */
+/** Editable settings bound to the real stores. Keys stay in localStorage and travel as headers. */
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Bot,
@@ -7,14 +7,14 @@ import {
   Gauge,
   KeyRound,
   Loader2,
+  Moon,
   RotateCcw,
   ShieldCheck,
   Sparkles,
   Sun,
-  Moon,
 } from "lucide-react";
 import { PROVIDERS, providerById } from "@edge-spec/core/catalog";
-import { SANDBOX_PROVIDERS } from "@edge-spec/core/sandbox";
+import { sandboxProvidersFor } from "@edge-spec/core/sandbox";
 import {
   Accordion,
   AccordionContent,
@@ -25,82 +25,60 @@ import {
   AlertTitle,
   Badge,
   Button,
-  Hint,
   Input,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Separator,
   Sheet,
   SheetBody,
   SheetContent,
   SheetDescription,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
   Switch,
+  Textarea,
   cn,
 } from "@edge-spec/ui";
+import { checkSandbox } from "@/api";
+import { isLocalDashboard } from "@/lib/env";
+import {
+  DEFAULT_SETTINGS,
+  clearSecrets,
+  setSecrets,
+  setSettings,
+  useSecrets,
+  useSettings,
+} from "@/lib/settings";
 import { ACCENTS, setAccent, toggleMode, useAppearance } from "@/lib/theme";
-
-export interface DraftSettings {
-  provider: string;
-  model: string;
-  accountId: string;
-  sandboxProvider: string;
-  sandboxUrl: string;
-  sandboxConcurrency: number;
-  sandboxTimeout: number;
-  coverage: boolean;
-  githubToken: string;
-  aiKey: string;
-  sandboxKey: string;
-  maxRetries: number;
-  maxAiRetries: number;
-  maxFiles: number;
-  strictTypes: boolean;
-}
 
 export type SettingsSection = "provider" | "sandbox" | "keys" | "pipeline" | "appearance";
 
-export const DEFAULT_DRAFT_SETTINGS: DraftSettings = {
-  provider: "anthropic",
-  model: "claude-sonnet-5-5",
-  accountId: "",
-  sandboxProvider: "docker",
-  sandboxUrl: "http://127.0.0.1:8788",
-  sandboxConcurrency: 3,
-  sandboxTimeout: 180,
-  coverage: true,
-  githubToken: "",
-  aiKey: "",
-  sandboxKey: "",
-  maxRetries: 3,
-  maxAiRetries: 2,
-  maxFiles: 14,
-  strictTypes: true,
+const SECTION_TONE: Record<string, string> = {
+  provider: "text-violet-300",
+  sandbox: "text-sky-300",
+  keys: "text-amber-300",
+  pipeline: "text-indigo-300",
+  appearance: "text-fuchsia-300",
 };
 
 export function SettingsSheet({
   open,
   onOpenChange,
-  value,
-  onChange,
   section,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  value: DraftSettings;
-  onChange: (next: DraftSettings) => void;
   section?: SettingsSection;
 }) {
+  const settings = useSettings();
+  const secrets = useSecrets();
   const appearance = useAppearance();
-  const [health, setHealth] = useState<"idle" | "checking" | "ok">("idle");
   const [openSections, setOpenSections] = useState<string[]>(["provider", "sandbox"]);
+  const [health, setHealth] = useState<"idle" | "checking" | "ok" | "error">("idle");
+  const [healthText, setHealthText] = useState("");
 
-  // The header badges open Settings at their own section.
   useEffect(() => {
     if (!open || !section) return;
     setOpenSections((current) => (current.includes(section) ? current : [...current, section]));
@@ -111,13 +89,36 @@ export function SettingsSheet({
     }, 200);
     return () => window.clearTimeout(timer);
   }, [open, section]);
-  const update = (patch: Partial<DraftSettings>) => onChange({ ...value, ...patch });
-  const provider = providerById(value.provider);
-  const needsKey = provider?.needsKey ?? false;
 
-  const checkHealth = () => {
+  const provider = providerById(settings.provider);
+  const needsKey = provider?.needsKey ?? false;
+  const sandboxProviders = sandboxProvidersFor(isLocalDashboard() ? "local" : "deployed");
+  const update = (patch: Parameters<typeof setSettings>[0]) => setSettings(patch);
+  const updateSecrets = (patch: Parameters<typeof setSecrets>[0]) => setSecrets(patch);
+
+  const checkHealth = async () => {
+    if (!settings.sandboxUrl.trim()) {
+      setHealth("error");
+      setHealthText("Add a runner URL first.");
+      return;
+    }
     setHealth("checking");
-    window.setTimeout(() => setHealth("ok"), 900);
+    try {
+      const result = await checkSandbox(settings.sandboxUrl, secrets.sandboxKey);
+      if (result.ok) {
+        setHealth("ok");
+        setHealthText(
+          [result.provider, result.version, result.isolation].filter(Boolean).join(" · ") ||
+            "Runner answered.",
+        );
+      } else {
+        setHealth("error");
+        setHealthText(result.error ?? "The runner did not answer.");
+      }
+    } catch (error) {
+      setHealth("error");
+      setHealthText(error instanceof Error ? error.message : String(error));
+    }
   };
 
   return (
@@ -126,7 +127,7 @@ export function SettingsSheet({
         <SheetHeader>
           <SheetTitle>Settings</SheetTitle>
           <SheetDescription>
-            Editable in this draft. Nothing is stored and no key leaves the page.
+            Stored in this browser. Keys travel as request headers and never enter the Worker.
           </SheetDescription>
         </SheetHeader>
 
@@ -141,14 +142,17 @@ export function SettingsSheet({
               id="provider"
               icon={Bot}
               title="AI provider"
-              summary={provider?.name ?? value.provider}
+              summary={provider?.name ?? settings.provider}
             >
-              <Field label="Provider" hint="Controls which protocol and key the run uses.">
+              <Field label="Provider" hint="Controls the protocol, the key and the model.">
                 <Select
-                  value={value.provider}
+                  value={settings.provider}
                   onValueChange={(next) => {
-                    const model = PROVIDERS.find((item) => item.id === next)?.models[0]?.id ?? "";
-                    update({ provider: next, model });
+                    const nextProvider = PROVIDERS.find((item) => item.id === next);
+                    update({
+                      provider: next,
+                      model: nextProvider?.models[0]?.id ?? settings.model,
+                    });
                   }}
                 >
                   <SelectTrigger aria-label="AI provider">
@@ -164,43 +168,61 @@ export function SettingsSheet({
                 </Select>
               </Field>
               <Field label="Model" hint={provider?.hint ?? "Pick the model that writes the tests."}>
-                <Select
-                  value={value.model}
-                  onValueChange={(model) => update({ model })}
-                  disabled={!provider}
-                >
-                  <SelectTrigger aria-label="AI model">
-                    <SelectValue placeholder="Choose a model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(provider?.models ?? []).map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {provider?.custom ? (
+                  <Input
+                    value={settings.model}
+                    onChange={(event) => update({ model: event.target.value })}
+                    placeholder="model name"
+                    className="font-mono"
+                  />
+                ) : (
+                  <Select
+                    value={settings.model}
+                    onValueChange={(model) => update({ model })}
+                    disabled={!provider}
+                  >
+                    <SelectTrigger aria-label="AI model">
+                      <SelectValue placeholder="Choose a model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(provider?.models ?? []).map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </Field>
-              <Field
-                label="Cloudflare account ID"
-                hint="Only for Workers AI BYOK. Leave blank to use the deployment binding."
-              >
-                <Input
-                  value={value.accountId}
-                  onChange={(event) => update({ accountId: event.target.value })}
-                  placeholder="32-character account id"
-                  className="font-mono"
-                />
-              </Field>
-              <Alert variant={needsKey && !value.aiKey ? "warning" : "success"}>
-                {needsKey && !value.aiKey ? <KeyRound /> : <CheckCircle2 />}
+              {provider?.custom && (
+                <Field label="Base URL" hint="OpenAI-compatible endpoint. Required for custom.">
+                  <Input
+                    value={settings.baseUrl}
+                    onChange={(event) => update({ baseUrl: event.target.value })}
+                    placeholder="http://localhost:11434/v1"
+                    className="font-mono"
+                  />
+                </Field>
+              )}
+              {provider?.id === "workers-ai" && (
+                <Field label="Cloudflare account ID" hint="Optional, for Workers AI BYOK.">
+                  <Input
+                    value={settings.accountId}
+                    onChange={(event) => update({ accountId: event.target.value })}
+                    placeholder="32-character account id"
+                    className="font-mono"
+                  />
+                </Field>
+              )}
+              <Alert variant={needsKey && !secrets.aiKey ? "warning" : "success"}>
+                {needsKey && !secrets.aiKey ? <KeyRound /> : <CheckCircle2 />}
                 <div>
                   <AlertTitle>
                     {needsKey ? "A key is needed for this provider" : "Ready"}
                   </AlertTitle>
                   <AlertDescription>
                     {needsKey
-                      ? "Add it under Keys. It travels as the x-ai-key header; the Worker never stores it."
+                      ? "Add it under Keys. It travels as x-ai-key."
                       : "Workers AI uses the deployment binding, so no key is required."}
                   </AlertDescription>
                 </div>
@@ -211,31 +233,33 @@ export function SettingsSheet({
               id="sandbox"
               icon={Boxes}
               title="Sandbox"
-              summary={`${value.sandboxProvider} · ${value.sandboxConcurrency} in flight · ${value.sandboxTimeout}s`}
+              summary={`${settings.sandboxProvider} · ${settings.sandboxConcurrency} in flight`}
             >
               <Field
                 label="Runner driver"
                 hint="Verified runs need a runner. Without one, only static checks run."
               >
                 <Select
-                  value={value.sandboxProvider}
-                  onValueChange={(sandboxProvider) => update({ sandboxProvider })}
+                  value={settings.sandboxProvider}
+                  onValueChange={(value) =>
+                    update({ sandboxProvider: value as typeof settings.sandboxProvider })
+                  }
                 >
                   <SelectTrigger aria-label="Runner driver">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SANDBOX_PROVIDERS.map((item) => (
+                    {sandboxProviders.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
-                        {item.label ?? item.id}
+                        {item.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Runner URL" hint="The self-hosted runner, or a hosted driver endpoint.">
+              <Field label="Runner URL" hint="The self-hosted runner or a hosted driver endpoint.">
                 <Input
-                  value={value.sandboxUrl}
+                  value={settings.sandboxUrl}
                   onChange={(event) => update({ sandboxUrl: event.target.value })}
                   placeholder="http://127.0.0.1:8788"
                   className="font-mono"
@@ -247,7 +271,7 @@ export function SettingsSheet({
                     type="number"
                     min={1}
                     max={6}
-                    value={value.sandboxConcurrency}
+                    value={settings.sandboxConcurrency}
                     onChange={(event) =>
                       update({ sandboxConcurrency: Number(event.target.value) || 1 })
                     }
@@ -258,9 +282,9 @@ export function SettingsSheet({
                     type="number"
                     min={30}
                     step={30}
-                    value={value.sandboxTimeout}
+                    value={Math.round(settings.sandboxTimeoutMs / 1000)}
                     onChange={(event) =>
-                      update({ sandboxTimeout: Number(event.target.value) || 30 })
+                      update({ sandboxTimeoutMs: (Number(event.target.value) || 30) * 1000 })
                     }
                   />
                 </Field>
@@ -275,13 +299,57 @@ export function SettingsSheet({
                   </span>
                 </span>
                 <Switch
-                  checked={value.coverage}
-                  onCheckedChange={(coverage) => update({ coverage })}
+                  checked={settings.sandboxCoverage}
+                  onCheckedChange={(sandboxCoverage) => update({ sandboxCoverage })}
                   size="sm"
                   aria-label="Ask for coverage"
                 />
               </label>
-              <div className="flex items-center gap-2">
+              <Field label="Setup commands" hint="One per line, before the tests.">
+                <Textarea
+                  rows={2}
+                  value={settings.sandboxSetup}
+                  onChange={(event) => update({ sandboxSetup: event.target.value })}
+                  placeholder="bun install --frozen-lockfile"
+                  className="font-mono text-[10px]"
+                />
+              </Field>
+              <Field label="Environment" hint="KEY=VALUE, one per line. Sent to the runner only.">
+                <Textarea
+                  rows={2}
+                  value={settings.sandboxEnv}
+                  onChange={(event) => update({ sandboxEnv: event.target.value })}
+                  placeholder="DATABASE_URL=postgres://…"
+                  className="font-mono text-[10px]"
+                />
+              </Field>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Field label="App command" hint="Optional; for live API tests.">
+                  <Input
+                    value={settings.sandboxServerCommand}
+                    onChange={(event) => update({ sandboxServerCommand: event.target.value })}
+                    placeholder="bun run dev"
+                    className="font-mono"
+                  />
+                </Field>
+                <Field label="App ready URL" hint="Polled before the suite runs.">
+                  <Input
+                    value={settings.sandboxReadyUrl}
+                    onChange={(event) => update({ sandboxReadyUrl: event.target.value })}
+                    placeholder="http://127.0.0.1:3000/health"
+                    className="font-mono"
+                  />
+                </Field>
+              </div>
+              <Field label="Working directory" hint="Relative path inside the repository.">
+                <Input
+                  value={settings.sandboxCwd}
+                  onChange={(event) => update({ sandboxCwd: event.target.value })}
+                  placeholder="packages/api"
+                  className="font-mono"
+                />
+              </Field>
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -298,7 +366,12 @@ export function SettingsSheet({
                 {health === "ok" && (
                   <Badge variant="success" className="gap-1">
                     <CheckCircle2 className="size-3" />
-                    docker 27.1 · namespace · 42ms
+                    {healthText}
+                  </Badge>
+                )}
+                {health === "error" && (
+                  <Badge variant="danger" className="max-w-56 truncate">
+                    {healthText}
                   </Badge>
                 )}
                 {health === "idle" && (
@@ -312,19 +385,19 @@ export function SettingsSheet({
               icon={KeyRound}
               title="Keys"
               summary={
-                value.githubToken || value.aiKey || value.sandboxKey
-                  ? "set for this tab"
-                  : "none set · GitHub token needed for PRs"
+                secrets.githubToken || secrets.aiKey || secrets.sandboxKey
+                  ? "set for this browser"
+                  : "none set"
               }
             >
               <Field
                 label="GitHub token"
-                hint="Needed for private repos and opening the pull request."
+                hint="Needed for private repos and opening pull requests."
               >
                 <Input
                   type="password"
-                  value={value.githubToken}
-                  onChange={(event) => update({ githubToken: event.target.value })}
+                  value={secrets.githubToken}
+                  onChange={(event) => updateSecrets({ githubToken: event.target.value })}
                   placeholder="ghp_…"
                   className="font-mono"
                   autoComplete="off"
@@ -333,8 +406,8 @@ export function SettingsSheet({
               <Field label="AI key" hint={`Used by ${provider?.name ?? "the provider"}.`}>
                 <Input
                   type="password"
-                  value={value.aiKey}
-                  onChange={(event) => update({ aiKey: event.target.value })}
+                  value={secrets.aiKey}
+                  onChange={(event) => updateSecrets({ aiKey: event.target.value })}
                   placeholder={needsKey ? "sk-…" : "not needed for Workers AI"}
                   className="font-mono"
                   autoComplete="off"
@@ -343,8 +416,8 @@ export function SettingsSheet({
               <Field label="Sandbox key" hint="Optional; only for a protected runner.">
                 <Input
                   type="password"
-                  value={value.sandboxKey}
-                  onChange={(event) => update({ sandboxKey: event.target.value })}
+                  value={secrets.sandboxKey}
+                  onChange={(event) => updateSecrets({ sandboxKey: event.target.value })}
                   placeholder="runner key"
                   className="font-mono"
                   autoComplete="off"
@@ -366,23 +439,33 @@ export function SettingsSheet({
               id="pipeline"
               icon={Gauge}
               title="Pipeline"
-              summary={`${value.maxFiles} files · ${value.maxRetries} retries · strict ${value.strictTypes ? "on" : "off"}`}
+              summary={`${settings.maxFiles} files · ${settings.maxRetries} retries · strict ${settings.strictTypes ? "on" : "off"}`}
             >
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Max files" hint="Per run.">
                   <Input
                     type="number"
                     min={1}
-                    value={value.maxFiles}
+                    max={50}
+                    value={settings.maxFiles}
                     onChange={(event) => update({ maxFiles: Number(event.target.value) || 1 })}
                   />
                 </Field>
-                <Field label="Retries" hint="Validation failures.">
+                <Field label="Generation concurrency" hint="Files in flight, 1–6.">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={6}
+                    value={settings.concurrency}
+                    onChange={(event) => update({ concurrency: Number(event.target.value) || 1 })}
+                  />
+                </Field>
+                <Field label="Validation retries" hint="Per failing file.">
                   <Input
                     type="number"
                     min={0}
-                    max={6}
-                    value={value.maxRetries}
+                    max={5}
+                    value={settings.maxRetries}
                     onChange={(event) => update({ maxRetries: Number(event.target.value) || 0 })}
                   />
                 </Field>
@@ -390,18 +473,49 @@ export function SettingsSheet({
                   <Input
                     type="number"
                     min={0}
-                    max={6}
-                    value={value.maxAiRetries}
+                    max={5}
+                    value={settings.maxAiRetries}
                     onChange={(event) => update({ maxAiRetries: Number(event.target.value) || 0 })}
                   />
                 </Field>
+                <Field label="Coverage target (%)" hint="Used for coverage gaps.">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={settings.coverageTarget}
+                    onChange={(event) =>
+                      update({ coverageTarget: Number(event.target.value) || 0 })
+                    }
+                  />
+                </Field>
                 <Field label="Verification" hint="Runner or static only.">
-                  <Badge variant="success" className="mt-1.5 h-6 gap-1">
+                  <Badge
+                    variant={settings.sandboxUrl.trim() ? "success" : "warning"}
+                    className="mt-1.5 h-6 gap-1"
+                  >
                     <ShieldCheck className="size-3" />
-                    verified
+                    {settings.sandboxUrl.trim() ? "runner" : "static only"}
                   </Badge>
                 </Field>
               </div>
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
+                <span>
+                  <span className="block text-[11px] font-medium text-zinc-300">
+                    Parallel test generation
+                  </span>
+                  <span className="block text-[10px] text-zinc-500">
+                    Write several files at once instead of one after another.
+                  </span>
+                </span>
+                <Switch
+                  checked={settings.parallelGeneration}
+                  onCheckedChange={(parallelGeneration) => update({ parallelGeneration })}
+                  size="sm"
+                  aria-label="Parallel test generation"
+                />
+              </label>
               <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
                 <span>
                   <span className="block text-[11px] font-medium text-zinc-300">
@@ -412,7 +526,7 @@ export function SettingsSheet({
                   </span>
                 </span>
                 <Switch
-                  checked={value.strictTypes}
+                  checked={settings.strictTypes}
                   onCheckedChange={(strictTypes) => update({ strictTypes })}
                   size="sm"
                   aria-label="Strict TypeScript"
@@ -437,18 +551,18 @@ export function SettingsSheet({
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {ACCENTS.map((accent) => (
-                    <Hint key={accent.id} label={accent.name}>
-                      <button
-                        type="button"
-                        onClick={() => setAccent(accent.base)}
-                        aria-label={accent.name}
-                        style={{ background: accent.base }}
-                        className={cn(
-                          "size-5 rounded-full ring-2 ring-offset-2 ring-offset-zinc-950 transition hover:scale-110",
-                          appearance.accentId === accent.id ? "ring-white/80" : "ring-transparent",
-                        )}
-                      />
-                    </Hint>
+                    <button
+                      key={accent.id}
+                      type="button"
+                      onClick={() => setAccent(accent.base)}
+                      title={accent.name}
+                      aria-label={accent.name}
+                      style={{ background: accent.base }}
+                      className={cn(
+                        "size-5 rounded-full ring-2 ring-offset-2 ring-offset-zinc-950 transition hover:scale-110",
+                        appearance.accentId === accent.id ? "ring-white/80" : "ring-transparent",
+                      )}
+                    />
                   ))}
                 </div>
               </div>
@@ -459,36 +573,27 @@ export function SettingsSheet({
             </Section>
           </Accordion>
 
-          <Alert variant="warning">
-            <Sparkles />
-            <div>
-              <AlertTitle>Draft controls</AlertTitle>
-              <AlertDescription>
-                Values update the mockup session only. The shipped dashboard stores settings in
-                localStorage and sends keys as headers.
-              </AlertDescription>
-            </div>
-          </Alert>
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800/70 bg-zinc-900/30 px-3 py-2">
+            <span className="text-[10px] text-zinc-500">
+              Reset the settings and clear the keys in this browser.
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSettings(DEFAULT_SETTINGS);
+                clearSecrets();
+              }}
+            >
+              <RotateCcw className="size-3.5" />
+              Reset
+            </Button>
+          </div>
         </SheetBody>
-
-        <SheetFooter>
-          <Button variant="ghost" size="sm" onClick={() => onChange(DEFAULT_DRAFT_SETTINGS)}>
-            <RotateCcw className="size-3.5" />
-            Reset
-          </Button>
-        </SheetFooter>
       </SheetContent>
     </Sheet>
   );
 }
-
-const SECTION_TONE: Record<string, string> = {
-  provider: "text-violet-300",
-  sandbox: "text-sky-300",
-  keys: "text-amber-300",
-  pipeline: "text-indigo-300",
-  appearance: "text-fuchsia-300",
-};
 
 function Section({
   id,
@@ -516,10 +621,7 @@ function Section({
           <span className="ml-2 truncate font-mono text-[9px] text-zinc-500">{summary}</span>
         </span>
       </AccordionTrigger>
-      <AccordionContent className="space-y-2.5">
-        {children}
-        <Separator className="mt-1 opacity-60" />
-      </AccordionContent>
+      <AccordionContent className="space-y-2.5">{children}</AccordionContent>
     </AccordionItem>
   );
 }

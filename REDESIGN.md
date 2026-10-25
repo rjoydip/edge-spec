@@ -4,48 +4,45 @@ Branch: `feat/agent-redesign` (from `feat/sandbox`).
 Scope: dashboard UX/UI only. No CLI, MCP, Worker-route or contract-test changes
 unless a phase says so explicitly.
 
-## 0. Draft on this branch
+## 0. Implemented on this branch
 
-A fixture-driven mockup of this layout is mounted at **`/?draft`** (and
-`/?draft&theme=light`). Every modal also has a deep link:
-`?draft&modal=log | diff | endpoint | spec | pr | facts | pulls | settings`, and
-`&section=provider | sandbox | keys | pipeline | appearance` opens Settings at
-one section (the header badges do the same).
+The four-step workspace is now the dashboard at `/`; the old tabbed shell and
+its components were removed. There is no `?draft` route and no fixture data.
 
-The draft plays one staged run on load: clone → gaps → contract tests → fix →
-review, then gates the PR on per-file decisions.
+- `apps/web/src/components/agent/workspace.tsx` — the four steps, header,
+  footer, auto-review mode, real scan/run actions.
+- `apps/web/src/components/agent/dialogs.tsx` — event log (search + level),
+  diff, source/metadata, endpoint, spec/contract, repository facts, pull
+  request screen.
+- `apps/web/src/components/agent/settings-sheet.tsx` — provider, sandbox, keys,
+  pipeline and appearance bound to `localStorage` and the secret stores.
+- `apps/web/src/components/agent/shared.tsx` — stage tones, check dots,
+  downloads, log/entry types.
+- `apps/web/src/components/agent/highlight.tsx` — Kirari YAML/TS/JSON.
+- `apps/worker` + `packages/core/src/pr.ts` — editable PR title, body, branch,
+  commit message and draft flag.
+- `apps/web/src/api.ts` — sends `mode: "both"` so contract tests run when a spec
+  exists, and forwards the PR metadata.
+- `packages/ui` — the new shadcn primitives and gradient button/switch styles.
 
-- `apps/web/src/draft/agent-workspace.tsx` — the four steps, header, footer.
-- `apps/web/src/draft/dialogs.tsx` — event log, diff review, endpoint detail,
-  spec/contract, repository facts, pull request screen, pull requests.
-- `apps/web/src/draft/settings-sheet.tsx` — editable provider, sandbox, keys,
-  pipeline and appearance (Accordion + inputs).
-- `apps/web/src/draft/shared.tsx` — stage tones, badges, downloads, log lines.
-- `apps/web/src/draft/data.ts` — repo facts, 14 gaps, 14 endpoints, 4 generated
-  files, spec YAML, logs, checks.
-- `apps/web/src/main.tsx` — lazy `?draft` entry; the shipped dashboard is
-  untouched and the mockup is a separate chunk.
-- `packages/ui` — 17 new shadcn primitives (P0).
-- `apps/web/src/tailwind.css` — stage tokens and the workspace keyframes.
+Real wiring:
 
-Interactions covered by the draft:
+| Flow            | Behaviour                                                                                            |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| Repository      | `owner/repo`, GitHub URL, local folder (dev only); branch list from GitHub; local forces Interactive |
+| Agent Activity  | stage states/counters from `RunEvent`s; click a card to open its events                              |
+| Gap Analysis    | real missing/coverage/contract/unsupported gaps; selectable only where generation is supported       |
+| Endpoint matrix | spec endpoints + real `ApiTestResult`s; row opens the operation and spec section                     |
+| Review Queue    | real generations + validations; per-file accept/reject; rejected kept out of the PR                  |
+| Diff/source     | generated code and `Generation.source`; real `Validation.checks`                                     |
+| Checks          | executed checks and verification state; no invented format/lint result                               |
+| Pull request    | editable title/branch/commit/description/draft, sent to the Worker                                   |
+| Facts           | real languages, runtime, package manager, frameworks, declared CI checks                             |
+| Logs            | real pipeline + gap logs, searchable and downloadable                                                |
+| Autonomous      | auto-accepts verified tests, then opens the PR screen; dispatch stays manual                         |
 
-| Flow         | Where                                                                                                                                                        |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Stage events | click a rail node, or "Event log" → modal with stage tabs                                                                                                    |
-| Diff review  | "Diff" per file → modal with generated test, source, checks, accept/reject, download                                                                         |
-| Decisions    | per-file accept/reject, "Accept all", rejected tray with Restore                                                                                             |
-| PR gate      | footer → pull request screen with editable title, branch, commit message, description, draft toggle and AI copy; dispatch is blocked while a file is pending |
-| Endpoints    | click a matrix row → request, highlighted response, execution log, copy cURL, re-test, open spec                                                             |
-| Spec         | "Spec" → raw YAML + generated contract, download                                                                                                             |
-| Gaps         | tabs: Missing 11 · Coverage 2 · Contract 1, coverage labelled from `lcov.info`                                                                               |
-| Facts        | repository languages, runtime, CI checks, coverage source                                                                                                    |
-| Settings     | Accordion sections with editable provider/model, runner, keys, retries, strict mode, accent                                                                  |
-| Autonomous   | auto-accepts, then opens the pull request screen instead of dispatching silently                                                                             |
-
-What is real in the draft: tokens, layout, motion, primitives, keyboard/focus
-behaviour, light/dark, downloads. What is mocked: every number, command and
-stage transition. The wiring phases below replace the fixtures with `RunEvent`s.
+The plan below remains the target for measurement, history and CI features that
+are not in this implementation yet.
 
 ## 1. Goal
 

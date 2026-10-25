@@ -176,11 +176,11 @@ export class GitHub {
 
   async openPull(
     repo: string,
-    input: { title: string; head: string; base: string; body: string },
+    input: { title: string; head: string; base: string; body: string; draft?: boolean },
   ): Promise<string> {
     const data = await this.request<{ html_url?: string }>(`/repos/${repo}/pulls`, {
       method: "POST",
-      body: { ...input, draft: false },
+      body: { ...input, draft: input.draft === true },
     });
     if (!data.html_url) throw new HttpError(502, "GitHub created the PR without returning a URL.");
     return data.html_url;

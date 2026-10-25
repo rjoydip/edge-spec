@@ -177,11 +177,21 @@ export interface PullFile {
   code: string;
 }
 
+/** Optional copy the reviewer can edit in the pull request dialog. */
+export interface PullMeta {
+  title?: string;
+  body?: string;
+  branch?: string;
+  commitMessage?: string;
+  draft?: boolean;
+}
+
 /** Opens one pull request that carries every listed test file. */
 export function openPullWithFiles(
   project: Project,
   settings: Settings,
   files: PullFile[],
+  meta?: PullMeta,
 ): Promise<{ url: string; files: number }> {
   return apiJson<{ url: string; files: number }>("/api/pull-request", {
     method: "POST",
@@ -189,6 +199,7 @@ export function openPullWithFiles(
       repo: project.repo,
       ref: project.ref,
       strictTypes: settings.strictTypes,
+      ...meta,
       files: files.map((file) => ({
         path: file.path,
         code: file.code,
@@ -224,6 +235,7 @@ export async function runPipelineStream(
         concurrency: settings.concurrency,
         strictTypes: settings.strictTypes,
         coverageTarget: settings.coverageTarget,
+        mode: "both",
         ...(retryGaps && retryGaps.length > 0 ? { retryGaps } : {}),
       }),
       ...(signal ? { signal } : {}),

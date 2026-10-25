@@ -1,4 +1,4 @@
-/** Kirari-backed highlighting for the draft's spec and source viewers. */
+/** Kirari-backed highlighting for the spec and source viewers. */
 import { Code } from "@vortexlabs/kirari-react";
 import { json } from "@vortexlabs/kirari/languages/json";
 import { typescript } from "@vortexlabs/kirari/languages/typescript";

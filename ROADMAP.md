@@ -319,7 +319,7 @@ not keys, and are opt-in.
 
 ### Routes (additive)
 
-```
+```sh
 GET  /api/runs                 list (repo, cursor)
 GET  /api/runs/:id             summary + files
 GET  /api/runs/:id/artifacts   signed R2 links
