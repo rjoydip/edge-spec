@@ -19,9 +19,28 @@ const SIZES = {
   icon: "size-9",
 } as const;
 
+export type ButtonVariant = keyof typeof VARIANTS;
+export type ButtonSize = keyof typeof SIZES;
+
+const BASE =
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-xl font-medium whitespace-nowrap transition-all outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0";
+
+/** The button look, for primitives that must render their own element (Radix actions). */
+export function buttonStyles({
+  variant = "default",
+  size = "default",
+  className,
+}: {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+} = {}): string {
+  return cn(BASE, VARIANTS[variant], SIZES[size], className);
+}
+
 export interface ButtonProps extends ComponentProps<"button"> {
-  variant?: keyof typeof VARIANTS;
-  size?: keyof typeof SIZES;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
 }
 
 export function Button({
@@ -31,18 +50,5 @@ export function Button({
   type = "button",
   ...props
 }: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 rounded-xl font-medium whitespace-nowrap transition-all outline-none",
-        "focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950",
-        "disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
-        VARIANTS[variant],
-        SIZES[size],
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <button type={type} className={buttonStyles({ variant, size, className })} {...props} />;
 }
