@@ -124,6 +124,7 @@ import {
   TONES,
   type AgentTest,
   type LogEntry,
+  type ReviewFilter,
   type ReviewState,
   type StepStatus,
   type Tone,
@@ -248,7 +249,7 @@ export function AgentWorkspace({
   const [apiQuery, setApiQuery] = useState("");
   const [apiMethods, setApiMethods] = useState<string[]>([]);
   const [reviewQuery, setReviewQuery] = useState("");
-  const [reviewState, setReviewState] = useState<"all" | ReviewState>("all");
+  const [reviewState, setReviewState] = useState<ReviewFilter>("all");
   const [selection, setSelection] = useState<string[]>([]);
   const [specPath, setSpecPath] = useState("");
   const [reviews, setReviews] = useState<Record<string, ReviewState>>({});
@@ -422,9 +423,17 @@ export function AgentWorkspace({
   const acceptedCount = entries.filter((entry) => entry.state === "accepted").length;
   const rejectedCount = entries.filter((entry) => entry.state === "rejected").length;
   const pendingCount = entries.filter((entry) => entry.state === "pending").length;
+  const matchesReviewFilter = (entry: ReviewEntry) => {
+    const { validation } = entry.item;
+    if (reviewState === "all") return true;
+    if (reviewState === "passed") return validation.ok && Boolean(validation.verified);
+    if (reviewState === "failed") return !validation.ok;
+    if (reviewState === "static") return validation.ok && !validation.verified;
+    return entry.state === reviewState;
+  };
   const visibleEntries = entries.filter(
     (entry) =>
-      (reviewState === "all" || entry.state === reviewState) &&
+      matchesReviewFilter(entry) &&
       (!reviewQuery.trim() ||
         `${entry.item.generation.testPath} ${entry.item.generation.sourcePath}`
           .toLowerCase()
@@ -1570,16 +1579,19 @@ export function AgentWorkspace({
                 />
                 <Select
                   value={reviewState}
-                  onValueChange={(value) => setReviewState(value as "all" | ReviewState)}
+                  onValueChange={(value) => setReviewState(value as ReviewFilter)}
                 >
                   <SelectTrigger className="h-8 w-32 text-[11px]" aria-label="Filter by status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All statuses</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="pending">Pending review</SelectItem>
                     <SelectItem value="accepted">Accepted</SelectItem>
                     <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="passed">Validation passed</SelectItem>
+                    <SelectItem value="failed">Validation failed</SelectItem>
+                    <SelectItem value="static">Static check only</SelectItem>
                   </SelectContent>
                 </Select>
                 <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-500">
