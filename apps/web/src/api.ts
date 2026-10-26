@@ -11,6 +11,7 @@ import type {
 import type { PullSummary } from "@edge-spec/core/github";
 import type { BacklogItem, BacklogState } from "@edge-spec/core/backlog";
 import type { RunDecision, RunDetail, RunSummary } from "@edge-spec/core/history";
+import type { RepoMemory } from "@edge-spec/core/memory";
 import type { PullPolicy } from "@edge-spec/core/policy";
 import type { PullFile } from "@edge-spec/core/pr";
 import type { SkippedContractOperation } from "@edge-spec/core/provenance";
@@ -295,6 +296,147 @@ export function fetchRuns(repo: string): Promise<RunsResponse> {
 
 export function fetchRunDetail(id: string): Promise<{ enabled: boolean } & RunDetail> {
   return apiJson<{ enabled: boolean } & RunDetail>(`/api/runs/${encodeURIComponent(id)}/files`);
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  /** Days to keep runs, audit events and command rate-limit rows. */
+  retentionDays: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** One workspace per deployment; `enabled: false` means no RUNS_DB. */
+export function fetchWorkspace(): Promise<{ enabled: boolean; workspace?: Workspace }> {
+  return apiJson<{ enabled: boolean; workspace?: Workspace }>("/api/workspace");
+}
+
+export function updateWorkspace(input: {
+  name?: string;
+  retentionDays?: number;
+}): Promise<{ enabled: boolean; workspace: Workspace }> {
+  return apiJson<{ enabled: boolean; workspace: Workspace }>("/api/workspace", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface AuditEvent {
+  id?: number;
+  repo?: string;
+  actor: string;
+  action: string;
+  detail: Record<string, unknown>;
+  createdAt: number;
+}
+
+/** Newest first. `repo` filters by `owner/name`; the Worker clamps the limit. */
+export function fetchAudit(
+  repo?: string,
+  limit = 100,
+): Promise<{ enabled: boolean; events: AuditEvent[] }> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (repo) params.set("repo", repo);
+  return apiJson<{ enabled: boolean; events: AuditEvent[] }>(`/api/audit?${params}`);
+}
+
+export interface ScheduledRepo {
+  repo: string;
+  intervalDays: number;
+  enabled: boolean;
+  installationId?: number;
+  lastRunAt?: number;
+}
+
+export function fetchSchedules(): Promise<{ enabled: boolean; schedules: ScheduledRepo[] }> {
+  return apiJson<{ enabled: boolean; schedules: ScheduledRepo[] }>("/api/schedules");
+}
+
+/** Upserts one schedule; the response is the full list. */
+export function updateSchedule(
+  input: ScheduledRepo,
+): Promise<{ enabled: boolean; schedules: ScheduledRepo[] }> {
+  return apiJson<{ enabled: boolean; schedules: ScheduledRepo[] }>("/api/schedules", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteSchedule(repo: string): Promise<{ deleted: boolean }> {
+  return apiJson<{ deleted: boolean }>(`/api/schedules?repo=${encodeURIComponent(repo)}`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchMemory(repo: string): Promise<{ enabled: boolean; memory: RepoMemory }> {
+  return apiJson<{ enabled: boolean; memory: RepoMemory }>(
+    `/api/memory?repo=${encodeURIComponent(repo)}`,
+  );
+}
+
+export function updateMemory(
+  repo: string,
+  memory: RepoMemory,
+): Promise<{ enabled: boolean; memory: RepoMemory }> {
+  return apiJson<{ enabled: boolean; memory: RepoMemory }>(
+    `/api/memory?repo=${encodeURIComponent(repo)}`,
+    { method: "PUT", body: JSON.stringify({ memory }) },
+  );
+}
+
+export function deleteMemory(repo: string): Promise<{ deleted: boolean }> {
+  return apiJson<{ deleted: boolean }>(`/api/memory?repo=${encodeURIComponent(repo)}`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchPolicy(repo: string): Promise<{ enabled: boolean; policy: PullPolicy }> {
+  return apiJson<{ enabled: boolean; policy: PullPolicy }>(
+    `/api/policies?repo=${encodeURIComponent(repo)}`,
+  );
+}
+
+export function updatePolicy(
+  repo: string,
+  policy: PullPolicy,
+): Promise<{ enabled: boolean; policy: PullPolicy }> {
+  return apiJson<{ enabled: boolean; policy: PullPolicy }>(
+    `/api/policies?repo=${encodeURIComponent(repo)}`,
+    { method: "PUT", body: JSON.stringify({ policy }) },
+  );
+}
+
+export function deletePolicy(repo: string): Promise<{ deleted: boolean }> {
+  return apiJson<{ deleted: boolean }>(`/api/policies?repo=${encodeURIComponent(repo)}`, {
+    method: "DELETE",
+  });
+}
+
+/** Stored R2 bundle for one run; the generated source is never included. */
+export interface RunArtifact {
+  runId: string;
+  repo: string;
+  ref: string;
+  status: string;
+  totals?: unknown;
+  finishedAt: number;
+  files: Array<{
+    sourcePath: string;
+    testPath: string;
+    verified: boolean;
+    checks: unknown[];
+    coverage?: unknown;
+  }>;
+}
+
+/** `enabled: false` means no ARTIFACTS binding; a 404 means no bundle for this run. */
+export function fetchRunArtifacts(
+  id: string,
+): Promise<{ enabled: boolean; artifact?: RunArtifact }> {
+  return apiJson<{ enabled: boolean; artifact?: RunArtifact }>(
+    `/api/runs/${encodeURIComponent(id)}/artifacts`,
+  );
 }
 
 /** One action deletes every run for the repository. */

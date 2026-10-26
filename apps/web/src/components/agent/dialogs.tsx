@@ -66,7 +66,14 @@ import {
   cn,
 } from "@edge-spec/ui";
 import type { BacklogItem, BacklogState } from "@edge-spec/core/backlog";
-import { deleteRuns, fetchBacklog, fetchRunDetail, fetchRuns, updateBacklog } from "@/api";
+import {
+  deleteRuns,
+  fetchBacklog,
+  fetchRunArtifacts,
+  fetchRunDetail,
+  fetchRuns,
+  updateBacklog,
+} from "@/api";
 import type { Project, Settings } from "@/lib/settings";
 import { HighlightedCode } from "./highlight";
 import {
@@ -1507,6 +1514,7 @@ export function HistoryDialog({
   const [selected, setSelected] = useState<string[]>([]);
   const [comparison, setComparison] = useState<RunComparison>();
   const [deleting, setDeleting] = useState(false);
+  const [artifactBusy, setArtifactBusy] = useState<string>();
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -1570,6 +1578,32 @@ export function HistoryDialog({
     }
   };
 
+  /** The bundle is written for interactive runs only; a 404 is a normal miss. */
+  const downloadArtifact = async (run: RunSummary) => {
+    setArtifactBusy(run.id);
+    setError(undefined);
+    try {
+      const result = await fetchRunArtifacts(run.id);
+      if (!result.enabled) {
+        setError("Run artifacts are not enabled: this deployment has no R2 ARTIFACTS binding.");
+        return;
+      }
+      if (!result.artifact) {
+        setError(`No artifact bundle was stored for this run (${when(run.startedAt)}).`);
+        return;
+      }
+      downloadFile(
+        `edge-spec-${run.id}.json`,
+        JSON.stringify(result.artifact, null, 2),
+        "application/json",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setArtifactBusy(undefined);
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -1614,44 +1648,60 @@ export function HistoryDialog({
             {runs.map((run) => {
               const index = selected.indexOf(run.id);
               return (
-                <button
-                  key={run.id}
-                  type="button"
-                  onClick={() => toggle(run.id)}
-                  className={cn(
-                    "w-full rounded-xl border px-3 py-2 text-left transition",
-                    index >= 0
-                      ? "border-indigo-500/40 bg-indigo-500/10"
-                      : "border-zinc-800/70 bg-zinc-900/40 hover:border-zinc-700",
-                  )}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      variant={
-                        run.status === "ready"
-                          ? "success"
-                          : run.status === "failed"
-                            ? "danger"
-                            : "neutral"
-                      }
-                    >
-                      {run.status}
-                    </Badge>
-                    {index >= 0 && (
-                      <Badge variant="accent">{index === 0 ? "before" : "after"}</Badge>
+                <div key={run.id} className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toggle(run.id)}
+                    className={cn(
+                      "min-w-0 flex-1 rounded-xl border px-3 py-2 text-left transition",
+                      index >= 0
+                        ? "border-indigo-500/40 bg-indigo-500/10"
+                        : "border-zinc-800/70 bg-zinc-900/40 hover:border-zinc-700",
                     )}
-                    <span className="text-[11px] text-zinc-300">{when(run.startedAt)}</span>
-                    <span className="ml-auto font-mono text-[10px] text-zinc-500">
-                      {run.provider} · {run.model}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-500">
-                    <span>{run.totals.missing} missing</span>
-                    <span>{run.totals.coverage} coverage</span>
-                    <span>{run.totals.api} api</span>
-                    <span>{run.totals.skipped} skipped by policy</span>
-                  </div>
-                </button>
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={
+                          run.status === "ready"
+                            ? "success"
+                            : run.status === "failed"
+                              ? "danger"
+                              : "neutral"
+                        }
+                      >
+                        {run.status}
+                      </Badge>
+                      {index >= 0 && (
+                        <Badge variant="accent">{index === 0 ? "before" : "after"}</Badge>
+                      )}
+                      <span className="text-[11px] text-zinc-300">{when(run.startedAt)}</span>
+                      <span className="ml-auto font-mono text-[10px] text-zinc-500">
+                        {run.provider} · {run.model}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-500">
+                      <span>{run.totals.missing} missing</span>
+                      <span>{run.totals.coverage} coverage</span>
+                      <span>{run.totals.api} api</span>
+                      <span>{run.totals.skipped} skipped by policy</span>
+                    </div>
+                  </button>
+                  <Hint label="Download the stored artifact bundle">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Download artifacts for the run at ${when(run.startedAt)}`}
+                      onClick={() => downloadArtifact(run)}
+                      disabled={artifactBusy === run.id}
+                    >
+                      {artifactBusy === run.id ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <HardDriveDownload className="size-3.5 text-zinc-400" />
+                      )}
+                    </Button>
+                  </Hint>
+                </div>
               );
             })}
           </div>

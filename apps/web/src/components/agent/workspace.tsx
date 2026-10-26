@@ -149,6 +149,7 @@ import {
   type PrDraft,
   type ReviewEntry,
 } from "./dialogs";
+import { DeploymentDialog } from "./deployment";
 import type { SettingsSection } from "./settings-sheet";
 
 type Mode = "review" | "auto";
@@ -285,6 +286,7 @@ export function AgentWorkspace({
   const [factsOpen, setFactsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [backlogOpen, setBacklogOpen] = useState(false);
+  const [deploymentOpen, setDeploymentOpen] = useState(false);
   const [prOpen, setPrOpen] = useState(false);
   const [prDraft, setPrDraft] = useState<PrDraft>({
     title: "",
@@ -843,6 +845,16 @@ export function AgentWorkspace({
                     </Button>
                   </Hint>
                 )}
+                <Hint label="Workspace, audit, schedules, memory and policy">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setDeploymentOpen(true)}
+                    aria-label="Deployment settings"
+                  >
+                    <Server className="text-amber-300" />
+                  </Button>
+                </Hint>
                 <Hint label="Settings">
                   <Button
                     variant="outline"
@@ -2129,6 +2141,11 @@ export function AgentWorkspace({
         <BacklogDialog
           open={backlogOpen}
           onClose={() => setBacklogOpen(false)}
+          repo={project.repo}
+        />
+        <DeploymentDialog
+          open={deploymentOpen}
+          onClose={() => setDeploymentOpen(false)}
           repo={project.repo}
         />
         <PrDialog

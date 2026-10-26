@@ -39,7 +39,17 @@ behind the content and are `pointer-events-none`.
    Bulk and per-file generation are here.
 4. **Review Queue** — one row per generated file with its diff, checks and
    coverage facts. Accept or reject each file; a rejected or unverified file
-   never reaches a pull request. History and backlog open from the header.
+   never reaches a pull request. History, backlog and **Deployment** open from
+   the header.
+
+The **Deployment** dialog holds the configuration that lives in D1 and R2, not
+in this browser: **Workspace** (name and retention days), **Audit** (newest
+first, current repository or every repository), **Schedules** (daily drift
+scans), **Memory** (approved naming, conventions, helpers and fixtures) and
+**Policies** (the stored pull request gates used by webhook runs). Each panel
+reads its real route; without the optional bindings it says so instead of
+showing an empty success. Run-history rows also download the stored R2 artifact
+bundle for that run; a 404 means the run stored no bundle.
 
 ## Motion
 
