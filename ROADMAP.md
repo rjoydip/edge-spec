@@ -51,6 +51,7 @@ measures something it actually ran, or says "not measured".
 | Test runner adapters                                         | Shipped (Bun/Vitest/Jest/Playwright detected per repo)         |
 | Repository memory / prompt version                           | Shipped (opt-in D1 strings, prompt version stamped)            |
 | Eval harness / model routing                                 | Shipped (golden cases, outcome scores, opt-in cheap-first)     |
+| Watch mode                                                   | Shipped (`edgespec watch`; VS Code extension not built)        |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run
 database. That is the largest structural gap.

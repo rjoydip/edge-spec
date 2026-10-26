@@ -36,7 +36,10 @@ export interface ClientConfig {
 }
 
 export interface GenerateRequest {
-  repo: string;
+  /** Omitted when `source` is inline (local watch mode). */
+  repo?: string;
+  /** Inline local source; only a local Worker accepts it. */
+  source?: string;
   ref?: string;
   path: string;
   provider?: string;
@@ -182,6 +185,7 @@ export class EdgeSpecClient {
   generate(input: GenerateRequest): Promise<GenerateResponse> {
     const {
       repo,
+      source,
       ref,
       path,
       provider,
@@ -196,7 +200,8 @@ export class EdgeSpecClient {
     return this.request("/api/generate", {
       method: "POST",
       body: {
-        repo,
+        ...(repo ? { repo } : {}),
+        ...(source !== undefined ? { source } : {}),
         ref: ref ?? "main",
         path,
         ...(provider ? { provider } : {}),
