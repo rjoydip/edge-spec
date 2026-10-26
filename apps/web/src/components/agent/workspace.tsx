@@ -1729,6 +1729,9 @@ export function AgentWorkspace({
                         <span className="hidden sm:block">
                           <CheckSummary validation={item.validation} />
                         </span>
+                        {item.validation.flaky && (
+                          <Badge variant="warning">flaky · quarantined</Badge>
+                        )}
                         {item.validation.coverage && (
                           <Badge variant="neutral">
                             {coverageDeltaLabel(item.validation.coverage)}

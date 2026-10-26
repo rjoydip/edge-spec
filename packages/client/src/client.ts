@@ -66,6 +66,7 @@ export interface RunRequest {
   maxAiRetries?: number;
   maxFiles?: number;
   maxTokens?: number;
+  flakyRuns?: number;
   strictTypes?: boolean;
   coverageTarget?: number;
   retryGaps?: string[];
@@ -228,6 +229,7 @@ export class EdgeSpecClient {
           ...(input.maxAiRetries !== undefined ? { maxAiRetries: input.maxAiRetries } : {}),
           ...(input.maxFiles !== undefined ? { maxFiles: input.maxFiles } : {}),
           ...(input.maxTokens !== undefined ? { maxTokens: input.maxTokens } : {}),
+          ...(input.flakyRuns !== undefined ? { flakyRuns: input.flakyRuns } : {}),
           ...(input.strictTypes !== undefined ? { strictTypes: input.strictTypes } : {}),
           ...(input.coverageTarget !== undefined ? { coverageTarget: input.coverageTarget } : {}),
           ...(input.retryGaps?.length ? { retryGaps: input.retryGaps } : {}),

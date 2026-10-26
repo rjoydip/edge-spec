@@ -63,6 +63,8 @@ export interface ValidateInput {
   sandbox?: SandboxConfig;
   /** The repository a v2 runner clones before writing the files. */
   repo?: SandboxRepo;
+  /** Extra repeats after a passing run; 0 disables flaky detection. */
+  flakyRuns?: number;
   /** Ask the runner for LCOV and attach a per-file delta to the result. */
   measureCoverage?: boolean;
   /** The before report; a delta needs both reports. */
@@ -118,10 +120,54 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
     };
   }
 
+  // Repeat a passing suite; a pass/fail split is flaky, not verified.
+  const firstOutput =
+    run.output || (run.ok ? "bun test passed." : "bun test failed without output.");
+  const extra = run.ok ? Math.min(5, Math.max(0, Math.round(input.flakyRuns ?? 0))) : 0;
+  let runs = 1;
+  let flaky = false;
+  let repeatNote = "";
+  for (let index = 0; index < extra; index += 1) {
+    const repeat = await runInSandbox({
+      sandbox: input.sandbox,
+      ...(input.repo ? { repo: input.repo } : {}),
+      files: {
+        [input.sourcePath]: input.source,
+        [input.testPath]: input.test,
+      },
+      command: input.repo ? `bun test ${shellWord(input.testPath)}` : "bun test",
+      ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+    });
+    runs += 1;
+    if (repeat.unreachable || repeat.environmentError) {
+      repeatNote = `Flaky repeats could not run: ${repeat.output}`;
+      break;
+    }
+    if (!repeat.ok) {
+      flaky = true;
+      repeatNote = repeat.output;
+      break;
+    }
+  }
+
+  if (flaky) {
+    return {
+      ok: false,
+      verified: false,
+      flaky: true,
+      runs,
+      output:
+        `Ran ${runs} time(s); the suite passed and failed on the same input. Flaky, quarantined.\n${repeatNote}`.trim(),
+      durationMs: Date.now() - started,
+      ...(coverage ? { coverage } : {}),
+    };
+  }
+
   return {
     ok: run.ok,
     verified: true,
-    output: run.output || (run.ok ? "bun test passed." : "bun test failed without output."),
+    runs,
+    output: [firstOutput, repeatNote].filter(Boolean).join("\n"),
     durationMs: Date.now() - started,
     ...(coverage ? { coverage } : {}),
   };

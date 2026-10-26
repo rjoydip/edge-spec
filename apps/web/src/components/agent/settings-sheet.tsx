@@ -482,6 +482,19 @@ export function SettingsSheet({
                     onChange={(event) => update({ maxAiRetries: Number(event.target.value) || 0 })}
                   />
                 </Field>
+                <Field label="Flaky repeats" hint="Extra runs after a pass; 0 = off.">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={5}
+                    value={settings.flakyRuns}
+                    onChange={(event) =>
+                      update({
+                        flakyRuns: Math.min(5, Math.max(0, Number(event.target.value) || 0)),
+                      })
+                    }
+                  />
+                </Field>
                 <Field label="Token budget" hint="Provider-reported tokens per run; 0 = no cap.">
                   <Input
                     type="number"

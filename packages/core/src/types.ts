@@ -215,6 +215,10 @@ export interface Validation {
   checks?: CheckResult[];
   /** Present only when the run asked the runner for coverage. */
   coverage?: CoverageDelta;
+  /** True when repeated runs disagreed; a flaky suite is never verified. */
+  flaky?: boolean;
+  /** How many times the suite ran, including the first. */
+  runs?: number;
   /** Set when the sandbox could not prepare or run the suite at all. */
   environmentError?: "setup" | "server" | "unreachable" | "timeout";
 }

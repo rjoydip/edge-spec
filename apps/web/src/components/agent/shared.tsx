@@ -163,6 +163,13 @@ function checkStatus(check: CheckResult): "passed" | "failed" | "warning" {
 
 /** One dot per real repository check, or one for the suite result. */
 export function CheckSummary({ validation }: { validation: Validation }) {
+  if (validation.flaky) {
+    return (
+      <Hint label="Flaky — quarantined, not verified">
+        <span className="inline-block size-2 rounded-full bg-amber-400" aria-label="Flaky suite" />
+      </Hint>
+    );
+  }
   const checks = validation.checks ?? [];
   if (checks.length === 0) {
     const status = validation.ok ? (validation.verified ? "passed" : "warning") : "failed";
@@ -275,11 +282,13 @@ export function coverageLabel(status?: "not-run" | "unavailable" | "measured"): 
 }
 
 export function verificationLabel(validation: Validation): string {
+  if (validation.flaky) return "Flaky · quarantined";
   if (!validation.ok) return "Validation failed";
   return validation.verified ? "Executed on the runner" : "Static check only";
 }
 
 export function verificationVariant(validation: Validation): "success" | "warning" | "danger" {
+  if (validation.flaky) return "warning";
   if (!validation.ok) return "danger";
   return validation.verified ? "success" : "warning";
 }
@@ -299,6 +308,7 @@ export function provenanceFiles(items: readonly AgentTest[]): ProvenanceFile[] {
     provider: generation.provider,
     model: generation.model,
     corrected: generation.corrected,
+    ...(validation.flaky ? { flaky: true } : {}),
     verified: validation.verified,
     ...(validation.checks ? { checks: validation.checks } : {}),
     ...(validation.coverage ? { coverage: validation.coverage } : {}),

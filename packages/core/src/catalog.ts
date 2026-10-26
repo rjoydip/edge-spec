@@ -159,6 +159,8 @@ export const DEFAULT_PIPELINE = {
   concurrency: 3,
   /** 0 means no cap. Measured from provider-reported usage. */
   maxTokens: 0,
+  /** Extra repeats after a passing run; 0 disables flaky detection. */
+  flakyRuns: 2,
 } as const;
 
 export function providerById(id: string): Provider | undefined {
@@ -362,6 +364,8 @@ export interface PipelineConfigInput {
   concurrency?: unknown;
   /** Provider-reported tokens one run may spend; 0 means no cap. */
   maxTokens?: unknown;
+  /** Extra repeats after a passing run; 0 disables flaky detection. */
+  flakyRuns?: unknown;
 }
 
 export function pipelineConfig(input: PipelineConfigInput): {
@@ -374,6 +378,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
   parallelGeneration: boolean;
   concurrency: number;
   maxTokens: number;
+  flakyRuns: number;
 } {
   const retries = Number(input.maxRetries);
   const aiRetries = Number(input.maxAiRetries);
@@ -381,6 +386,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
   const files = Number(input.maxFiles);
   const concurrency = Number(input.concurrency);
   const tokens = Number(input.maxTokens);
+  const flaky = Number(input.flakyRuns);
   return {
     maxRetries: Number.isFinite(retries) ? Math.min(5, Math.max(0, Math.round(retries))) : 2,
     maxAiRetries: Number.isFinite(aiRetries) ? Math.min(5, Math.max(0, Math.round(aiRetries))) : 2,
@@ -393,6 +399,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
       ? Math.min(6, Math.max(1, Math.round(concurrency)))
       : 3,
     maxTokens: Number.isFinite(tokens) ? Math.min(2_000_000, Math.max(0, Math.round(tokens))) : 0,
+    flakyRuns: Number.isFinite(flaky) ? Math.min(5, Math.max(0, Math.round(flaky))) : 2,
   };
 }
 

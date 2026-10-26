@@ -347,6 +347,7 @@ export function SourceDialog({
             {providerById(generation.provider)?.name ?? generation.provider} · {generation.model}
           </Badge>
           <CheckSummary validation={validation} />
+          {validation.flaky && <Badge variant="warning">flaky · quarantined</Badge>}
           {validation.coverage && (
             <Badge variant="neutral">{coverageDeltaLabel(validation.coverage)}</Badge>
           )}

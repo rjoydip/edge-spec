@@ -198,6 +198,7 @@ describe("pipelineConfig", () => {
       parallelGeneration: true,
       concurrency: 3,
       maxTokens: 0,
+      flakyRuns: 2,
     });
     expect(pipelineConfig({ maxRetries: "x" }).maxRetries).toBe(2);
     expect(pipelineConfig({ maxFiles: 0 }).maxFiles).toBe(1);
@@ -206,6 +207,9 @@ describe("pipelineConfig", () => {
     expect(pipelineConfig({ maxTokens: 5000 }).maxTokens).toBe(5000);
     expect(pipelineConfig({ maxTokens: -5 }).maxTokens).toBe(0);
     expect(pipelineConfig({ maxTokens: 9_000_000 }).maxTokens).toBe(2_000_000);
+    expect(pipelineConfig({ flakyRuns: 3 }).flakyRuns).toBe(3);
+    expect(pipelineConfig({ flakyRuns: -1 }).flakyRuns).toBe(0);
+    expect(pipelineConfig({ flakyRuns: 99 }).flakyRuns).toBe(5);
   });
 });
 

@@ -177,6 +177,7 @@ custom path is simpler.
 | `parallelGeneration` | true    | boolean | Generate the picked tests in parallel instead of one by one           |
 | `maxFiles`           | 10      | 1–50    | How many gap files one pipeline run generates a test for              |
 | `maxTokens`          | 0       | 0–2M    | Provider-reported token cap for one run; `0` means no cap             |
+| `flakyRuns`          | 2       | 0–5     | Extra repeats after a passing suite; `0` disables flaky detection     |
 | `concurrency`        | 3       | 1–6     | Files generated and validated at once; a lower sandbox cap wins       |
 | `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments         |
 
@@ -192,6 +193,12 @@ current file, starts no new files, and returns the tests that are ready with
 not be enforced. On a quota or 5xx response the Worker retries once with the
 next model of the same provider and logs the fallback; a failed call never
 contributes a cost.
+
+A passing suite is repeated `flakyRuns` times. If any repeat fails on the same
+input, the result is `flaky: true`, `ok: false`, `verified: false`; it is
+quarantined in Review and labelled in the PR body instead of being counted as a
+pass. This can multiply runner time, so `0` turns it off. The same command and
+environment are reused; there is no per-run seed control yet.
 
 A run covers the first `maxFiles` gaps, highest risk first, and every test it
 writes waits in **Review** for a pull request. Files run through a bounded pool:

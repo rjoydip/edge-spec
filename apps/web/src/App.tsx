@@ -482,6 +482,7 @@ export function App() {
         provider: item.generation.provider,
         model: item.generation.model,
         corrected: item.generation.corrected,
+        ...(item.validation.flaky ? { flaky: true } : {}),
         verified: item.validation.verified,
         ...(item.validation.checks ? { checks: item.validation.checks } : {}),
         ...(item.validation.coverage ? { coverage: item.validation.coverage } : {}),

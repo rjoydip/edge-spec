@@ -13,6 +13,7 @@ export interface PullFile {
   provider?: string;
   model?: string;
   corrected?: boolean;
+  flaky?: boolean;
   verified?: boolean;
   checks?: ProvenanceCheck[];
   coverage?: CoverageDelta;
@@ -83,6 +84,7 @@ function provenanceOf(item: Record<string, unknown>): Partial<PullFile> {
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
     ...(item.corrected === true ? { corrected: true } : {}),
+    ...(item.flaky === true ? { flaky: true } : {}),
     ...(typeof item.verified === "boolean" ? { verified: item.verified } : {}),
     ...(checks.length > 0 ? { checks } : {}),
     ...(coverage ? { coverage } : {}),

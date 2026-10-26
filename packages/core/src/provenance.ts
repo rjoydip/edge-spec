@@ -17,6 +17,8 @@ export interface ProvenanceFile {
   provider?: string;
   model?: string;
   corrected?: boolean;
+  /** The suite passed and failed on identical input; never accepted as verified. */
+  flaky?: boolean;
   /** `true` executed, `false` static only, absent not reported. */
   verified?: boolean;
   checks?: ProvenanceCheck[];
@@ -47,8 +49,9 @@ function signed(value: number): string {
 }
 
 function fileLine(file: ProvenanceFile): string {
-  const verification =
-    file.verified === true
+  const verification = file.flaky
+    ? "flaky, quarantined (not verified)"
+    : file.verified === true
       ? "executed on the runner"
       : file.verified === false
         ? "static check only"
@@ -78,6 +81,7 @@ export function pullRequestBody(input: PullProvenance): string {
   const staticOnly = files.filter((file) => file.verified === false).length;
   const unreported = files.filter((file) => file.verified === undefined).length;
   const corrected = files.filter((file) => file.corrected);
+  const flaky = files.filter((file) => file.flaky).length;
   const coverageLines = files.map(coverageLine).filter(Boolean);
 
   const checks = new Map<string, ProvenanceCheck>();
@@ -117,6 +121,7 @@ export function pullRequestBody(input: PullProvenance): string {
       unreported > 0 ? `, ${unreported} not reported` : ""
     }.`,
     ...files.map(fileLine),
+    ...(flaky > 0 ? [`- ${flaky} test(s) are flaky and quarantined.`] : []),
     "",
     "## Checks",
     "",

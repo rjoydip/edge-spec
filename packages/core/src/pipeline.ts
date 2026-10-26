@@ -58,6 +58,8 @@ export interface PipelineInput {
   retryGaps?: string[];
   /** Provider-reported tokens this run may spend; 0 or absent means no cap. */
   maxTokens?: number;
+  /** Extra repeats after a passing suite; 0 disables flaky detection. */
+  flakyRuns?: number;
   /** When set, run only these failed operations and label the run a retest. */
   retestOperations?: RetestOperation[];
 }
@@ -675,6 +677,7 @@ export async function* runPipeline(
           ...(repoArg ? { repo: repoArg } : {}),
           ...(measureCoverage ? { measureCoverage: true } : {}),
           ...(baselineCoverage ? { baselineCoverage } : {}),
+          flakyRuns: input.flakyRuns ?? 0,
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         });
 
@@ -809,6 +812,7 @@ export async function* runPipeline(
             ...(repoArg ? { repo: repoArg } : {}),
             ...(measureCoverage ? { measureCoverage: true } : {}),
             ...(baselineCoverage ? { baselineCoverage } : {}),
+            flakyRuns: input.flakyRuns ?? 0,
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
           });
           const retryChecks = await runRepositoryChecks({

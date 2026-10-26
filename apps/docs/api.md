@@ -348,6 +348,7 @@ Request:
   "maxRetries": 2,
   "maxFiles": 10,
   "maxTokens": 0,
+  "flakyRuns": 2,
   "concurrency": 3,
   "mode": "unit",
   "strictTypes": true,
@@ -440,6 +441,9 @@ Flow details:
   Reaching it ends the run with `result.ok: false`, the reason, and any
   tests that already passed. With no cap, the run still logs an estimated
   input-token range before spending.
+- `flakyRuns` repeats a passing suite (default 2). A pass/fail split returns
+  `validation {ok:false, verified:false, flaky:true, runs}`; it is quarantined,
+  never counted as verified.
 - Quota and 5xx responses fall back once to the next model of the same
   provider; the fallback appears as a `warn` log.
 - A retest sends `retestOperations: [{specPath, method, path}]`. The run is

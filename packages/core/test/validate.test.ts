@@ -155,6 +155,48 @@ describe("validateTest", () => {
     expect(result.coverage).toEqual({ status: "not-measured" });
   });
 
+  it("marks a pass/fail split flaky, quarantined and never verified", async () => {
+    let calls = 0;
+    const fakeFetch = (async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({
+          exitCode: calls === 2 ? 1 : 0,
+          stdout: calls === 2 ? "1 fail" : "1 pass",
+        }),
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example" },
+      flakyRuns: 2,
+      fetchImpl: fakeFetch,
+    });
+
+    expect(result).toMatchObject({ ok: false, verified: false, flaky: true, runs: 2 });
+    expect(result.output).toContain("Flaky, quarantined");
+  });
+
+  it("keeps a stable suite verified after its repeats", async () => {
+    let calls = 0;
+    const fakeFetch = (async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ exitCode: 0, stdout: "1 pass" }));
+    }) as unknown as typeof fetch;
+
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example" },
+      flakyRuns: 2,
+      fetchImpl: fakeFetch,
+    });
+
+    expect(result).toMatchObject({ ok: true, verified: true, runs: 3 });
+    expect(result.flaky).toBeUndefined();
+    expect(calls).toBe(3);
+  });
+
   it("does not claim verification when the runner is unreachable", async () => {
     const fakeFetch = (async () => {
       throw new Error("boom");

@@ -851,6 +851,7 @@ app.post("/api/generate", async (c) => {
         testPath,
         test: candidate,
         strictTypes: config.strictTypes,
+        flakyRuns: config.flakyRuns,
         ...(sandbox ? { sandbox } : {}),
         ...(repoArg ? { repo: repoArg } : {}),
       });
@@ -949,6 +950,7 @@ app.post("/api/pull-request", async (c) => {
       ...(file.provider ? { provider: file.provider } : {}),
       ...(file.model ? { model: file.model } : {}),
       ...(file.corrected ? { corrected: true } : {}),
+      ...(file.flaky ? { flaky: true } : {}),
       ...(file.verified !== undefined ? { verified: file.verified } : {}),
       ...(file.checks ? { checks: file.checks } : {}),
       ...(file.coverage ? { coverage: file.coverage } : {}),
