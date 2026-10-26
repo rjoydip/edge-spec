@@ -198,6 +198,27 @@ writes waits in **Review** for a pull request. Files run through a bounded pool:
 `ready` stays in scan order even though events interleave, and each event names
 its `sourcePath`. One file that exhausts its retries fails alone.
 
+## Pull request policy (optional)
+
+Dashboard policy lives in `localStorage` (Settings → Policy) and travels with
+the pull request request. CI policy is opt-in server data in the same D1
+database as run history (`PUT /api/policies?repo=owner/name`). No policy entry
+means no extra gates.
+
+| Gate               | Behaviour                                                        |
+| ------------------ | ---------------------------------------------------------------- |
+| Kill switch        | Blocks every pull request                                        |
+| Draft only         | Requires a draft pull request for human approval                 |
+| Max files          | Blocks a batch larger than the limit                             |
+| Allowed test paths | Glob allowlist; every test path must match                       |
+| Min coverage delta | Requires measured, non-negative covered lines to reach the floor |
+| Labels / reviewers | Applied after opening; never fails the pull request              |
+
+A violation blocks before any branch or commit exists, and the API returns the
+gate name and reason. The dashboard shows that error in the pull request
+dialog. The webhook workflow enforces the server policy and returns
+`status: "blocked"` without opening a pull request.
+
 ## Sandbox runner (optional)
 
 A runner executes the generated suite, so the result is a real pass or fail
@@ -444,7 +465,8 @@ persisted). The installation id is not a secret and is passed instead.
 For App auth, install the app on the repository, subscribe the app to pushes
 and pull requests, and set the app's webhook secret to
 `GITHUB_WEBHOOK_SECRET`. The app needs **Contents: read and write**,
-**Pull requests: read and write**, and **Checks: read and write**.
+**Pull requests: read and write**, **Checks: read and write**, and
+**Issues: read and write** (for policy labels).
 
 A pull request run is a read-only advisory check: changed-file gaps, affected
 tests if a runner exists, one check and one comment. Re-runs update both.

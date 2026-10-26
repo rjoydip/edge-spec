@@ -38,8 +38,9 @@ measures something it actually ran, or says "not measured".
 | Dashboard                                                    | Redesign draft at `/?draft`; fixtures, not yet wired to events |
 | Persistence                                                  | Optional D1 for run history (`RUNS_DB`); settings stay local   |
 | Auth                                                         | User PATs for dashboard; optional GitHub App for CI            |
-| Run history                                                  | Shipped (`/api/runs`, History/Compare); backlog/policies later |
-| Backlog, policies                                            | Not built                                                      |
+| Run history                                                  | Shipped (`/api/runs`, History/Compare)                         |
+| Policies                                                     | Shipped (dashboard + optional D1, enforced in both PR paths)   |
+| Backlog                                                      | Not built                                                      |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run
 database. That is the largest structural gap.

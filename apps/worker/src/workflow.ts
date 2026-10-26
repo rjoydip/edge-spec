@@ -11,7 +11,13 @@ import { GitHub } from "@edge-spec/core/github";
 import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github-app";
 import { buildPrCheck } from "@edge-spec/core/pr-check";
 import { classifyTree, findGaps } from "@edge-spec/core/scanner";
-import { assertTestOnly } from "@edge-spec/core/policy";
+import {
+  assertTestOnly,
+  evaluatePullPolicy,
+  policyBlocked,
+  type PullPolicy,
+} from "@edge-spec/core/policy";
+import { getPolicy, runsDb } from "./db";
 import { sandboxRepo, runInSandbox } from "@edge-spec/core/sandbox";
 import { validateTest } from "@edge-spec/core/validate";
 import type { Env } from "./env";
@@ -271,6 +277,23 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       return { status: "ready", path: scanned.path, testPath: scanned.testPath };
     }
 
+    // Server-side policy is opt-in: no D1 row means no extra gates.
+    const db = runsDb(this.env);
+    const policy: PullPolicy = db ? await step.do("load-policy", () => getPolicy(db, repo)) : {};
+    const policyFiles = [
+      {
+        path: scanned.testPath,
+        ...(validation.coverage ? { coverage: validation.coverage } : {}),
+      },
+    ];
+    const blocked = policyBlocked(
+      evaluatePullPolicy(policy, {
+        files: policyFiles,
+        ...(policy.draftOnly ? { draft: true } : {}),
+      }),
+    );
+    if (blocked) return { status: "blocked", reason: blocked };
+
     const pullRequestUrl = await step.do("create-pull-request", async (): Promise<string> => {
       const base = await github.defaultBranch(repo);
       const sha = await github.headSha(repo, base);
@@ -289,12 +312,23 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
         `test: add generated tests for ${scanned.path}`,
         branch,
       );
-      return github.openPull(repo, {
+      const url = await github.openPull(repo, {
         title: `test: add unit tests for ${scanned.path}`,
         head: branch,
         base,
         body: `### EdgeSpec\n\nGenerated unit tests for \`${scanned.path}\` with ${model}.`,
+        ...(policy.draftOnly ? { draft: true } : {}),
       });
+      const number = Number(/\/pull\/(\d+)\/?$/.exec(url)?.[1]);
+      if (number > 0) {
+        if (policy.labels?.length) {
+          await github.addLabels(repo, number, policy.labels).catch(() => undefined);
+        }
+        if (policy.reviewers?.length) {
+          await github.requestReviewers(repo, number, policy.reviewers).catch(() => undefined);
+        }
+      }
+      return url;
     });
 
     return {

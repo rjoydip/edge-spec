@@ -59,13 +59,17 @@ import {
 import type { Env } from "./env";
 import {
   createRun,
+  deletePolicy,
   deleteRunHistory,
   finishRun,
+  getPolicy,
   getRun,
   listRuns,
+  putPolicy,
   runsDb,
   setRunDecisions,
 } from "./db";
+import { evaluatePullPolicy, parsePullPolicy, policyBlocked } from "@edge-spec/core/policy";
 import type { RunDecision, RunFile, RunSummary } from "@edge-spec/core/history";
 
 export { TestGenerationWorkflow } from "./workflow";
@@ -822,10 +826,17 @@ app.post("/api/pull-request", async (c) => {
       }
     }
 
+    // Gates run before any branch or commit exists.
+    const meta = pullMetaOf(body);
+    const policy = parsePullPolicy(body.policy);
+    const blocked = policyBlocked(
+      evaluatePullPolicy(policy, { files, ...(meta.draft ? { draft: true } : {}) }),
+    );
+    if (blocked) throw new HttpError(403, blocked);
+
     const github = githubFor(c);
     const base = await github.defaultBranch(repo);
     const sha = await github.headSha(repo, base);
-    const meta = pullMetaOf(body);
     if (meta.branch && !validBranchName(meta.branch)) {
       throw new HttpError(400, "Enter a safe branch name other than the default branch.");
     }
@@ -873,6 +884,17 @@ app.post("/api/pull-request", async (c) => {
         }),
       ...(meta.draft ? { draft: true } : {}),
     });
+
+    // Labels and reviewers are policy actions, not gates: never fail the PR for them.
+    const pullNumber = Number(/\/pull\/(\d+)\/?$/.exec(url)?.[1]);
+    if (pullNumber > 0) {
+      if (policy.labels?.length) {
+        await github.addLabels(repo, pullNumber, policy.labels).catch(() => undefined);
+      }
+      if (policy.reviewers?.length) {
+        await github.requestReviewers(repo, pullNumber, policy.reviewers).catch(() => undefined);
+      }
+    }
 
     // The pull request is the acceptance decision, when the client knows the run.
     const history = runsDb(c.env);
@@ -956,6 +978,50 @@ app.post("/webhook", async (c) => {
       params: { repo, ref, event: "push", ...installation },
     });
     return c.json({ workflowId: instance.id }, 202);
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.get("/api/policies", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, policy: {} });
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    const policy = await getPolicy(db, `${repo.owner}/${repo.name}`);
+    return c.json({ enabled: true, policy });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.put("/api/policies", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Policy storage is not enabled on this deployment.");
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    const body = await readJson(c);
+    const policy = await putPolicy(
+      db,
+      `${repo.owner}/${repo.name}`,
+      parsePullPolicy(body.policy ?? body),
+    );
+    return c.json({ enabled: true, policy });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.delete("/api/policies", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Policy storage is not enabled on this deployment.");
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    await deletePolicy(db, `${repo.owner}/${repo.name}`);
+    return c.json({ deleted: true });
   } catch (err) {
     return fail(err);
   }

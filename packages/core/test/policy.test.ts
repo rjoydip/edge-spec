@@ -1,9 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import {
   assertTestOnly,
+  evaluatePullPolicy,
   generatedMarkerReason,
   isTestPath,
+  parsePullPolicy,
   PolicyError,
+  policyBlocked,
   testPathProblem,
 } from "../src/policy";
 
@@ -86,5 +89,95 @@ describe("assertTestOnly", () => {
 
   it("accepts a test artifact", () => {
     expect(() => assertTestOnly("tests/a.test.ts")).not.toThrow();
+  });
+});
+
+describe("parsePullPolicy", () => {
+  it("keeps known fields, ignores unknown ones and treats zero as no gate", () => {
+    expect(
+      parsePullPolicy({
+        killSwitch: true,
+        unknown: "ignored",
+        maxFiles: 0,
+        minCoverageDelta: 0,
+        allowedPaths: [" tests/** ", ""],
+        labels: ["tests"],
+      }),
+    ).toEqual({
+      killSwitch: true,
+      allowedPaths: ["tests/**"],
+      labels: ["tests"],
+    });
+  });
+
+  it("clamps numbers and caps lists", () => {
+    const policy = parsePullPolicy({
+      maxFiles: 999,
+      minCoverageDelta: 9_999_999,
+      labels: Array.from({ length: 30 }, (_, index) => `l${index}`),
+    });
+    expect(policy.maxFiles).toBe(100);
+    expect(policy.minCoverageDelta).toBe(1_000_000);
+    expect(policy.labels).toHaveLength(20);
+  });
+});
+
+describe("evaluatePullPolicy", () => {
+  const files = [
+    {
+      path: "src/a.test.ts",
+      coverage: { status: "measured", lines: { delta: 2 } },
+    },
+  ];
+
+  it("allows a pull request that satisfies the gates", () => {
+    expect(
+      evaluatePullPolicy(
+        { draftOnly: true, maxFiles: 2, allowedPaths: ["src/**"], minCoverageDelta: 2 },
+        { files, draft: true },
+      ),
+    ).toEqual([]);
+  });
+
+  it("names every gate that blocks, with a readable message", () => {
+    const violations = evaluatePullPolicy(
+      {
+        killSwitch: true,
+        draftOnly: true,
+        maxFiles: 1,
+        allowedPaths: ["tests/**"],
+        minCoverageDelta: 5,
+      },
+      { files, draft: false },
+    );
+    expect(violations.map((violation) => violation.gate)).toEqual([
+      "kill-switch",
+      "draft-only",
+      "allowed-paths",
+      "coverage-delta",
+    ]);
+    expect(policyBlocked(violations)).toContain("kill-switch");
+    expect(policyBlocked(violations)).toContain("below the required 5");
+  });
+
+  it("matches a recursive glob at the top level and below it", () => {
+    const policy = { allowedPaths: ["src/**/*.test.ts"] };
+    expect(
+      evaluatePullPolicy(policy, {
+        files: [{ path: "src/a.test.ts" }, { path: "src/deep/b.test.ts" }],
+      }),
+    ).toEqual([]);
+    expect(evaluatePullPolicy(policy, { files: [{ path: "src/a.ts" }] })[0]?.gate).toBe(
+      "allowed-paths",
+    );
+  });
+
+  it("blocks a coverage floor that was never measured", () => {
+    const violations = evaluatePullPolicy(
+      { minCoverageDelta: 1 },
+      { files: [{ path: "src/a.test.ts", coverage: { status: "not-measured" } }] },
+    );
+    expect(violations[0]).toMatchObject({ gate: "coverage-delta" });
+    expect(violations[0]?.message).toContain("not measured");
   });
 });

@@ -10,6 +10,7 @@ import type {
 } from "@edge-spec/core/types";
 import type { PullSummary } from "@edge-spec/core/github";
 import type { RunDecision, RunDetail, RunSummary } from "@edge-spec/core/history";
+import type { PullPolicy } from "@edge-spec/core/policy";
 import type { PullFile } from "@edge-spec/core/pr";
 import type { SkippedContractOperation } from "@edge-spec/core/provenance";
 import { getProject, requestHeaders, type Project, type Settings } from "./lib/settings";
@@ -202,6 +203,7 @@ export function openPullWithFiles(
   files: PullFile[],
   meta?: PullMeta,
   skipped?: SkippedContractOperation[],
+  policy?: PullPolicy,
 ): Promise<{ url: string; files: number }> {
   return apiJson<{ url: string; files: number }>("/api/pull-request", {
     method: "POST",
@@ -211,6 +213,7 @@ export function openPullWithFiles(
       strictTypes: settings.strictTypes,
       ...meta,
       ...(skipped && skipped.length > 0 ? { skipped } : {}),
+      ...(policy && Object.keys(policy).length > 0 ? { policy } : {}),
       files: files.map((file) => ({
         path: file.path,
         code: file.code,

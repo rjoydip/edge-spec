@@ -471,9 +471,10 @@ export function App() {
     if (active.localPath) {
       throw new Error("Pull requests need a GitHub repository.");
     }
+    const activeSettings = getSettings();
     const result = await openPullWithFiles(
       active,
-      getSettings(),
+      activeSettings,
       items.map((item) => ({
         sourcePath: item.generation.sourcePath,
         path: item.generation.testPath,
@@ -493,6 +494,7 @@ export function App() {
           path: result.path,
           reason: result.error ?? "skipped",
         })),
+      activeSettings.policy,
     );
     setPullUrls((current) => {
       const next = { ...current };

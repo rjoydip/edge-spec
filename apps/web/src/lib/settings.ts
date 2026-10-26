@@ -9,6 +9,7 @@ import {
   normalizeModel,
   providerById,
 } from "@edge-spec/core/catalog";
+import { parsePullPolicy, type PullPolicy } from "@edge-spec/core/policy";
 import { sandboxProvidersFor, type SandboxProviderId } from "@edge-spec/core/sandbox";
 import { isLocalDashboard, isLocalHost } from "./env";
 
@@ -32,6 +33,8 @@ export interface Settings {
   concurrency: number;
   /** Provider-reported tokens one run may spend. 0 means no cap. */
   maxTokens: number;
+  /** Pull-request gates. Stored locally; sent with the PR request, never a secret. */
+  policy: PullPolicy;
   /** A runner the visitor owns; it executes the suite. */
   sandboxUrl: string;
   /** Which driver the runner must use; `auto` asserts nothing. */
@@ -67,6 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxFiles: DEFAULT_PIPELINE.maxFiles,
   concurrency: DEFAULT_PIPELINE.concurrency,
   maxTokens: DEFAULT_PIPELINE.maxTokens,
+  policy: {},
   sandboxUrl: "",
   sandboxProvider: "auto",
   sandboxSetup: "",
@@ -170,6 +174,7 @@ function load(): Settings {
         2_000_000,
         Math.max(0, Math.round(pickNumber(parsed.maxTokens, DEFAULT_PIPELINE.maxTokens))),
       ),
+      policy: parsePullPolicy(parsed.policy),
       sandboxUrl: typeof parsed.sandboxUrl === "string" ? parsed.sandboxUrl : "",
       sandboxProvider: sandboxProvidersFor(isLocalDashboard() ? "local" : "deployed").some(
         (entry) => entry.id === parsed.sandboxProvider,

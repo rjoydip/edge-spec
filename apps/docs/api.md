@@ -511,6 +511,14 @@ Request:
     }
   ],
   "skipped": [{ "method": "GET", "path": "/users", "reason": "missing auth fixture" }],
+  "policy": {
+    "draftOnly": true,
+    "maxFiles": 10,
+    "allowedPaths": ["tests/**", "src/**/*.test.ts"],
+    "minCoverageDelta": 1,
+    "labels": ["tests"],
+    "reviewers": ["octocat"]
+  },
   "strictTypes": true
 }
 ```
@@ -539,7 +547,35 @@ Behaviour:
   Send `body` to replace it with your own copy.
 - Check output is never stored or echoed; only the check name, command,
   duration and outcome are used.
+- `policy` gates run before any branch or commit exists. A violation returns
+  `403` with `Policy blocked this pull request: <gate> — <reason>`. Gates are
+  kill switch, draft-only, max files, allowed test-path globs, and a measured
+  minimum coverage delta (unmeasured never satisfies it). Labels and reviewers
+  are applied after opening and never fail the pull request.
 - Requires a GitHub token with permission to push and open PRs.
+
+---
+
+## `GET | PUT | DELETE /api/policies?repo=owner/name`
+
+Opt-in server-side policy for CI (the same D1 database as run history). The
+dashboard keeps its own copy in `localStorage` and sends it per request, so this
+endpoint is for webhook runs.
+
+```json
+{
+  "draftOnly": true,
+  "maxFiles": 10,
+  "allowedPaths": ["tests/**"],
+  "minCoverageDelta": 1,
+  "labels": ["tests"],
+  "reviewers": ["octocat"]
+}
+```
+
+`GET` returns `{enabled, policy}`; `PUT` stores the sanitized policy; `DELETE`
+removes it. Without a `RUNS_DB` binding the routes answer `enabled: false` or 501. The webhook workflow reads this policy before creating a pull request and
+returns `status: "blocked"` with the gate reason when it fails.
 
 ---
 

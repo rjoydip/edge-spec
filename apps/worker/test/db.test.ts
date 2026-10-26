@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { deleteRunHistory, listRuns } from "../src/db";
+import { deleteRunHistory, getPolicy, listRuns, putPolicy } from "../src/db";
 import type { D1Database, D1PreparedStatement } from "../src/env";
 
 /** A D1 stand-in: records bound values and returns one prepared result set. */
@@ -71,6 +71,38 @@ describe("run history queries", () => {
     expect(runs[0]?.cost).toBeUndefined();
     // The limit is clamped before it reaches D1.
     expect(calls[0]?.values).toEqual(["acme/api", 50]);
+  });
+
+  it("round-trips a repository policy through D1", async () => {
+    let stored: string | undefined;
+    const db = {
+      prepare(sql: string) {
+        let values: unknown[] = [];
+        const statement: D1PreparedStatement = {
+          bind(...next: unknown[]) {
+            values = next;
+            return statement;
+          },
+          async first<T>(): Promise<T | null> {
+            return (stored ? { policy_json: stored } : null) as T | null;
+          },
+          async all<T>(): Promise<{ results?: T[] }> {
+            return { results: [] };
+          },
+          async run() {
+            if (sql.startsWith("INSERT")) stored = String(values[1]);
+            return {};
+          },
+        };
+        return statement;
+      },
+      async batch() {
+        return [];
+      },
+    } as D1Database;
+
+    await putPolicy(db, "acme/api", { killSwitch: true, maxFiles: 9 });
+    expect(await getPolicy(db, "acme/api")).toEqual({ killSwitch: true, maxFiles: 9 });
   });
 
   it("deletes run files and runs for one repository in one batch", async () => {

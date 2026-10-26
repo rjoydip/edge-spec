@@ -187,6 +187,28 @@ export class GitHub {
     return data.html_url;
   }
 
+  /** Applies repository policy labels after the pull request opens. */
+  async addLabels(repo: string, number: number, labels: readonly string[]): Promise<void> {
+    if (labels.length === 0) return;
+    await this.request(`/repos/${repo}/issues/${number}/labels`, {
+      method: "POST",
+      body: { labels },
+    });
+  }
+
+  /** Requests policy reviewers; GitHub ignores collaborators it cannot add. */
+  async requestReviewers(
+    repo: string,
+    number: number,
+    reviewers: readonly string[],
+  ): Promise<void> {
+    if (reviewers.length === 0) return;
+    await this.request(`/repos/${repo}/pulls/${number}/requested_reviewers`, {
+      method: "POST",
+      body: { reviewers },
+    });
+  }
+
   /** The first page of changed files: enough for an advisory changed-file scan. */
   async pullFiles(repo: string, number: number): Promise<string[]> {
     const data = await this.request<unknown>(`/repos/${repo}/pulls/${number}/files?per_page=100`);

@@ -7,6 +7,7 @@ import type {
   RunSummary,
   StoredCheck,
 } from "@edge-spec/core/history";
+import { parsePullPolicy, type PullPolicy } from "@edge-spec/core/policy";
 import type { CoverageDelta, ScanTotals } from "@edge-spec/core/types";
 import type { D1Database, Env } from "./env";
 
@@ -170,6 +171,32 @@ export async function deleteRunHistory(db: D1Database, repo: string): Promise<nu
     db.prepare("DELETE FROM runs WHERE repo = ?").bind(repo),
   ]);
   return Number(count?.count ?? 0);
+}
+
+/** The opt-in CI policy for one repository; absent means no gates. */
+export async function getPolicy(db: D1Database, repo: string): Promise<PullPolicy> {
+  const row = await db
+    .prepare("SELECT policy_json FROM policies WHERE repo = ?")
+    .bind(repo)
+    .first<{ policy_json: string }>();
+  return row ? parsePullPolicy(json(row.policy_json, {})) : {};
+}
+
+export async function putPolicy(
+  db: D1Database,
+  repo: string,
+  policy: PullPolicy,
+): Promise<PullPolicy> {
+  const parsed = parsePullPolicy(policy);
+  await db
+    .prepare("INSERT OR REPLACE INTO policies (repo, policy_json, updated_at) VALUES (?, ?, ?)")
+    .bind(repo, JSON.stringify(parsed), Date.now())
+    .run();
+  return parsed;
+}
+
+export async function deletePolicy(db: D1Database, repo: string): Promise<void> {
+  await db.prepare("DELETE FROM policies WHERE repo = ?").bind(repo).run();
 }
 
 /** Records the reviewer's decisions for files in one run. */
