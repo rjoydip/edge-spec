@@ -111,6 +111,14 @@ function fileCoverage(report: CoverageReport | undefined, path: string): Coverag
   });
 }
 
+/** The measured record for one file, or `undefined` when absent. */
+export function coverageForFile(
+  report: CoverageReport | undefined,
+  path: string,
+): CoverageFile | undefined {
+  return fileCoverage(report, path);
+}
+
 /**
  * The per-file change between two executed reports. A delta exists only when
  * both reports measured the file; missing data is "not measured", never zero.

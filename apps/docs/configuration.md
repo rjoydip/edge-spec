@@ -458,7 +458,8 @@ persisted). The installation id is not a secret and is passed instead.
 2. Payload URL: `https://<worker>/webhook`.
 3. Content type: `application/json`.
 4. Secret: the same value as `GITHUB_WEBHOOK_SECRET`.
-5. Events: **push** and **pull request** (`opened`, `synchronize`, `reopened`).
+5. Events: **push**, **pull request** (`opened`, `synchronize`, `reopened`), and
+   **issue comments** (for `/edgespec retest|coverage|explain`).
 6. Use the GitHub App installation, or ensure `GITHUB_TOKEN` can write to the
    repository, and keep Workers AI bound.
 

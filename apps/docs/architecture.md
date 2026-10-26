@@ -123,6 +123,9 @@ GitHub ── POST /webhook ──▶ verify HMAC (if GITHUB_WEBHOOK_SECRET is s
                             push:          binding.create({ repo, ref, event:"push" })
                             pull_request:  binding.create({ repo, ref:headSha,
                                             pullRequest, event:"pull_request" })
+                            issue_comment: authorize association, parse /edgespec,
+                                           rate limit, then binding.create({
+                                             pullRequest, event:"pr_command", command })
                                                           → 202 { workflowId }
 Workflow · push
   scan-repository     tree, first gap, source          (durable step)
@@ -136,6 +139,13 @@ Workflow · pull_request (advisory)
   scan-changed        changed sources without tests
   run-affected-tests  existing tests, only with a runner
   publish-check       upsert one check run + one marked comment
+
+Workflow · pr_command (authorized /edgespec comment)
+  resolve-pull        head commit
+  changed-files       first page of PR files
+  scan-changed        changed sources and their tests
+  retest|coverage|explain
+  publish-command     one reply + the same EdgeSpec check upserted
 ```
 
 Workflow parameters are persisted by Cloudflare. Therefore the workflow:

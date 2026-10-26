@@ -631,6 +631,17 @@ adding more. It never commits, generates a test, or opens a PR. Changed-file
 scope only: import-graph dependents are not analyzed yet. Without a runner the
 check is `neutral` and its annotations say static only.
 
+`issue_comment` events support three commands in a pull request comment:
+`/edgespec retest`, `/edgespec coverage`, and `/edgespec explain <file|METHOD
+/path>`. Only `OWNER`, `MEMBER` and `COLLABORATOR` comments are accepted; bots
+and outsiders are ignored. One command per user, pull request and command is
+accepted per 60-second window (D1 when configured, per-isolate otherwise). Each
+accepted command posts exactly one reply and upserts the same EdgeSpec check.
+`retest` re-runs the changed files' existing tests, `coverage` reports measured
+LCOV line rates from one run (never a delta), and `explain` answers from the
+tree, scanner and OpenAPI spec without spending AI. Missing arguments or
+unrelated comments are ignored with 202.
+
 The workflow uses the deployment's Workers AI binding and never receives
 visitor keys. Missing bindings return 501; no credential returns a failed run
 with a readable error.

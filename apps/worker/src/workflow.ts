@@ -9,8 +9,10 @@ import { generateTest } from "@edge-spec/core/ai";
 import { DEFAULT_AI, pipelineConfig, providerById } from "@edge-spec/core/catalog";
 import { GitHub } from "@edge-spec/core/github";
 import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github-app";
-import { buildPrCheck } from "@edge-spec/core/pr-check";
-import { classifyTree, findGaps } from "@edge-spec/core/scanner";
+import { coverageForFile } from "@edge-spec/core/coverage";
+import { contractPathFor } from "@edge-spec/core/openapi";
+import { buildPrCheck, type PrCheckResult } from "@edge-spec/core/pr-check";
+import { classifyTree, findGaps, isSourceFile, parseOpenApiSpec } from "@edge-spec/core/scanner";
 import {
   assertTestOnly,
   evaluatePullPolicy,
@@ -28,11 +30,18 @@ export interface WorkflowParams {
   ref: string;
   /** From the webhook payload. Not a secret, so it may be persisted. */
   installationId?: number;
-  /** `push` generates and may open a PR; `pull_request` only publishes a check. */
-  event?: "push" | "pull_request";
+  /** `push` generates, `pull_request` checks, `pr_command` answers a comment. */
+  event?: "push" | "pull_request" | "pr_command";
   pullRequest?: number;
   /** The PR head commit the check annotates. */
   headSha?: string;
+  /** Parsed `/edgespec …` command. Never contains a secret. */
+  command?: {
+    name: "retest" | "coverage" | "explain";
+    argument?: string;
+    commentId?: number;
+    login?: string;
+  };
   provider?: string;
   model?: string;
   maxRetries?: number;
@@ -56,6 +65,71 @@ interface Scanned {
 }
 
 export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
+  /** Classifies the changed paths once; used by both checks and commands. */
+  private async scanChanged(input: {
+    github: GitHub;
+    repo: string;
+    ref: string;
+    changed: string[];
+    step: WorkflowStep;
+  }) {
+    return input.step.do("scan-changed", async () => {
+      const tree = await input.github.tree(input.repo, input.ref);
+      const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
+      const classification = classifyTree(blobs);
+      const changedSet = new Set(input.changed);
+      const gaps = classification.missing.filter((gap) => changedSet.has(gap.path));
+      const affected = new Set<string>();
+      for (const path of input.changed) {
+        if (/\.(test|spec)\.[cm]?[jt]sx?$/i.test(path)) affected.add(path);
+        for (const test of classification.testsBySource.get(path) ?? []) affected.add(test);
+      }
+      return {
+        gaps,
+        affectedTests: [...affected],
+        sources: input.changed.filter(isSourceFile),
+        testsBySource: input.changed.map((path) => ({
+          path,
+          tests: classification.testsBySource.get(path) ?? [],
+        })),
+      };
+    });
+  }
+
+  /** Runs the changed files' existing tests, when a runner exists. */
+  private async runAffected(input: {
+    repo: string;
+    ref: string;
+    tests: string[];
+    step: WorkflowStep;
+    coverage?: boolean;
+  }) {
+    const runnerUrl = this.env.SANDBOX_RUNNER_URL?.trim();
+    if (!runnerUrl || input.tests.length === 0) return undefined;
+    return input.step.do(input.coverage ? "run-coverage-tests" : "run-affected-tests", async () => {
+      const started = Date.now();
+      const sandbox = {
+        url: runnerUrl,
+        v2: true,
+        ...(this.env.SANDBOX_API_KEY ? { apiKey: this.env.SANDBOX_API_KEY } : {}),
+      };
+      const repoArg = sandboxRepo({ repo: input.repo, ref: input.ref, sandbox });
+      const run = await runInSandbox({
+        sandbox,
+        ...(repoArg ? { repo: repoArg } : {}),
+        command: `bun test ${input.tests.map(shellWord).join(" ")}`,
+        ...(input.coverage ? { coverage: { format: "lcov" as const } } : {}),
+      });
+      return {
+        ok: run.ok,
+        output: run.output,
+        durationMs: Date.now() - started,
+        executed: !run.unreachable && !run.environmentError,
+        ...(run.coverage ? { coverage: run.coverage } : {}),
+      };
+    });
+  }
+
   /**
    * Advisory PR check. Changed files only (the import graph is not built yet):
    * report changed sources without tests, run their existing tests when a
@@ -72,50 +146,25 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       input.github.pullFiles(input.repo, input.number),
     );
 
-    const scan = await input.step.do("scan-changed", async () => {
-      const tree = await input.github.tree(input.repo, input.ref);
-      const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
-      const classification = classifyTree(blobs);
-      const changedSet = new Set(changed);
-      const gaps = classification.missing.filter((gap) => changedSet.has(gap.path));
-      const affected = new Set<string>();
-      for (const path of changed) {
-        if (/\.(test|spec)\.[cm]?[jt]sx?$/i.test(path)) affected.add(path);
-        for (const test of classification.testsBySource.get(path) ?? []) affected.add(test);
-      }
-      return { gaps, affectedTests: [...affected], scanned: blobs.length };
+    const scan = await this.scanChanged({
+      github: input.github,
+      repo: input.repo,
+      ref: input.ref,
+      changed,
+      step: input.step,
     });
-
-    const runnerUrl = this.env.SANDBOX_RUNNER_URL?.trim();
-    const testRun =
-      runnerUrl && scan.affectedTests.length > 0
-        ? await input.step.do("run-affected-tests", async () => {
-            const started = Date.now();
-            const sandbox = {
-              url: runnerUrl,
-              v2: true,
-              ...(this.env.SANDBOX_API_KEY ? { apiKey: this.env.SANDBOX_API_KEY } : {}),
-            };
-            const repoArg = sandboxRepo({ repo: input.repo, ref: input.ref, sandbox });
-            const run = await runInSandbox({
-              sandbox,
-              ...(repoArg ? { repo: repoArg } : {}),
-              command: `bun test ${scan.affectedTests.map(shellWord).join(" ")}`,
-            });
-            return {
-              ok: run.ok,
-              output: run.output,
-              durationMs: Date.now() - started,
-              executed: !run.unreachable && !run.environmentError,
-            };
-          })
-        : undefined;
+    const testRun = await this.runAffected({
+      repo: input.repo,
+      ref: input.ref,
+      tests: scan.affectedTests,
+      step: input.step,
+    });
 
     const check = buildPrCheck({
       changedFiles: changed,
       gaps: scan.gaps,
       affectedTests: scan.affectedTests,
-      runner: Boolean(runnerUrl) && (!testRun || testRun.executed),
+      runner: Boolean(this.env.SANDBOX_RUNNER_URL?.trim()) && (!testRun || testRun.executed),
       ...(testRun ? { testRun } : {}),
     });
 
@@ -138,6 +187,239 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
     };
   }
 
+  /** Answers one authorized `/edgespec` comment: one reply, one updated check. */
+  private async runCommand(input: {
+    github: GitHub;
+    repo: string;
+    number: number;
+    command: NonNullable<WorkflowParams["command"]>;
+    step: WorkflowStep;
+  }) {
+    const pull = await input.step.do("resolve-pull", () =>
+      input.github.pullHead(input.repo, input.number),
+    );
+    const changed = await input.step.do("changed-files", () =>
+      input.github.pullFiles(input.repo, input.number),
+    );
+    const scan = await this.scanChanged({
+      github: input.github,
+      repo: input.repo,
+      ref: pull.sha,
+      changed,
+      step: input.step,
+    });
+
+    let check: PrCheckResult;
+    if (input.command.name === "retest") {
+      const testRun = await this.runAffected({
+        repo: input.repo,
+        ref: pull.sha,
+        tests: scan.affectedTests,
+        step: input.step,
+      });
+      check = buildPrCheck({
+        changedFiles: changed,
+        gaps: scan.gaps,
+        affectedTests: scan.affectedTests,
+        runner: Boolean(this.env.SANDBOX_RUNNER_URL?.trim()) && (!testRun || testRun.executed),
+        ...(testRun ? { testRun } : {}),
+      });
+    } else if (input.command.name === "coverage") {
+      const testRun = await this.runAffected({
+        repo: input.repo,
+        ref: pull.sha,
+        tests: scan.affectedTests,
+        step: input.step,
+        coverage: true,
+      });
+      const lines: string[] = [];
+      if (!this.env.SANDBOX_RUNNER_URL?.trim()) {
+        lines.push("- Not measured: no runner is configured.");
+      } else if (!testRun) {
+        lines.push("- No affected test file was found for the changed sources.");
+      } else if (!testRun.executed) {
+        lines.push("- Not measured: the runner could not execute the tests.");
+      } else if (!testRun.coverage) {
+        lines.push("- Not measured: the runner returned no LCOV report.");
+      } else {
+        for (const path of scan.sources) {
+          const file = coverageForFile(testRun.coverage, path);
+          if (!file) {
+            lines.push(`- \`${path}\`: not in the LCOV report.`);
+            continue;
+          }
+          const rate =
+            file.lines.total > 0 ? Math.round((file.lines.covered / file.lines.total) * 100) : 100;
+          const branches = file.branches
+            ? ` · branches ${file.branches.covered}/${file.branches.total}`
+            : "";
+          lines.push(
+            `- \`${path}\`: ${file.lines.covered}/${file.lines.total} lines (${rate}%)${branches}.`,
+          );
+        }
+        if (scan.sources.length === 0) lines.push("- No changed source file to measure.");
+      }
+      const summary = [
+        "## EdgeSpec coverage",
+        "",
+        ...lines,
+        "",
+        "One measured report from the changed files' existing tests. This is not a delta.",
+      ].join("\n");
+      check = {
+        conclusion: "neutral",
+        output: { title: "EdgeSpec · coverage", summary, annotations: [] },
+        comment: summary,
+      };
+    } else {
+      const summary = await this.explainCommand({
+        github: input.github,
+        repo: input.repo,
+        ref: pull.sha,
+        argument: input.command.argument ?? "",
+        scan,
+        step: input.step,
+      });
+      check = {
+        conclusion: "neutral",
+        output: { title: "EdgeSpec · explain", summary, annotations: [] },
+        comment: summary,
+      };
+    }
+
+    await input.step.do("publish-command", async () => {
+      const checkId = await input.github.upsertCheck(input.repo, pull.sha, check);
+      const commentId = await input.github.commentOnPull(
+        input.repo,
+        input.number,
+        `${check.output.summary}\n\n<!-- edgespec:command -->`,
+      );
+      return { checkId, commentId };
+    });
+
+    return {
+      status: "command",
+      command: input.command.name,
+      conclusion: check.conclusion,
+    };
+  }
+
+  /** Deterministic file or OpenAPI explanation; no AI is spent. */
+  private async explainCommand(input: {
+    github: GitHub;
+    repo: string;
+    ref: string;
+    argument: string;
+    scan: {
+      gaps: Array<{ path: string; testPath: string; risk: string; reason: string }>;
+      sources: string[];
+    };
+    step: WorkflowStep;
+  }): Promise<string> {
+    const target = input.argument.trim();
+    const endpoint = /^([A-Za-z]+)\s+(\/\S*)$/.exec(target);
+    const tree = await input.step.do("explain-tree", async () => {
+      const list = await input.github.tree(input.repo, input.ref);
+      return list.filter((entry) => entry.type === "blob").map((entry) => entry.path);
+    });
+
+    if (endpoint) {
+      const method = (endpoint[1] ?? "").toUpperCase();
+      const path = endpoint[2] ?? "";
+      const specs = tree.filter((item) =>
+        /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i.test(item),
+      );
+      let found:
+        | {
+            specPath: string;
+            title?: string;
+            responses?: string[];
+            parameters?: Array<{ name?: string; in?: string; required?: boolean }>;
+          }
+        | undefined;
+      for (const specPath of specs.slice(0, 4)) {
+        try {
+          const spec = parseOpenApiSpec(
+            await input.github.file(input.repo, specPath, input.ref),
+            specPath,
+          );
+          const operation = spec?.endpoints.find(
+            (item) => item.method.toUpperCase() === method && item.path === path,
+          );
+          if (spec && operation) {
+            found = {
+              specPath,
+              ...(spec.title ? { title: spec.title } : {}),
+              ...(operation.responses ? { responses: operation.responses } : {}),
+              ...(operation.parameters
+                ? {
+                    parameters: operation.parameters.map((parameter) => ({
+                      name: parameter.name,
+                      in: parameter.in,
+                      required: parameter.required === true,
+                    })),
+                  }
+                : {}),
+            };
+            break;
+          }
+        } catch {
+          // A spec we cannot parse is a spec we cannot explain.
+        }
+      }
+      if (!found) {
+        return `## EdgeSpec explain · ${method} ${path}\n\nNo OpenAPI operation with this method and path was found in this commit.`;
+      }
+      const parameters = found.parameters?.length
+        ? found.parameters
+            .map(
+              (parameter) =>
+                `${parameter.name} (${parameter.in}${parameter.required ? ", required" : ""})`,
+            )
+            .join(", ")
+        : "none";
+      return [
+        `## EdgeSpec explain · ${method} ${path}`,
+        "",
+        `- Spec: \`${found.specPath}\`${found.title ? ` (${found.title})` : ""}.`,
+        `- Contract test: \`${contractPathFor(found.specPath)}\` when the spec is in scope.`,
+        `- Responses: ${found.responses?.join(", ") || "not documented"}.`,
+        `- Parameters: ${parameters}.`,
+      ].join("\n");
+    }
+
+    const path = target.replace(/^`|`$/g, "").replace(/^\.\//, "");
+    if (!tree.includes(path)) {
+      return `## EdgeSpec explain · \`${path}\`\n\nNo file with this path exists in this commit.`;
+    }
+    const gap = input.scan.gaps.find((item) => item.path === path);
+    if (gap) {
+      return [
+        `## EdgeSpec explain · \`${path}\``,
+        "",
+        `- No test found. Expected \`${gap.testPath}\`.`,
+        `- Risk: ${gap.risk}.`,
+        `- Reason: ${gap.reason}`,
+        "- This is a path heuristic, not a measured coverage number.",
+      ].join("\n");
+    }
+    const tests = tree.filter((item) =>
+      new RegExp(
+        `(^|/)${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\.(ts|tsx|js|jsx)$/i, "")}\\.(test|spec)\\.[cm]?[jt]sx?$`,
+        "i",
+      ).test(item),
+    );
+    if (tests.length > 0) {
+      return [
+        `## EdgeSpec explain · \`${path}\``,
+        "",
+        `- Existing tests: ${tests.map((test) => `\`${test}\``).join(", ")}.`,
+        "- No missing-test gap was recorded for this changed file.",
+      ].join("\n");
+    }
+    return `## EdgeSpec explain · \`${path}\`\n\nThis path is not a changed source with a missing test in this commit.`;
+  }
+
   async run(event: WorkflowEvent<WorkflowParams>, step: WorkflowStep) {
     const params = event.payload;
     const repo = params.repo;
@@ -153,6 +435,16 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       );
     }
     const github = new GitHub(token);
+
+    if (params.event === "pr_command" && params.pullRequest && params.command) {
+      return this.runCommand({
+        github,
+        repo,
+        number: params.pullRequest,
+        command: params.command,
+        step,
+      });
+    }
 
     // A pull request is a read-only check: no generation, no branch, no PR.
     if (params.event === "pull_request" && params.pullRequest) {

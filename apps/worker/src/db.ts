@@ -199,6 +199,35 @@ export async function deletePolicy(db: D1Database, repo: string): Promise<void> 
   await db.prepare("DELETE FROM policies WHERE repo = ?").bind(repo).run();
 }
 
+/**
+ * One command per user/PR/command per window. The row is small and old rows
+ * are harmless; there is no unbounded event log here.
+ */
+export async function claimPrCommand(
+  db: D1Database,
+  repo: string,
+  pull: number,
+  login: string,
+  command: string,
+  windowMs = 60_000,
+  now = Date.now(),
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      "SELECT started_at FROM pr_commands WHERE repo = ? AND pull = ? AND login = ? AND command = ?",
+    )
+    .bind(repo, pull, login, command)
+    .first<{ started_at: number }>();
+  if (row && now - row.started_at < windowMs) return false;
+  await db
+    .prepare(
+      "INSERT OR REPLACE INTO pr_commands (repo, pull, login, command, started_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(repo, pull, login, command, now)
+    .run();
+  return true;
+}
+
 /** Records the reviewer's decisions for files in one run. */
 export async function setRunDecisions(
   db: D1Database,

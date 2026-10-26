@@ -209,6 +209,16 @@ export class GitHub {
     });
   }
 
+  /** The head commit and branch of a pull request, for command checks. */
+  async pullHead(repo: string, number: number): Promise<{ sha: string; ref: string }> {
+    const data = await this.request<{ head?: { sha?: string; ref?: string } }>(
+      `/repos/${repo}/pulls/${number}`,
+    );
+    const sha = data.head?.sha;
+    if (!sha) throw new HttpError(502, `Could not resolve the head of pull request ${number}.`);
+    return { sha, ref: data.head?.ref ?? sha };
+  }
+
   /** The first page of changed files: enough for an advisory changed-file scan. */
   async pullFiles(repo: string, number: number): Promise<string[]> {
     const data = await this.request<unknown>(`/repos/${repo}/pulls/${number}/files?per_page=100`);
@@ -240,6 +250,15 @@ export class GitHub {
       method: "POST",
       body: { ...body, head_sha: ref },
     });
+    return typeof created.id === "number" ? created.id : 0;
+  }
+
+  /** Posts one reply for a command invocation. */
+  async commentOnPull(repo: string, number: number, body: string): Promise<number> {
+    const created = await this.request<{ id?: number }>(
+      `/repos/${repo}/issues/${number}/comments`,
+      { method: "POST", body: { body } },
+    );
     return typeof created.id === "number" ? created.id : 0;
   }
 

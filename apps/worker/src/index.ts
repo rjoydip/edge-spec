@@ -24,6 +24,7 @@ import {
   validBranchName,
 } from "@edge-spec/core/pr";
 import { pullRequestBody } from "@edge-spec/core/provenance";
+import { authorizedCommenter, parsePrCommand } from "@edge-spec/core/pr-command";
 import { assertTestOnly } from "@edge-spec/core/policy";
 import {
   classifyTree,
@@ -58,6 +59,7 @@ import {
 } from "@edge-spec/core/types";
 import type { Env } from "./env";
 import {
+  claimPrCommand,
   createRun,
   deletePolicy,
   deleteRunHistory,
@@ -122,6 +124,21 @@ function retestOperationsOf(value: unknown): RetestOperation[] {
     operations.push({ specPath, method, path });
   }
   return operations;
+}
+
+/** In-memory fallback when D1 is not configured; per isolate, best effort. */
+const recentCommands = new Map<string, number>();
+function allowCommandInMemory(key: string, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const last = recentCommands.get(key);
+  if (last !== undefined && now - last < windowMs) return false;
+  recentCommands.set(key, now);
+  if (recentCommands.size > 1_000) {
+    for (const [entry, at] of recentCommands) {
+      if (now - at >= windowMs) recentCommands.delete(entry);
+    }
+  }
+  return true;
 }
 
 /** A failed attempt the client sends back to the self-correction loop. */
@@ -949,6 +966,52 @@ app.post("/webhook", async (c) => {
     const binding = c.env.TEST_GENERATION_WORKFLOW;
     if (!binding) throw new HttpError(501, "Workflows are not bound on this deployment.");
     const installation = useApp ? { installationId } : {};
+
+    if (c.req.header("x-github-event") === "issue_comment") {
+      if (str(payload.action) !== "created") {
+        return c.json({ ignored: str(payload.action) ?? "action" }, 202);
+      }
+      const issue = asRecord(payload.issue);
+      if (!issue.pull_request) return c.json({ ignored: "not a pull request" }, 202);
+      const comment = asRecord(payload.comment);
+      const command = parsePrCommand(str(comment.body) ?? "");
+      if (!command) return c.json({ ignored: "not a command" }, 202);
+      const user = asRecord(comment.user);
+      const login = str(user.login) ?? "";
+      if (
+        !login ||
+        !authorizedCommenter({
+          association: str(comment.author_association),
+          userType: str(user.type),
+        })
+      ) {
+        return c.json({ ignored: "unauthorized" }, 202);
+      }
+      const number = Number(issue.number);
+      if (!Number.isInteger(number) || number <= 0) {
+        return c.json({ ignored: "no pull request" }, 202);
+      }
+      const db = runsDb(c.env);
+      const allowed = db
+        ? await claimPrCommand(db, repo, number, login, command.name)
+        : allowCommandInMemory(`${repo}#${number}:${login}:${command.name}`);
+      if (!allowed) return c.json({ ignored: "rate limited" }, 202);
+      const instance = await binding.create({
+        params: {
+          repo,
+          ref: "main",
+          pullRequest: number,
+          event: "pr_command",
+          command: {
+            ...command,
+            commentId: Number(comment.id) || 0,
+            login,
+          },
+          ...installation,
+        },
+      });
+      return c.json({ workflowId: instance.id }, 202);
+    }
 
     if (c.req.header("x-github-event") === "pull_request") {
       const action = str(payload.action);

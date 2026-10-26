@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { deleteRunHistory, getPolicy, listRuns, putPolicy } from "../src/db";
+import { claimPrCommand, deleteRunHistory, getPolicy, listRuns, putPolicy } from "../src/db";
 import type { D1Database, D1PreparedStatement } from "../src/env";
 
 /** A D1 stand-in: records bound values and returns one prepared result set. */
@@ -103,6 +103,39 @@ describe("run history queries", () => {
 
     await putPolicy(db, "acme/api", { killSwitch: true, maxFiles: 9 });
     expect(await getPolicy(db, "acme/api")).toEqual({ killSwitch: true, maxFiles: 9 });
+  });
+
+  it("rate limits one command per user and window", async () => {
+    let started: number | undefined;
+    const db = {
+      prepare() {
+        let values: unknown[] = [];
+        const statement: D1PreparedStatement = {
+          bind(...next: unknown[]) {
+            values = next;
+            return statement;
+          },
+          async first<T>(): Promise<T | null> {
+            return (started === undefined ? null : { started_at: started }) as T | null;
+          },
+          async all<T>(): Promise<{ results?: T[] }> {
+            return { results: [] };
+          },
+          async run() {
+            started = Number(values[4]);
+            return {};
+          },
+        };
+        return statement;
+      },
+      async batch() {
+        return [];
+      },
+    } as D1Database;
+
+    expect(await claimPrCommand(db, "acme/api", 1, "alice", "retest", 60_000, 1_000)).toBe(true);
+    expect(await claimPrCommand(db, "acme/api", 1, "alice", "retest", 60_000, 30_000)).toBe(false);
+    expect(await claimPrCommand(db, "acme/api", 1, "alice", "retest", 60_000, 62_000)).toBe(true);
   });
 
   it("deletes run files and runs for one repository in one batch", async () => {
