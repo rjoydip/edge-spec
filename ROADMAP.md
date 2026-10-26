@@ -1,10 +1,11 @@
 # EdgeSpec — Feature Roadmap
 
 A feature plan grounded in what the repository already does today: a Worker that
-scans a repo, finds untested units and API contract gaps, writes `bun:test`
-files with the user's model, validates them (runner optional), self-corrects,
-and opens a pull request. The CLI and MCP server are API clients. The sandbox
-package runs suites locally or in hosted drivers.
+scans a repo, finds untested units and API contract gaps, writes tests in the
+repository's own runner (Bun, Vitest, Jest or Playwright), validates them
+(runner optional), self-corrects, and opens a pull request. The CLI and MCP
+server are API clients. The sandbox package runs suites locally or in hosted
+drivers.
 
 The plan is deliberately conservative about claims: every feature below either
 measures something it actually ran, or says "not measured".
@@ -23,40 +24,41 @@ measures something it actually ran, or says "not measured".
 
 ## 1. Where the product is today
 
-| Capability                                                   | Status                                                         |
-| ------------------------------------------------------------ | -------------------------------------------------------------- |
-| Scanner + AST/file tree, missing/coverage/API gaps           | Shipped (`core/scanner`)                                       |
-| LCOV parsing                                                 | Shipped (`core/coverage`), used for reporting only             |
-| OpenAPI parsing, deterministic contract tests, JUnit parsing | Shipped (`core/openapi`)                                       |
-| Streaming pipeline, bounded pool, self-correction            | Shipped (`core/pipeline`, SSE `/api/run`)                      |
-| Single-file generate                                         | Shipped (`/api/generate`)                                      |
-| Sandbox drivers (bwrap/Docker/Podman/E2B/Vercel/Daytona)     | Shipped (`packages/sandbox`)                                   |
-| PR creation with selected files                              | Shipped (`/api/pull-request`)                                  |
-| Durable workflow + webhook                                   | Shipped (`/webhook` → `TestGenerationWorkflow`)                |
-| CLI (`scan`, `generate`, `run`, `catalog`)                   | Shipped                                                        |
-| MCP stdio server (6 tools, 4 resources)                      | Shipped                                                        |
-| Dashboard                                                    | Redesign draft at `/?draft`; fixtures, not yet wired to events |
-| Persistence                                                  | Optional D1 for run history (`RUNS_DB`); settings stay local   |
-| Auth                                                         | User PATs for dashboard; optional GitHub App for CI            |
-| Run history                                                  | Shipped (`/api/runs`, History/Compare)                         |
-| Policies                                                     | Shipped (dashboard + optional D1, enforced in both PR paths)   |
-| Scheduled drift                                              | Shipped (daily cron, webhook summary, optional R2 artifacts)   |
-| Backlog                                                      | Shipped (D1 items, CODEOWNERS owner, dashboard states)         |
-| Import graph / impact                                        | Shipped (bounded test graph, PR checks + `/api/impact`)        |
-| Flaky detection                                              | Shipped (repeats, quarantined, never verified)                 |
-| Mutation score                                               | Shipped (opt-in Stryker report, budget stop labelled)          |
-| Contract negatives / auth fixtures                           | Shipped (env-only fixtures, missing/wrong/unauthorized cases)  |
-| Record/replay API fixtures                                   | Shipped (`/api/record`, in-test mock replay, no live app)      |
-| Property-based tests                                         | Shipped (opt-in fast-check, labelled/seeded/bounded)           |
-| Test runner adapters                                         | Shipped (Bun/Vitest/Jest/Playwright detected per repo)         |
-| Repository memory / prompt version                           | Shipped (opt-in D1 strings, prompt version stamped)            |
-| Eval harness / model routing                                 | Shipped (golden cases, outcome scores, opt-in cheap-first)     |
-| Watch mode                                                   | Shipped (`edgespec watch`; VS Code extension not built)        |
-| MCP resources / approvals                                    | Shipped (4 resources, one-time PR approval token)              |
-| Team workspaces / audit / retention                          | Shipped (single workspace, redacted audit, daily purge)        |
+| Capability                                                   | Status                                                                                                           |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Scanner + AST/file tree, missing/coverage/API gaps           | Shipped (`core/scanner`)                                                                                         |
+| LCOV parsing                                                 | Shipped (`core/coverage`), used for reporting only                                                               |
+| OpenAPI parsing, deterministic contract tests, JUnit parsing | Shipped (`core/openapi`)                                                                                         |
+| Streaming pipeline, bounded pool, self-correction            | Shipped (`core/pipeline`, SSE `/api/run`)                                                                        |
+| Single-file generate                                         | Shipped (`/api/generate`)                                                                                        |
+| Sandbox drivers (bwrap/Docker/Podman/E2B/Vercel/Daytona)     | Shipped (`packages/sandbox`)                                                                                     |
+| PR creation with selected files                              | Shipped (`/api/pull-request`)                                                                                    |
+| Durable workflow + webhook                                   | Shipped (`/webhook` → `TestGenerationWorkflow`)                                                                  |
+| CLI (`scan`, `generate`, `run`, `watch`, `catalog`)          | Shipped                                                                                                          |
+| MCP stdio server (6 tools, 4 resource templates)             | Shipped                                                                                                          |
+| Dashboard                                                    | Shipped (event-driven workspace; History and Backlog dialogs)                                                    |
+| Persistence                                                  | Optional D1 (`RUNS_DB`) for runs, backlog, memory, schedules, policies, workspace and audit; settings stay local |
+| Auth                                                         | User PATs for dashboard; optional GitHub App for CI                                                              |
+| Run history                                                  | Shipped (`/api/runs`, History/Compare)                                                                           |
+| Policies                                                     | Shipped (dashboard + optional D1, enforced in both PR paths)                                                     |
+| Scheduled drift                                              | Shipped (daily cron, webhook summary, optional R2 artifacts)                                                     |
+| Backlog                                                      | Shipped (D1 items, CODEOWNERS owner, dashboard states)                                                           |
+| Import graph / impact                                        | Shipped (bounded test graph, PR checks + `/api/impact`)                                                          |
+| Flaky detection                                              | Shipped (repeats, quarantined, never verified)                                                                   |
+| Mutation score                                               | Shipped (opt-in Stryker report, budget stop labelled)                                                            |
+| Contract negatives / auth fixtures                           | Shipped (env-only fixtures, missing/wrong/unauthorized cases)                                                    |
+| Record/replay API fixtures                                   | Shipped (`/api/record`, in-test mock replay, no live app)                                                        |
+| Property-based tests                                         | Shipped (opt-in fast-check, labelled/seeded/bounded)                                                             |
+| Test runner adapters                                         | Shipped (Bun/Vitest/Jest/Playwright detected per repo)                                                           |
+| Repository memory / prompt version                           | Shipped (opt-in D1 strings, prompt version stamped)                                                              |
+| Eval harness / model routing                                 | Shipped (golden cases, outcome scores, opt-in cheap-first)                                                       |
+| Watch mode                                                   | Shipped (`edgespec watch`; VS Code extension not built)                                                          |
+| MCP resources / approvals                                    | Shipped (4 resources, one-time PR approval token)                                                                |
+| Team workspaces / audit / retention                          | Shipped (single workspace, redacted audit, daily purge)                                                          |
 
-The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run
-database. That is the largest structural gap.
+The `/api/runs/:id` route reads Cloudflare Workflow status; optional D1 stores
+run history, decisions, backlog, memory, schedules, policies, workspace settings
+and the audit log. Remaining gaps are tracked in `TASKS.md`.
 
 ## 2. Design constraints (these shape every feature)
 
@@ -108,13 +110,18 @@ dev. "Runner" means a working sandbox.
 
 ## 4. Detailed features
 
+Every numbered feature in this section has shipped. The paragraphs keep the
+original acceptance criteria as the definition of done; deviations and
+follow-ups live in `TASKS.md`.
+
 ### Phase 0 — Finish the shell
 
 **0.1 Wire the redesign to real events.**
 Replace the fixtures with `RunEvent`s: `apiResults` state, stage counters, real
 logs, review decisions, editable PR fields, settings that drive the request.
-Delete `apps/web/src/draft` once parity is reached. Acceptance: every number in
-the dashboard comes from an event or a scan result; no static fixture remains.
+The `draft` fixtures were removed when parity was reached. Acceptance: every
+number in the dashboard comes from an event or a scan result; no static fixture
+remains.
 
 ### Phase 1 — Trust and measurement
 
@@ -236,8 +243,9 @@ Commands are authorized by the commenter's repo permission and rate-limited.
 
 **2.5 Scheduled drift scans and notifications.**
 Weekly (configurable) scans that detect new untested files and contract drift
-since the last run; open a draft PR only when the policy allows. Notify Slack,
-email, or a webhook. Store artifacts (JUnit, LCOV, logs) in R2 with retention.
+since the last run. Shipped as notification-only: a summary to a Slack-
+compatible webhook plus optional R2 artifacts. Opening a draft PR, email
+delivery and R2 retention remain in `TASKS.md`.
 
 - Acceptance: a quiet repo produces "no drift" and no PR; a drifted repo
   produces one actionable summary.
@@ -304,66 +312,91 @@ run a bounded number of cases. Keep it opt-in because flakiness/cost is real.
 
 **4.1 Runner adapters.** Support vitest/jest/playwright conventions as
 first-class, detected per repo, not bolted onto `bun:test`. The PR uses the
-repo's runner and assertions.
+repo's runner and assertions. Shipped: the detected runner supplies the import
+style, assertions and command.
 
 **4.2 Repo memory.** Persist accepted conventions, helpers, fixtures, and
 naming per repo (opt-in, no source retention beyond chosen snippets) and feed
 them into future prompts. Version the prompt so results are attributable.
+Shipped as opt-in D1 strings with a prompt version stamp.
 
 **4.3 Eval harness and routing.** Golden repos with expected gaps and outcomes;
 score providers/models on verified rate, acceptance, cost, and flake rate. Route
 cheap models to simple files and strong models to failures; fall back on quota.
+Shipped as `evals/` with opt-in cheap-first routing.
 
 **4.4 VS Code extension and watch mode.** Scan the open workspace, preview
 diffs, apply or reject locally, and run the local sandbox. `edgespec watch`
-regenerates tests for changed files before commit.
+regenerates tests for changed files before commit. Shipped as the CLI watch
+mode; the VS Code extension is still open in `TASKS.md`.
 
 **4.5 MCP resources and approvals.** Expose gaps, specs, coverage, and run
 status as MCP resources; require explicit approval before a tool opens a PR.
+Shipped as four read-only resource templates and a one-time approval token.
 
 **4.6 Team workspaces.** Shared policies, backlog, and history; audit log for
 autonomous actions; retention controls; no secrets. This intentionally relaxes
 "the deployment stores no user configuration": policies are workspace data,
-not keys, and are opt-in.
+not keys, and are opt-in. Shipped as one lazy `default` workspace per
+deployment (name, retention, redacted audit, daily purge). Multi-user
+membership and roles remain in `TASKS.md`.
 
-## 5. Architecture changes
+## 5. Architecture today
 
-### Data (new bindings)
+### Data (D1 and R2)
 
-- **D1**: runs, run_files, policies, backlog, coverage snapshots, model/usage.
-- **R2**: logs, JUnit/LCOV artifacts, recorded fixtures, generated diffs. Object
-  keys are run-scoped; retention per workspace.
-- **Queues**: scheduled scans, PR command jobs, batch repos.
-- **Secrets**: GitHub App private key, webhook secret, optional notification
-  tokens. Never user PATs for CI.
+- **D1 (`RUNS_DB`, opt-in)**: `runs`, `run_files`, `pr_commands`,
+  `drift_snapshots`, `backlog_items`, `repo_memory`, `policies`, `workspaces`
+  and `audit_events`. Migrations live in `migrations/0001`–`0007`.
+- **R2 (`ARTIFACTS`, optional)**: drift summaries at
+  `drift/<repo>/<timestamp>.json`. Run logs and JUnit/LCOV artifacts are not
+  uploaded yet; retention does not touch R2.
+- **Cron**: one daily trigger (`0 8 * * *`) applies workspace retention and runs
+  due repository schedules. There is no Queue binding.
+- **Secrets**: GitHub App id/private key, webhook secret, optional drift webhook
+  secret, sandbox URL/key. Never user PATs for CI.
 
-### Routes (additive)
+### Routes (as implemented)
 
 ```sh
-GET  /api/runs                 list (repo, cursor)
-GET  /api/runs/:id             summary + files
-GET  /api/runs/:id/artifacts   signed R2 links
-GET  /api/backlog              gaps with state
-POST /api/policies             repo policy (opt-in)
-POST /api/repo-memory          accepted conventions (opt-in)
-POST /api/record               record a fixture session
+GET    /api/health                 GET    /api/quota
+GET    /api/catalog                GET    /api/branches
+POST   /api/scan                   POST   /api/coverage
+POST   /api/impact                 POST   /api/record
+POST   /api/run                    POST   /api/generate
+POST   /api/pull-request           GET    /api/pulls
+GET    /api/runs                   GET    /api/runs/:id
+DELETE /api/runs                   GET    /api/runs/:id/files
+POST   /api/runs/:id/decisions     POST   /api/sandbox/health
+GET    /api/backlog                PATCH  /api/backlog
+GET    /api/schedules              PUT    /api/schedules
+DELETE /api/schedules              GET    /api/memory
+PUT    /api/memory                 DELETE /api/memory
+GET    /api/policies               PUT    /api/policies
+DELETE /api/policies               GET    /api/workspace
+PUT    /api/workspace              GET    /api/audit
+POST   /webhook                    GET    /local-api/scan
+GET    /local-api/file
 ```
+
+There is no signed-artifact route yet; see `TASKS.md`.
 
 ### Packages
 
-- `core/graph.ts` — import graph, dependents, impact selection.
-- `core/policy.ts` — path guard, deny lists, PR/cov gates, shared CLI/Worker.
-- `core/fixtures.ts` — auth fixture profiles, record/replay format.
-- `core/usage.ts` — token/cost estimate and caps.
-- `sandbox/record.ts` — record mode.
-- `apps/worker/db.ts` — D1 queries, batched event writes.
-- `packages/client` — typed methods for the new routes; CLI/MCP consume them.
+- `packages/core` — pure scanner, coverage, OpenAPI, pipeline, GitHub, policy,
+  memory, drift, impact, history, routing and eval logic.
+- `packages/client` — typed HTTP client shared by the CLI and MCP server.
+- `packages/ui` — React primitives and `theme.css` brand tokens.
+- `packages/cli` — `scan`, `generate`, `run`, `watch`, `catalog`.
+- `packages/mcp` — stdio server with six tools and four resource templates.
+- `packages/sandbox` — bwrap/Docker/Podman plus hosted SDK drivers.
+- `apps/worker`, `apps/web`, `apps/docs` — the deployment, dashboard and docs.
 
 ### Dashboard
 
-History + compare, backlog, policy editor, coverage delta per file, run cost,
-provider fallback notice, and a provenance drawer per test. Keep the current
-header/step language and tokens.
+Shipped: the event-driven workspace, History/Compare, Backlog, policy editor,
+Settings, and the review queue. Workspace/audit screens are still open; see
+`TASKS.md`.
 
 ## 6. Delivery plan
 
@@ -375,9 +408,9 @@ header/step language and tokens.
 | 3     | 10      | Import graph/impact, flaky, mutation, contract negatives/fixtures, record/replay, property tests | Quality signals are measured, not claimed            |
 | 4     | ongoing | Runner adapters, memory, evals/routing, VS Code/watch, MCP, teams                                | The loop improves with usage and scales to teams     |
 
-Recommended next three after Phase 0: **coverage targeting + delta**, **D1 run
-history**, **GitHub App PR checks**. They compound: targeting improves output,
-history proves it, PR checks make it recurring.
+All four phases are delivered; the table is the original estimate, kept for
+comparison. Remaining and incomplete work is queued in `TASKS.md` rather than
+added as a fifth phase.
 
 ## 7. Metrics and guardrails
 
@@ -395,17 +428,17 @@ draft PR vs ready PR; comment-only vs commit-on-PR defaults.
 
 ## 8. Risks
 
-| Risk                                     | Mitigation                                                                 |
-| ---------------------------------------- | -------------------------------------------------------------------------- |
-| Model cost explodes with reruns/mutation | Per-run budget, per-feature caps, cheap-first routing                      |
-| GitHub rate limits                       | App installation tokens, ETag cache, changed-file scope                    |
-| D1 write volume from events              | Summaries in D1, full logs in R2, batched writes                           |
-| Flaky verification erodes trust          | Repeat runs, quarantine, never count flaky as passed                       |
-| Sandbox cold starts                      | Warm pools, image cache, per-repo setup cache                              |
-| Contract tests need a live app           | Record/replay fixtures (3.5)                                               |
-| Policy bypass / source edits             | Path guard enforced at generation and PR upload                            |
-| Privacy of run history                   | Opt-in, redaction, retention, per-repo delete                              |
-| Feature sprawl                           | Each feature must improve verified rate, acceptance, or cost/verified test |
+| Risk                                     | Mitigation                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------ |
+| Model cost explodes with reruns/mutation | Per-run budget, per-feature caps, cheap-first routing                          |
+| GitHub rate limits                       | App installation tokens, ETag cache, changed-file scope                        |
+| D1 write volume from events              | Summaries in D1, full logs stay in the stream until R2 upload lands (TASKS.md) |
+| Flaky verification erodes trust          | Repeat runs, quarantine, never count flaky as passed                           |
+| Sandbox cold starts                      | Warm pools, image cache, per-repo setup cache                                  |
+| Contract tests need a live app           | Record/replay fixtures (3.5)                                                   |
+| Policy bypass / source edits             | Path guard enforced at generation and PR upload                                |
+| Privacy of run history                   | Opt-in, redaction, retention, per-repo delete                                  |
+| Feature sprawl                           | Each feature must improve verified rate, acceptance, or cost/verified test     |
 
 ## 9. Non-goals
 
@@ -416,15 +449,17 @@ draft PR vs ready PR; comment-only vs commit-on-PR defaults.
 - Autonomous merges. Human approval stays for anything that leaves the session.
 - Multi-language test generation before the JS/TS loop is excellent.
 
-## 10. Decisions needed
+## 10. Open decisions
 
-1. **CI distribution**: hosted GitHub App first, or a GitHub Action wrapping the
-   CLI first? (App enables PR checks; Action is faster to ship.)
-2. **Persistence default**: opt-in per repo, or on for all hosted workspaces?
-3. **Policy storage**: D1 workspace policies (changes the "no server config"
-   invariant) vs per-repo config in the dashboard only.
-4. **Runner priority**: keep `bun:test` first-class and add vitest/jest, or
-   detect and match the repo from day one?
-5. **Mutation/flaky defaults**: off by default (cost) with a per-repo opt-in?
-6. **Fixture storage**: R2 encrypted at rest, retention window, and who can
-   download recorded fixtures.
+The original decisions were resolved by the shipped design:
+
+1. **CI distribution** — GitHub App first, with `GITHUB_TOKEN` and per-request
+   PATs as fallbacks.
+2. **Persistence default** — opt-in `RUNS_DB`; the Worker still runs without it.
+3. **Policy storage** — per-repo D1 for CI plus the dashboard's local copy; no
+   keys in either.
+4. **Runner priority** — Bun first, with per-repo adapter detection.
+5. **Mutation/flaky defaults** — off by default; opt-in per repository.
+
+One decision remains open and is tracked in `TASKS.md`: fixture storage and
+access policy (R2 vs test code, encryption, retention, download rights).
