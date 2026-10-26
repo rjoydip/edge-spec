@@ -34,6 +34,7 @@ import {
   type Generation,
   type Gap,
   type OpenApiSpec,
+  type RetestOperation,
   type RunEvent,
   type ScanResult,
   type ScanTotals,
@@ -57,6 +58,8 @@ export interface PipelineInput {
   retryGaps?: string[];
   /** Provider-reported tokens this run may spend; 0 or absent means no cap. */
   maxTokens?: number;
+  /** When set, run only these failed operations and label the run a retest. */
+  retestOperations?: RetestOperation[];
 }
 
 const DEFAULT_CONCURRENCY = 3;
@@ -272,6 +275,9 @@ export async function* runPipeline(
     ...(options.repoToken ? { token: options.repoToken } : {}),
   });
 
+  const retestOperations = input.retestOperations ?? [];
+  const retest = retestOperations.length > 0;
+
   try {
     yield log("info", `EdgeSpec run started for ${input.repo}@${input.ref}.`);
     yield log("ai", `Model: ${model}.`);
@@ -336,7 +342,8 @@ export async function* runPipeline(
         skipped: classification.skipped,
       };
       const overview = describeRepository(blobs);
-      if (gaps.length === 0 && apiGapList.length === 0) {
+      // A retest runs the named operations even when the scan finds no gap.
+      if (!retest && gaps.length === 0 && apiGapList.length === 0) {
         yield {
           type: "gaps",
           gaps: unsupported,
@@ -346,7 +353,12 @@ export async function* runPipeline(
         };
         yield { type: "step", step: "scan", status: "done", note: "No missing tests" };
         yield log("success", `No untested source files found in ${blobs.length} paths.`);
-        yield { type: "result", ok: true, reason: "No missing tests found." };
+        yield {
+          type: "result",
+          ok: true,
+          reason: "No missing tests found.",
+          ...(retest ? { retest: true } : {}),
+        };
         return;
       }
 
@@ -380,18 +392,27 @@ export async function* runPipeline(
         coverageStatus: "not-run",
         overview,
       };
+      if (!retest) {
+        yield {
+          type: "gaps",
+          gaps: [...gaps, ...apiGapList, ...unsupported],
+          overview,
+          totals,
+          coverageStatus: scan.coverageStatus,
+        };
+      }
       yield {
-        type: "gaps",
-        gaps: [...gaps, ...apiGapList, ...unsupported],
-        overview,
-        totals,
-        coverageStatus: scan.coverageStatus,
+        type: "step",
+        step: "scan",
+        status: "done",
+        note: retest ? "retest specs" : `${gaps.length} missing`,
       };
-      yield { type: "step", step: "scan", status: "done", note: `${gaps.length} missing` };
-      yield log(
-        "warn",
-        `${gaps.length} missing, 0 coverage, ${apiGapList.length} API; this run covers ${loaded.length} missing file(s)${apiSpecs.length > 0 ? ` and ${apiSpecs.length} API spec(s)` : ""}.`,
-      );
+      if (!retest) {
+        yield log(
+          "warn",
+          `${gaps.length} missing, 0 coverage, ${apiGapList.length} API; this run covers ${loaded.length} missing file(s)${apiSpecs.length > 0 ? ` and ${apiSpecs.length} API spec(s)` : ""}.`,
+        );
+      }
     }
 
     if (retry) {
@@ -857,8 +878,27 @@ export async function* runPipeline(
     }
 
     if (apiMode && apiSpecs.length > 0) {
+      if (retest) {
+        yield log(
+          "info",
+          `Retest: only ${retestOperations.length} failed endpoint(s), not a fresh scan.`,
+        );
+      }
       for (const [index, spec] of apiSpecs.entries()) {
-        const contract = contractTestsFor(spec);
+        const contract = contractTestsFor(
+          spec,
+          retest
+            ? (operation) =>
+                retestOperations.some(
+                  (item) =>
+                    item.specPath === spec.path &&
+                    item.method.toUpperCase() === operation.method.toUpperCase() &&
+                    item.path === operation.path,
+                )
+            : undefined,
+        );
+        // A retest runs no operation from a spec that had no failures.
+        if (contract.operations.length === 0) continue;
         const position = `${index + 1}/${apiSpecs.length}`;
 
         yield {
@@ -960,7 +1000,7 @@ export async function* runPipeline(
           }
         }
 
-        yield { type: "api", results };
+        yield { type: "api", results, ...(retest ? { retest: true } : {}) };
         yield { type: "validation", validation, sourcePath: spec.path };
         const passed = results.filter((result) => result.status === "passed").length;
         yield {
@@ -1005,6 +1045,7 @@ export async function* runPipeline(
         ok: false,
         reason: `Token budget reached (${spentTokens}/${cap} tokens).`,
         ready: ordered,
+        ...(retest ? { retest: true } : {}),
       };
       return;
     }
@@ -1012,7 +1053,13 @@ export async function* runPipeline(
     if (ordered.length === 0) {
       yield { type: "step", step: "pull-request", status: "failed", note: "No PR" };
       yield log("error", "No test passed the check. Open Missing tests to look at them.");
-      yield { type: "result", ok: false, reason: "Validation did not pass.", ready: ordered };
+      yield {
+        type: "result",
+        ok: false,
+        reason: "Validation did not pass.",
+        ready: ordered,
+        ...(retest ? { retest: true } : {}),
+      };
       return;
     }
 
@@ -1028,7 +1075,12 @@ export async function* runPipeline(
       "success",
       `${ordered.length} test(s) ready. Review the preview, then open the pull request.`,
     );
-    yield { type: "result", ok: true, ready: ordered };
+    yield {
+      type: "result",
+      ok: true,
+      ready: ordered,
+      ...(retest ? { retest: true } : {}),
+    };
   } catch (error) {
     const message =
       error instanceof HttpError
@@ -1038,6 +1090,6 @@ export async function* runPipeline(
           : String(error);
     yield log("error", message);
     yield { type: "error", message };
-    yield { type: "result", ok: false, reason: message };
+    yield { type: "result", ok: false, reason: message, ...(retest ? { retest: true } : {}) };
   }
 }

@@ -127,6 +127,10 @@ export interface OpenApiSpec {
   content?: string;
 }
 
+/** The kind of failure a contract test reported. */
+export type ApiDiagnosis =
+  "assertion" | "timeout" | "boot" | "missing-fixture" | "network" | "unknown";
+
 /** One contract test result, parsed from JUnit. */
 export interface ApiTestResult {
   specPath: string;
@@ -136,6 +140,17 @@ export interface ApiTestResult {
   httpStatus?: number;
   durationMs?: number;
   error?: string;
+  /** Only set for a failed case; derived from the failure text. */
+  diagnosis?: ApiDiagnosis;
+  expected?: string;
+  actual?: string;
+}
+
+/** One operation a retest should execute, and the spec it belongs to. */
+export interface RetestOperation {
+  specPath: string;
+  method: string;
+  path: string;
 }
 
 /** Facts read from the repository tree, not invented. */
@@ -281,7 +296,11 @@ export type RunEvent =
   | { type: "quota"; rateLimit: RateLimitInfo }
   | { type: "generation"; generation: Generation }
   | { type: "validation"; validation: Validation; sourcePath?: string }
-  | { type: "api"; results: ApiTestResult[] }
+  | {
+      type: "api";
+      results: ApiTestResult[];
+      /** This was a retest, not a fresh run. */ retest?: boolean;
+    }
   | {
       type: "result";
       ok: boolean;
@@ -290,5 +309,7 @@ export type RunEvent =
       generation?: Generation;
       /** Source paths whose tests are ready for a pull request. */
       ready?: string[];
+      /** This was a retest of failed endpoints, not a fresh run. */
+      retest?: boolean;
     }
   | { type: "error"; message: string };

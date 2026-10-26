@@ -46,6 +46,7 @@ import {
   type Gap,
   type OpenApiSpec,
   type RateLimitInfo,
+  type RetestOperation,
   type Validation,
 } from "@edge-spec/core/types";
 import type { Env } from "./env";
@@ -95,6 +96,21 @@ function numbersOf(value: unknown, max = 500): number[] {
       (item): item is number => typeof item === "number" && Number.isInteger(item) && item > 0,
     )
     .slice(0, max);
+}
+
+/** Validates the failed operations a client asks to retest. */
+function retestOperationsOf(value: unknown): RetestOperation[] {
+  if (!Array.isArray(value)) return [];
+  const operations: RetestOperation[] = [];
+  for (const entry of value.slice(0, 30)) {
+    const item = asRecord(entry);
+    const specPath = str(item.specPath);
+    const method = str(item.method)?.toUpperCase();
+    const path = str(item.path);
+    if (!specPath || !method || !path || !/^[A-Z]+$/.test(method)) continue;
+    operations.push({ specPath, method, path });
+  }
+  return operations;
 }
 
 /** A failed attempt the client sends back to the self-correction loop. */
@@ -537,6 +553,7 @@ app.post("/api/run", async (c) => {
     const retryGaps = Array.isArray(body.retryGaps)
       ? body.retryGaps.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
       : undefined;
+    const retestOperations = retestOperationsOf(body.retestOperations);
     const sandbox = sandboxFor(c);
     const repoToken = sandbox?.allowRepoToken
       ? c.req.header(TOKEN_HEADER)?.trim() || undefined
@@ -552,10 +569,12 @@ app.post("/api/run", async (c) => {
         repo,
         ref,
         ...pipelineConfig(body),
-        ...(body.mode === "api" || body.mode === "both" || body.mode === "unit"
-          ? { mode: body.mode }
-          : {}),
-        ...(retryGaps ? { retryGaps } : {}),
+        ...(retestOperations.length > 0
+          ? { mode: "api" as const, retestOperations }
+          : body.mode === "api" || body.mode === "both" || body.mode === "unit"
+            ? { mode: body.mode }
+            : {}),
+        ...(retryGaps && retestOperations.length === 0 ? { retryGaps } : {}),
       },
     };
   } catch (err) {

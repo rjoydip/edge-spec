@@ -53,6 +53,7 @@ import type {
   OpenApiEndpoint,
   RateLimitInfo,
   RepositoryOverview,
+  RetestOperation,
   ScanTotals,
   ScanTruncation,
   StepId,
@@ -195,9 +196,12 @@ export interface AgentWorkspaceProps {
   /** The history id of the current run, when the deployment stores history. */
   runId?: string;
   apiResults: ApiTestResult[];
+  /** The last API result came from a retest, not a fresh run. */
+  retest?: boolean;
   toast?: { title: string; description?: string; variant: "default" | "success" | "warning" };
   onRun: () => void;
   onScan: () => void;
+  onRetest: (operations: RetestOperation[]) => void;
   onStop: () => void;
   onStopGenerating: () => void;
   onReset: () => void;
@@ -229,9 +233,11 @@ export function AgentWorkspace({
   pullUrls,
   runId,
   apiResults,
+  retest,
   toast,
   onRun,
   onScan,
+  onRetest,
   onStop,
   onStopGenerating,
   onReset,
@@ -1554,11 +1560,35 @@ export function AgentWorkspace({
                   <div className="flex items-center gap-1.5 border-t border-zinc-800/60 px-3 py-1.5 text-[10px] text-zinc-500">
                     <Server className="size-3 text-sky-400" />
                     {apiResults.length
-                      ? "contract suite executed"
+                      ? retest
+                        ? "contract retest executed"
+                        : "contract suite executed"
                       : settings.sandboxUrl.trim()
                         ? "Runner configured · contract suite not run yet"
                         : "No runner · static checks only"}
-                    <span className="ml-auto font-mono">
+                    {apiFailed > 0 && (
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        className="ml-auto"
+                        disabled={running}
+                        onClick={() =>
+                          onRetest(
+                            apiResults
+                              .filter((result) => result.status === "failed")
+                              .map((result) => ({
+                                specPath: result.specPath,
+                                method: result.method,
+                                path: result.path,
+                              })),
+                          )
+                        }
+                      >
+                        <RefreshCw className="size-3" />
+                        Retest {apiFailed} failed
+                      </Button>
+                    )}
+                    <span className={cn("font-mono", apiFailed === 0 && "ml-auto")}>
                       {apiPassed}/{apiResults.length || 0} · {apiFailed} failed · {apiSkipped}{" "}
                       skipped
                     </span>

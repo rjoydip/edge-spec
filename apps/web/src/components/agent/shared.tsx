@@ -135,10 +135,12 @@ export function EndpointStatus({ result }: { result?: ApiTestResult }) {
     );
   }
   if (result.status === "failed") {
+    const diagnosis =
+      result.diagnosis === "missing-fixture" ? "fixture" : (result.diagnosis ?? "failed");
     return (
       <Badge variant="danger" className="gap-1">
         <X className="size-3" />
-        {result.httpStatus ?? "failed"}
+        {result.httpStatus ? `${result.httpStatus} · ${diagnosis}` : diagnosis}
       </Badge>
     );
   }

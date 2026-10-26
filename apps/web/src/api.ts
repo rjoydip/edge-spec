@@ -3,6 +3,7 @@ import type { Provider } from "@edge-spec/core/catalog";
 import type {
   Generation,
   RateLimitInfo,
+  RetestOperation,
   RunEvent,
   ScanResult,
   Validation,
@@ -259,6 +260,8 @@ export async function runPipelineStream(
   signal?: AbortSignal,
   /** Re-run only these gap paths, skipping the scan stage. */
   retryGaps?: string[],
+  /** Re-run only these failed contract operations, not a fresh run. */
+  retestOperations?: RetestOperation[],
 ): Promise<void> {
   let response: Response;
   try {
@@ -280,6 +283,7 @@ export async function runPipelineStream(
         coverageTarget: settings.coverageTarget,
         mode: "both",
         ...(retryGaps && retryGaps.length > 0 ? { retryGaps } : {}),
+        ...(retestOperations && retestOperations.length > 0 ? { retestOperations } : {}),
       }),
       ...(signal ? { signal } : {}),
     });

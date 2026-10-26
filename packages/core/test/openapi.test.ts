@@ -172,4 +172,45 @@ describe("parseJUnit", () => {
     });
     expect(results[2]?.status).toBe("skipped");
   });
+
+  it("names the failure and keeps expected against actual", () => {
+    const xml = [
+      '<testcase name="GET /users"><failure message="expect(received).toBe(expected)">',
+      "Expected: 201\nReceived: 500",
+      "</failure></testcase>",
+      '<testcase name="POST /users"><failure message="fetch failed: ECONNREFUSED"/></testcase>',
+      '<testcase name="DELETE /users"><failure message="Timeout: test exceeded 5000ms"/></testcase>',
+      '<testcase name="PUT /users"><failure message="missing token fixture"/></testcase>',
+    ].join("");
+    const [assertion, boot, timeout, fixture] = parseJUnit(xml);
+    expect(assertion).toMatchObject({
+      diagnosis: "assertion",
+      expected: "201",
+      actual: "500",
+    });
+    expect(boot?.diagnosis).toBe("boot");
+    expect(timeout?.diagnosis).toBe("timeout");
+    expect(fixture?.diagnosis).toBe("missing-fixture");
+  });
+});
+
+describe("contractTestsFor", () => {
+  it("can hold only the operations a retest asks for", () => {
+    const spec = parseOpenApiSpec(
+      JSON.stringify({
+        openapi: "3.0.0",
+        info: { title: "Small", version: "1" },
+        paths: {
+          "/a": { get: { responses: { "200": { description: "ok" } } } },
+          "/b": { post: { responses: { "201": { description: "ok" } } } },
+        },
+      }),
+      "openapi.json",
+    );
+    if (!spec) throw new Error("fixture did not parse");
+    const contract = contractTestsFor(spec, (operation) => operation.method === "POST");
+    expect(contract.operations.map((operation) => operation.method)).toEqual(["POST"]);
+    expect(contract.code).toContain("POST /b");
+    expect(contract.code).not.toContain("GET /a");
+  });
 });

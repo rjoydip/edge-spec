@@ -3,7 +3,14 @@
  * and anything the spec does not resolve is skipped with a reason instead of
  * invented. JUnit is parsed back into per-operation facts.
  */
-import type { ApiTestResult, Gap, OpenApiEndpoint, OpenApiParameter, OpenApiSpec } from "./types";
+import type {
+  ApiDiagnosis,
+  ApiTestResult,
+  Gap,
+  OpenApiEndpoint,
+  OpenApiParameter,
+  OpenApiSpec,
+} from "./types";
 
 export interface SkippedOperation {
   method: string;
@@ -173,11 +180,18 @@ function testCode(
   };
 }
 
-/** One contract file per spec. Deterministic: same input, same source. */
-export function contractTestsFor(spec: OpenApiSpec): ContractFile {
+/**
+ * One contract file per spec. Deterministic: same input, same source. A retest
+ * passes a filter so the file holds only the operations that failed.
+ */
+export function contractTestsFor(
+  spec: OpenApiSpec,
+  filter?: (operation: OpenApiEndpoint) => boolean,
+): ContractFile {
   const baseUrl = baseUrlOf(spec);
   const skipped: SkippedOperation[] = [];
-  const tests = spec.endpoints.map((operation) => {
+  const operations = filter ? spec.endpoints.filter(filter) : spec.endpoints;
+  const tests = operations.map((operation) => {
     const result = testCode(operation, spec);
     if (result.skipped) skipped.push(result.skipped);
     return result.code;
@@ -201,7 +215,7 @@ export function contractTestsFor(spec: OpenApiSpec): ContractFile {
     specPath: spec.path,
     path: contractPathFor(spec.path),
     code: [...header, ...tests, `});`, ``].join("\n"),
-    operations: spec.endpoints,
+    operations,
     skipped,
   };
 }
@@ -259,6 +273,45 @@ function attribute(attributes: string, name: string): string | undefined {
   return match?.[1] === undefined ? undefined : decodeXml(match[1]);
 }
 
+const DIAGNOSIS_RULES: Array<[ApiDiagnosis, RegExp]> = [
+  ["timeout", /timed?\s*out|\btimeout\b|exceeded .*\bms\b|AbortError/i],
+  [
+    "boot",
+    /ECONNREFUSED|connection refused|fetch failed|server (?:is )?not (?:ready|reachable)|\bboot\b/i,
+  ],
+  ["network", /ENOTFOUND|EAI_AGAIN|socket hang up|network error|getaddrinfo/i],
+  [
+    "missing-fixture",
+    /fixture|missing (?:auth|token|credential)|token (?:is )?(?:missing|not (?:set|provided))/i,
+  ],
+  ["assertion", /\bassert|expect|toBe|toEqual|Expected:/i],
+];
+
+/** A named reason from the failure text. No stack-trace guessing beyond this. */
+export function diagnosisOf(text: string): ApiDiagnosis {
+  for (const [diagnosis, pattern] of DIAGNOSIS_RULES) {
+    if (pattern.test(text)) return diagnosis;
+  }
+  return "unknown";
+}
+
+function firstLine(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 400);
+}
+
+/** The expected/actual pair an assertion prints, when it prints one. */
+function expectedActualOf(text: string): { expected?: string; actual?: string } {
+  const expected = /Expected:\s*([^\n]+)/i.exec(text)?.[1];
+  const actual = /(?:Received|Actual):\s*([^\n]+)/i.exec(text)?.[1];
+  const loose = /expected\s+(.+?),?\s+got\s+(.+)/i.exec(text);
+  const expectedValue = firstLine(expected ?? loose?.[1] ?? "");
+  const actualValue = firstLine(actual ?? loose?.[2] ?? "");
+  return {
+    ...(expectedValue ? { expected: expectedValue } : {}),
+    ...(actualValue ? { actual: actualValue } : {}),
+  };
+}
+
 /**
  * Parses the JUnit XML a runner returns. One test per operation is the only
  * shape EdgeSpec generates; anything else is reported as `not-run`.
@@ -278,13 +331,21 @@ export function parseJUnit(xml: string, specPath = ""): ApiTestResult[] {
     const message =
       /<failure\b[^>]*\bmessage="([^"]*)"/.exec(body)?.[1] ??
       /<error\b[^>]*\bmessage="([^"]*)"/.exec(body)?.[1];
+    const details =
+      /<(?:failure|error)\b[^>]*>([\s\S]*?)<\/(?:failure|error)>/.exec(body)?.[1] ?? "";
+    const messageText = message ? decodeXml(message) : "";
+    const diagnosticText = `${messageText}\n${decodeXml(details)}`;
+    const errorText = messageText || firstLine(decodeXml(details));
     results.push({
       specPath,
       method: operation[1] as string,
       path: operation[2] as string,
       status: skipped ? "skipped" : failed ? "failed" : "passed",
       ...(Number.isFinite(time) ? { durationMs: Math.round(time * 1000) } : {}),
-      ...(message ? { error: decodeXml(message) } : {}),
+      ...(errorText ? { error: errorText } : {}),
+      ...(failed
+        ? { diagnosis: diagnosisOf(diagnosticText), ...expectedActualOf(diagnosticText) }
+        : {}),
     });
   }
   return results;

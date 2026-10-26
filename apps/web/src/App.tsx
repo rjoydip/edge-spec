@@ -7,6 +7,7 @@ import type {
   Generation,
   RateLimitInfo,
   RepositoryOverview,
+  RetestOperation,
   RunEvent,
   ScanTotals,
   ScanTruncation,
@@ -86,6 +87,8 @@ export function App() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [apiResults, setApiResults] = useState<ApiTestResult[]>([]);
+  /** True when the current API results came from a failed-endpoint retest. */
+  const [wasRetest, setWasRetest] = useState(false);
   /** The log of the missing tests, apart from the pipeline run. */
   const [gapLogs, setGapLogs] = useState<LogEntry[]>([]);
   const [steps, setSteps] = useState<Steps>(INITIAL_STEPS);
@@ -261,6 +264,7 @@ export function App() {
           break;
         }
         case "api":
+          if (event.retest) setWasRetest(true);
           setApiResults((current) => {
             const next = [...current];
             for (const result of event.results) {
@@ -324,8 +328,9 @@ export function App() {
     [addLog, project.folder, showToast],
   );
 
-  const run = async () => {
+  const run = async (options: { retestOperations?: RetestOperation[] } = {}) => {
     const active = getProject();
+    const retesting = Boolean(options.retestOperations?.length);
     if (running) return;
     if (active.localPath) {
       showToast({
@@ -351,14 +356,28 @@ export function App() {
     setLogs([]);
     setLive({});
     setApiResults([]);
+    setWasRetest(retesting);
     setRunId(undefined);
     const controller = new AbortController();
     abortRef.current = controller;
     currentStep.current = "scan";
-    addLog("info", `EdgeSpec starting for ${active.repo}@${active.ref || "main"}.`, "scan");
+    addLog(
+      "info",
+      retesting
+        ? `Retesting ${options.retestOperations?.length ?? 0} failed endpoint(s) for ${active.repo}@${active.ref || "main"}.`
+        : `EdgeSpec starting for ${active.repo}@${active.ref || "main"}.`,
+      "scan",
+    );
 
     try {
-      await runPipelineStream(active, getSettings(), handleEvent, controller.signal);
+      await runPipelineStream(
+        active,
+        getSettings(),
+        handleEvent,
+        controller.signal,
+        undefined,
+        options.retestOperations,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (isAbortError(message)) {
@@ -381,6 +400,11 @@ export function App() {
         return next;
       });
     }
+  };
+
+  /** Retests only the failed contract operations; the scan and unit work stay put. */
+  const retest = (operations: RetestOperation[]) => {
+    if (operations.length > 0) void run({ retestOperations: operations });
   };
 
   const stop = () => {
@@ -480,6 +504,7 @@ export function App() {
     setLive({});
     setPullUrls({});
     setRunId(undefined);
+    setWasRetest(false);
     setLogs([]);
     setGapLogs([]);
     setSteps(INITIAL_STEPS);
@@ -660,9 +685,11 @@ export function App() {
         pullUrls={pullUrls}
         {...(runId ? { runId } : {})}
         apiResults={apiResults}
+        {...(wasRetest ? { retest: true } : {})}
         {...(toast ? { toast } : {})}
         onRun={run}
         onScan={scan}
+        onRetest={retest}
         onStop={stop}
         onStopGenerating={stopGenerating}
         onReset={resetAll}

@@ -419,6 +419,12 @@ Flow details:
   input-token range before spending.
 - Quota and 5xx responses fall back once to the next model of the same
   provider; the fallback appears as a `warn` log.
+- A retest sends `retestOperations: [{specPath, method, path}]`. The run is
+  forced to API mode, builds a contract file holding only those operations, and
+  labels its `api` and `result` events with `retest: true`.
+- Failed contract results carry `diagnosis` (`assertion`, `timeout`, `boot`,
+  `missing-fixture`, `network`, `unknown`) plus `expected`/`actual` when the
+  runner printed them.
 - If an error occurs after streaming starts, the HTTP status is already 200;
   clients must inspect the events, not just the status.
 
