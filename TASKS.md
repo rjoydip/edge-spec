@@ -1,7 +1,8 @@
 # EdgeSpec — Tasks
 
-Remaining and incomplete work. `ROADMAP.md` is the shipped record; this file is
-the queue. Each item names the gap and what "done" means. Nothing here is a
+Remaining and incomplete work. This is the queue for the repository; shipped
+behaviour lives in the code, tests and docs, and the previous roadmap was
+retired. Each item names the gap and what "done" means. Nothing here is a
 commitment to a date.
 
 ## Cloudflare Sandbox
@@ -38,7 +39,7 @@ commitment to a date.
       without curl.
 - [ ] **Audit pagination.** `GET /api/audit` returns the newest N rows with no
       cursor. Add `before`/cursor paging if rows outgrow one page.
-- [ ] **Run artifacts route.** The original roadmap listed
+- [ ] **Run artifacts route.** The earlier plan listed
       `GET /api/runs/:id/artifacts` (signed R2 links); it is not implemented.
       Add it only if artifacts are actually uploaded for runs, not just drift.
 
@@ -60,12 +61,16 @@ commitment to a date.
 - [ ] **R2 retention.** The daily purge deletes D1 runs, `run_files`, audit
       events, and `pr_commands`, but R2 drift artifacts are never deleted. Add
       an object-age sweep (and decide whether fixtures live in R2).
+- [ ] **Upload run logs and test artifacts.** Only drift summaries reach R2;
+      run logs, JUnit and LCOV stay in the response. Upload them per run if
+      long-lived debugging is needed, then wire the signed-artifact route and
+      retention above.
 - [ ] **Export/archive before purge.** There is no export step. Add a JSON/CSV
       export if audit history must outlive the retention window.
 - [ ] **Fixture storage decision.** Recorded fixtures currently travel as test
       code. Decide whether any fixture bytes go to R2, at-rest encryption, the
       retention window, and who may download them. This is the one unresolved
-      decision from the original roadmap.
+      decision from the earlier plan.
 
 ## Scheduled scans
 
@@ -79,9 +84,9 @@ commitment to a date.
 
 ## Watch mode and editor
 
-- [ ] **VS Code extension.** Only `edgespec watch` shipped. The extension was
-      the other half of 4.4; it needs a workspace scan, diff preview, apply or
-      reject, and the local sandbox.
+- [ ] **VS Code extension.** Only `edgespec watch` shipped. The extension is
+      the other half of the editor work; it needs a workspace scan, diff
+      preview, apply or reject, and the local sandbox.
 - [ ] **Remote Worker support for watch.** Watch sends inline source and refuses
       anything but a local Worker. Add an opt-in path (and its trust model) if
       remote use is needed.
@@ -112,10 +117,28 @@ commitment to a date.
       outcome is measurable.
 - [ ] **Mutation/flaky/eval defaults.** All remain opt-in. Revisit only with
       measured cost and flake data; do not turn them on by default.
-- [ ] **Queue-backed batch work.** Roadmap listed Cloudflare Queues for batch
-      scans and PR commands; the cron and synchronous paths are sufficient at
-      current volume. Add Queues when the 10-repo cron cap or command latency
-      becomes a real limit.
+- [ ] **Shared scan cache (KV).** Nothing is cached server-side; repeated scans
+      of the same commit still pay GitHub calls. Add KV only if that becomes a
+      measured cost or rate-limit problem.
+- [ ] **Run the recorded product experiments.** The earlier plan named four:
+      targeted vs untargeted prompts, cheap-vs-strong model routing, draft vs
+      ready PRs, and comment-only vs commit-on-PR defaults. Record outcomes and
+      change a default only when the measurement supports it.
+- [ ] **Queue-backed batch work.** The earlier plan listed Cloudflare Queues
+      for batch scans and PR commands; the cron and synchronous paths are
+      sufficient at current volume. Add Queues when the 10-repo cron cap or
+      command latency becomes a real limit.
+
+## Non-goals
+
+Keep these out unless the product direction explicitly changes:
+
+- Editing application source or auto-fixing production bugs.
+- A general code-review bot.
+- Coverage percentages without an executed report.
+- Storing user PATs or AI keys server-side.
+- Autonomous merges; human approval stays for anything that leaves the session.
+- Multi-language test generation before the JS/TS loop is excellent.
 
 ## Documentation
 

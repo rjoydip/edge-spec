@@ -72,7 +72,7 @@ GitHub              ──▶ /webhook ──▶ Workflow ─┘      └─▶ 
 
 ```text
 edge-spec/
-├── PLAN.md, ROADMAP.md, TASKS.md, AGENTS.md, README.md
+├── PLAN.md, TASKS.md, AGENTS.md, README.md
 ├── package.json              # Bun workspaces and root scripts
 ├── bunfig.toml               # Bun formatter settings
 ├── tsconfig.base.json
@@ -329,7 +329,7 @@ a dialog, not a stage (one configuration surface, not two).
 The durable Workflow runs the same four core steps for webhook automation and
 never receives user API keys.
 
-Later roadmap features extend this path without changing its honesty rules:
+Later features extend this path without changing its honesty rules:
 runner adapters choose the repo's test framework, the impact graph narrows PR
 checks and retests, policy gates block before GitHub writes, and coverage delta,
 flaky repeats, mutation and contract fixtures report "not measured" whenever
@@ -369,7 +369,7 @@ their runner did not execute.
 
 ### Status
 
-The seven foundation phases and every roadmap item (0.1 through 4.6) are
+The seven foundation phases and every planned feature (0.1 through 4.6) are
 implemented, plus the Cloudflare Sandbox bridge and inferred-OpenAPI health
 matrix. Tests live in each workspace's `test/` directory (never beside the
 sources) and are included in `bun run check`. The dashboard was smoke-tested
