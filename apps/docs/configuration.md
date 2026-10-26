@@ -315,6 +315,13 @@ but `/api/runs`, `/api/backlog`, `/api/workspace` and `/api/audit` answer
 `enabled: false` and the cron does nothing. The tables store summaries, not
 source text, prompts or keys.
 
+`wrangler dev` uses its own local database under `.wrangler/state`, so remote
+migrations do not create tables there. A `D1_ERROR: no such table: runs` (or
+`backlog_items`) on localhost means the local copy is empty: run
+`bun run db:migrate:local`. It is harmless to repeat — applied migrations are
+skipped. `bun run dev:worker` runs it automatically; `bun run db:migrate`
+applies the same migrations to production.
+
 ## Repository memory (optional)
 
 With `RUNS_DB`, a repository can opt into a small memory of approved

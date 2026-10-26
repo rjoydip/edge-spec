@@ -11,7 +11,9 @@
   ],
   "scripts": {
     "dev": "bun run --filter @edge-spec/web dev",
-    "dev:worker": "bun run --filter @edge-spec/worker dev",
+    "dev:worker": "bun run db:migrate:local && bun run --filter @edge-spec/worker dev",
+    "db:migrate": "wrangler d1 migrations apply edge-spec-runs --remote",
+    "db:migrate:local": "wrangler d1 migrations apply edge-spec-runs --local",
     "cli": "bun packages/cli/src/index.ts",
     "mcp": "bun packages/mcp/src/index.ts",
     "sandbox": "bun run --filter @edge-spec/sandbox start",
