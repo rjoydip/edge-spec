@@ -478,8 +478,21 @@ export function App() {
         sourcePath: item.generation.sourcePath,
         path: item.generation.testPath,
         code: item.generation.code,
+        provider: item.generation.provider,
+        model: item.generation.model,
+        corrected: item.generation.corrected,
+        verified: item.validation.verified,
+        ...(item.validation.checks ? { checks: item.validation.checks } : {}),
+        ...(item.validation.coverage ? { coverage: item.validation.coverage } : {}),
       })),
       { ...meta, ...(runId ? { runId } : {}) },
+      apiResults
+        .filter((result) => result.status === "skipped")
+        .map((result) => ({
+          method: result.method,
+          path: result.path,
+          reason: result.error ?? "skipped",
+        })),
     );
     setPullUrls((current) => {
       const next = { ...current };

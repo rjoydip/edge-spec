@@ -45,6 +45,7 @@ import {
 import { folderFirst } from "@edge-spec/core/scanner";
 import { providerById } from "@edge-spec/core/catalog";
 import { parseRepoInput } from "@edge-spec/core/catalog";
+import { pullRequestBody } from "@edge-spec/core/provenance";
 import type {
   ApiTestResult,
   CoverageStatus,
@@ -118,10 +119,11 @@ import { toggleMode, useAppearance } from "@/lib/theme";
 import {
   CheckSummary,
   EndpointStatus,
-  coverageBodyLine,
   coverageDeltaLabel,
   coverageLabel,
   ICON_GRADIENT,
+  provenanceFiles,
+  skippedOperationsOf,
   IconGradientDefs,
   INITIAL_STEPS,
   MethodChip,
@@ -653,37 +655,14 @@ export function AgentWorkspace({
     setEndpointKey({ specPath: spec, method: item.method, path: item.path });
   };
 
-  const buildDescription = (items: AgentTest[]) => {
-    const verified = items.filter((item) => item.validation.verified).length;
-    const staticOnly = items.filter(
-      (item) => item.validation.ok && !item.validation.verified,
-    ).length;
-    const coverageLines = items
-      .map((item) => coverageBodyLine(item.generation.sourcePath, item.validation.coverage))
-      .filter(Boolean);
-    return [
-      "## Summary",
-      "",
-      `Generated with ${provider?.name ?? settings.provider} · ${settings.model}.`,
-      "",
-      ...items.map((item) => `- ${item.generation.testPath}`),
-      "",
-      "## Verification",
-      "",
-      verified
-        ? `- ${verified} suite(s) executed on the runner.`
-        : "- No runner executed these tests.",
-      staticOnly ? `- ${staticOnly} suite(s) passed static checks only.` : "",
-      apiSkipped ? `- ${apiSkipped} contract operation(s) skipped.` : "",
-      "- Application source was not modified.",
-      "",
-      "## Coverage",
-      "",
-      ...(coverageLines.length > 0 ? coverageLines : ["- Not measured: no two LCOV reports."]),
-    ]
-      .filter(Boolean)
-      .join("\n");
-  };
+  const buildDescription = (items: AgentTest[]) =>
+    pullRequestBody({
+      provider: provider?.name ?? settings.provider,
+      model: settings.model,
+      files: provenanceFiles(items),
+      skipped: skippedOperationsOf(apiResults),
+      testOnly: true,
+    });
 
   function openPullDialog(items: AgentTest[]) {
     if (items.length === 0) return;

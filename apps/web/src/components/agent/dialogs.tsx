@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { providerById } from "@edge-spec/core/catalog";
 import { compareRuns, type RunComparison, type RunSummary } from "@edge-spec/core/history";
+import { pullRequestBody } from "@edge-spec/core/provenance";
 import type {
   ApiTestResult,
   OpenApiEndpoint,
@@ -70,9 +71,10 @@ import { HighlightedCode } from "./highlight";
 import {
   CheckSummary,
   EndpointStatus,
-  coverageBodyLine,
   coverageDeltaLabel,
   coverageLabel,
+  provenanceFiles,
+  skippedOperationsOf,
   ICON_GRADIENT,
   MethodChip,
   downloadFile,
@@ -989,39 +991,19 @@ export function PrDialog({
   const blocked = accepted.length === 0 || pending.length > 0 || busy;
   const providerName = providerById(settings.provider)?.name ?? settings.provider;
   const files = accepted.map((entry) => entry.item.generation.testPath);
-  const coverageLines = accepted
-    .map((entry) =>
-      coverageBodyLine(entry.item.generation.sourcePath, entry.item.validation.coverage),
-    )
-    .filter(Boolean);
 
   const generateCopy = () => {
     onChange({
       ...value,
       title: `test: cover ${files.length || "the"} untested path${files.length === 1 ? "" : "s"}`,
       commit: `test: add ${files.length} generated test file${files.length === 1 ? "" : "s"}`,
-      description: [
-        "## Summary",
-        "",
-        `Generated with ${providerName} · ${settings.model}.`,
-        "",
-        ...files.map((file) => `- ${file}`),
-        "",
-        "## Verification",
-        "",
-        verified
-          ? `- ${verified} suite(s) executed on the runner.`
-          : "- No runner executed these tests.",
-        staticOnly ? `- ${staticOnly} suite(s) passed static checks only.` : "",
-        skipped.length ? `- ${skipped.length} contract operation(s) skipped.` : "",
-        "- Application source was not modified.",
-        "",
-        "## Coverage",
-        "",
-        ...(coverageLines.length > 0 ? coverageLines : ["- Not measured: no two LCOV reports."]),
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      description: pullRequestBody({
+        provider: providerName,
+        model: settings.model,
+        files: provenanceFiles(accepted.map((entry) => entry.item)),
+        skipped: skippedOperationsOf(skipped),
+        testOnly: true,
+      }),
     });
   };
 

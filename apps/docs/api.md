@@ -495,9 +495,22 @@ Request:
     {
       "sourcePath": "src/math.ts",
       "path": "src/math.test.ts",
-      "code": "import { describe, it, expect } from \"bun:test\";\n…"
+      "code": "import { describe, it, expect } from \"bun:test\";\n…",
+      "provider": "openai",
+      "model": "gpt-6-astra",
+      "verified": true,
+      "corrected": false,
+      "checks": [
+        { "name": "bun test", "kind": "test", "command": "bun test", "ok": true, "durationMs": 840 }
+      ],
+      "coverage": {
+        "status": "measured",
+        "path": "src/math.ts",
+        "lines": { "before": 1, "after": 4, "delta": 3, "total": 10 }
+      }
     }
   ],
+  "skipped": [{ "method": "GET", "path": "/users", "reason": "missing auth fixture" }],
   "strictTypes": true
 }
 ```
@@ -520,7 +533,12 @@ Behaviour:
   branch head.
 - Every test of a batch is committed to the same branch, so the review covers
   all of them at once.
-- Commit message and PR body identify EdgeSpec and the source files.
+- The default PR body is built from the provenance the request carries: model,
+  executed vs static verification, checks with durations, measured coverage,
+  self-corrections, skipped contract operations, and the test-only guarantee.
+  Send `body` to replace it with your own copy.
+- Check output is never stored or echoed; only the check name, command,
+  duration and outcome are used.
 - Requires a GitHub token with permission to push and open PRs.
 
 ---

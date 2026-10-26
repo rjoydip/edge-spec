@@ -10,6 +10,8 @@ import type {
 } from "@edge-spec/core/types";
 import type { PullSummary } from "@edge-spec/core/github";
 import type { RunDecision, RunDetail, RunSummary } from "@edge-spec/core/history";
+import type { PullFile } from "@edge-spec/core/pr";
+import type { SkippedContractOperation } from "@edge-spec/core/provenance";
 import { getProject, requestHeaders, type Project, type Settings } from "./lib/settings";
 
 export interface Catalog {
@@ -180,11 +182,7 @@ export function fetchQuota(
   return apiJson<{ rateLimit?: RateLimitInfo }>(`/api/quota?${query.toString()}`);
 }
 
-export interface PullFile {
-  sourcePath: string;
-  path: string;
-  code: string;
-}
+export type { PullFile };
 
 /** Optional copy the reviewer can edit in the pull request dialog. */
 export interface PullMeta {
@@ -203,6 +201,7 @@ export function openPullWithFiles(
   settings: Settings,
   files: PullFile[],
   meta?: PullMeta,
+  skipped?: SkippedContractOperation[],
 ): Promise<{ url: string; files: number }> {
   return apiJson<{ url: string; files: number }>("/api/pull-request", {
     method: "POST",
@@ -211,10 +210,17 @@ export function openPullWithFiles(
       ref: project.ref,
       strictTypes: settings.strictTypes,
       ...meta,
+      ...(skipped && skipped.length > 0 ? { skipped } : {}),
       files: files.map((file) => ({
         path: file.path,
         code: file.code,
         sourcePath: file.sourcePath,
+        ...(file.provider ? { provider: file.provider } : {}),
+        ...(file.model ? { model: file.model } : {}),
+        ...(file.corrected ? { corrected: true } : {}),
+        ...(file.verified !== undefined ? { verified: file.verified } : {}),
+        ...(file.checks ? { checks: file.checks } : {}),
+        ...(file.coverage ? { coverage: file.coverage } : {}),
       })),
     }),
   });

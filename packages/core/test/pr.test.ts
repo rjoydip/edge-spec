@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { pullFilesOf, pullMetaOf, slugOf, validBranchName } from "../src/pr";
+import { pullFilesOf, pullMetaOf, pullSkippedOf, slugOf, validBranchName } from "../src/pr";
 import { PolicyError } from "../src/policy";
 
 describe("pullFilesOf", () => {
@@ -38,6 +38,60 @@ describe("pullFilesOf", () => {
     expect(() =>
       pullFilesOf({ sourcePath: "src/a.ts", testPath: "src/a.ts", code: "test a" }),
     ).toThrow(PolicyError);
+  });
+
+  it("keeps provenance but never check output", () => {
+    const [file] = pullFilesOf({
+      files: [
+        {
+          path: "src/a.test.ts",
+          code: "test a",
+          sourcePath: "src/a.ts",
+          provider: "OpenAI",
+          model: "gpt-6",
+          verified: true,
+          corrected: true,
+          checks: [
+            {
+              name: "bun test",
+              kind: "test",
+              command: "bun test",
+              ok: true,
+              durationMs: 12,
+              output: "source text must not be stored",
+            },
+          ],
+          coverage: {
+            status: "measured",
+            path: "src/a.ts",
+            lines: { before: 0, after: 2, delta: 2, total: 3 },
+          },
+        },
+      ],
+    });
+
+    expect(file).toMatchObject({
+      provider: "OpenAI",
+      model: "gpt-6",
+      verified: true,
+      corrected: true,
+      checks: [{ name: "bun test", durationMs: 12 }],
+      coverage: { status: "measured", lines: { delta: 2 } },
+    });
+    const check = file?.checks?.[0];
+    expect(check).toBeDefined();
+    expect(check && "output" in check).toBe(false);
+  });
+
+  it("reads skipped contract operations with their reasons", () => {
+    expect(
+      pullSkippedOf({
+        skipped: [
+          { method: "get", path: "/users", reason: " missing auth fixture " },
+          { method: "POST" },
+        ],
+      }),
+    ).toEqual([{ method: "GET", path: "/users", reason: "missing auth fixture" }]);
   });
 
   it("uses the test path when no source path is given", () => {

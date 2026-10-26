@@ -9,6 +9,7 @@ import type {
   StepId,
   Validation,
 } from "@edge-spec/core/types";
+import type { ProvenanceFile, SkippedContractOperation } from "@edge-spec/core/provenance";
 
 export interface AgentTest {
   generation: Generation;
@@ -290,12 +291,29 @@ export function coverageDeltaLabel(delta?: CoverageDelta): string {
   return `coverage ${lines >= 0 ? "+" : ""}${lines} lines`;
 }
 
-/** One pull-request body line for a measured delta; empty when not measured. */
-export function coverageBodyLine(sourcePath: string, delta?: CoverageDelta): string {
-  if (!delta || delta.status !== "measured") return "";
-  const signed = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
-  const branches = delta.branches ? `, branches ${signed(delta.branches.delta)}` : "";
-  return `- \`${sourcePath}\`: ${signed(delta.lines.delta)} covered line(s)${branches} (${delta.lines.after}/${delta.lines.total}).`;
+/** The facts a pull request body needs, from the tests the reviewer accepted. */
+export function provenanceFiles(items: readonly AgentTest[]): ProvenanceFile[] {
+  return items.map(({ generation, validation }) => ({
+    sourcePath: generation.sourcePath,
+    testPath: generation.testPath,
+    provider: generation.provider,
+    model: generation.model,
+    corrected: generation.corrected,
+    verified: validation.verified,
+    ...(validation.checks ? { checks: validation.checks } : {}),
+    ...(validation.coverage ? { coverage: validation.coverage } : {}),
+  }));
+}
+
+/** Skipped contract operations with the reason the runner or planner gave. */
+export function skippedOperationsOf(results: readonly ApiTestResult[]): SkippedContractOperation[] {
+  return results
+    .filter((result) => result.status === "skipped")
+    .map((result) => ({
+      method: result.method,
+      path: result.path,
+      reason: result.error ?? "skipped",
+    }));
 }
 
 export function skippedChecks(validation: Validation): number {

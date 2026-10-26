@@ -16,7 +16,14 @@ import {
 import { GitHub } from "@edge-spec/core/github";
 import { readRepositoryChecks, runPipeline, withChecks } from "@edge-spec/core/pipeline";
 import { detectChecks, SUPPORT_FILES } from "@edge-spec/core/ci";
-import { pullFilesOf, pullMetaOf, slugOf, validBranchName } from "@edge-spec/core/pr";
+import {
+  pullFilesOf,
+  pullMetaOf,
+  pullSkippedOf,
+  slugOf,
+  validBranchName,
+} from "@edge-spec/core/pr";
+import { pullRequestBody } from "@edge-spec/core/provenance";
 import { assertTestOnly } from "@edge-spec/core/policy";
 import {
   classifyTree,
@@ -837,9 +844,16 @@ app.post("/api/pull-request", async (c) => {
       await github.putFile(repo, file.path, file.code, commitMessage, branch);
     }
 
-    const listing = files
-      .map((file) => `- \`${file.path}\` (for \`${file.sourcePath}\`)`)
-      .join("\\n");
+    const provenanceFiles = files.map((file) => ({
+      sourcePath: file.sourcePath,
+      testPath: file.path,
+      ...(file.provider ? { provider: file.provider } : {}),
+      ...(file.model ? { model: file.model } : {}),
+      ...(file.corrected ? { corrected: true } : {}),
+      ...(file.verified !== undefined ? { verified: file.verified } : {}),
+      ...(file.checks ? { checks: file.checks } : {}),
+      ...(file.coverage ? { coverage: file.coverage } : {}),
+    }));
     const url = await github.openPull(repo, {
       title:
         meta.title ??
@@ -850,17 +864,13 @@ app.post("/api/pull-request", async (c) => {
       base,
       body:
         meta.body ??
-        [
-          "### EdgeSpec",
-          "",
-          single
-            ? `Generated unit tests for \`${files[0]?.sourcePath}\`.`
-            : `Generated unit tests for ${files.length} files.`,
-          "",
-          listing,
-          "",
-          "Review before merging — generated tests are a draft, not a proof.",
-        ].join("\\n"),
+        pullRequestBody({
+          provider: files[0]?.provider,
+          model: files[0]?.model,
+          files: provenanceFiles,
+          skipped: pullSkippedOf(body),
+          testOnly: true,
+        }),
       ...(meta.draft ? { draft: true } : {}),
     });
 
