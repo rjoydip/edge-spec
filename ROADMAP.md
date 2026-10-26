@@ -42,6 +42,7 @@ measures something it actually ran, or says "not measured".
 | Policies                                                     | Shipped (dashboard + optional D1, enforced in both PR paths)   |
 | Scheduled drift                                              | Shipped (daily cron, webhook summary, optional R2 artifacts)   |
 | Backlog                                                      | Shipped (D1 items, CODEOWNERS owner, dashboard states)         |
+| Import graph / impact                                        | Shipped (bounded test graph, PR checks + `/api/impact`)        |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run
 database. That is the largest structural gap.

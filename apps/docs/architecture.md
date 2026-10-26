@@ -137,7 +137,8 @@ Workflow · push
 Workflow · pull_request (advisory)
   changed-files       first page of PR files
   scan-changed        changed sources without tests
-  run-affected-tests  existing tests, only with a runner
+  impact-graph        test import closure (≤200 files) → dependents + reasons
+  run-affected-tests  selected tests, only with a runner
   publish-check       upsert one check run + one marked comment
 
 Workflow · pr_command (authorized /edgespec comment)

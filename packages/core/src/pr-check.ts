@@ -36,6 +36,10 @@ export interface PrCheckInput {
   runner: boolean;
   /** `executed: false` means the runner was configured but could not run. */
   testRun?: { ok: boolean; output: string; durationMs: number; executed?: boolean };
+  /** Why each test was selected, from the import graph. */
+  impact?: ReadonlyArray<{ test: string; via: string[] }>;
+  /** The graph fetch was bounded; some dependents may be absent. */
+  partialImpact?: boolean;
 }
 
 function clip(value: string, max = MAX_MESSAGE): string {
@@ -86,12 +90,31 @@ export function buildPrCheck(input: PrCheckInput): PrCheckResult {
     .map((gap) => `- \`${gap.path}\` — expected \`${gap.testPath}\`.`);
   if (input.gaps.length > 20) gapLines.push(`- …and ${input.gaps.length - 20} more.`);
 
+  const impactLines =
+    input.impact && input.impact.length > 0
+      ? input.impact
+          .slice(0, 20)
+          .map(
+            (item) => `- \`${item.test}\` ← ${item.via.map((path) => `\`${path}\``).join(" → ")}.`,
+          )
+      : ["- No test dependent was selected."];
+  if (input.impact && input.impact.length > 20) {
+    impactLines.push(`- …and ${input.impact.length - 20} more.`);
+  }
+  if (input.partialImpact) {
+    impactLines.push("- Partial graph: the source fetch was bounded.");
+  }
+
   const summary = [
     "## EdgeSpec check",
     "",
     `- ${input.changedFiles.length} changed file(s); ${input.gaps.length} changed source(s) have no test.`,
     testLine,
-    "- Changed-file scope only: import-graph dependents are not analyzed yet.",
+    "- Changed-file scope; test dependents come from the import graph.",
+    "",
+    "### Impact",
+    "",
+    ...impactLines,
     "",
     "### Gaps",
     "",

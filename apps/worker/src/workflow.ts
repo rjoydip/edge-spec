@@ -12,6 +12,7 @@ import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github
 import { coverageForFile } from "@edge-spec/core/coverage";
 import { contractPathFor } from "@edge-spec/core/openapi";
 import { buildPrCheck, type PrCheckResult } from "@edge-spec/core/pr-check";
+import { impactForChanges } from "./impact";
 import { classifyTree, findGaps, isSourceFile, parseOpenApiSpec } from "@edge-spec/core/scanner";
 import {
   assertTestOnly,
@@ -130,10 +131,31 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
     });
   }
 
+  /** Direct and transitive test dependents, built from test import closures. */
+  private async impactFor(input: {
+    github: GitHub;
+    repo: string;
+    ref: string;
+    changed: string[];
+    step: WorkflowStep;
+  }) {
+    return input.step.do("impact-graph", async () => {
+      const tree = await input.github.tree(input.repo, input.ref);
+      const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
+      return impactForChanges({
+        github: input.github,
+        repo: input.repo,
+        ref: input.ref,
+        blobs,
+        changed: input.changed,
+      });
+    });
+  }
+
   /**
-   * Advisory PR check. Changed files only (the import graph is not built yet):
-   * report changed sources without tests, run their existing tests when a
-   * runner exists, then upsert one check and one comment.
+   * Advisory PR check. Changed sources plus their test dependents: report
+   * changed sources without tests, run the selected tests when a runner exists,
+   * then upsert one check and one comment.
    */
   private async checkPullRequest(input: {
     github: GitHub;
@@ -153,17 +175,28 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       changed,
       step: input.step,
     });
+    const impact = await this.impactFor({
+      github: input.github,
+      repo: input.repo,
+      ref: input.ref,
+      changed,
+      step: input.step,
+    });
+    const affectedTests =
+      impact.tests.length > 0 ? impact.tests.map((item) => item.test) : scan.affectedTests;
     const testRun = await this.runAffected({
       repo: input.repo,
       ref: input.ref,
-      tests: scan.affectedTests,
+      tests: affectedTests,
       step: input.step,
     });
 
     const check = buildPrCheck({
       changedFiles: changed,
       gaps: scan.gaps,
-      affectedTests: scan.affectedTests,
+      affectedTests,
+      impact: impact.tests,
+      partialImpact: impact.partial,
       runner: Boolean(this.env.SANDBOX_RUNNER_URL?.trim()) && (!testRun || testRun.executed),
       ...(testRun ? { testRun } : {}),
     });
@@ -208,19 +241,30 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       changed,
       step: input.step,
     });
+    const impact = await this.impactFor({
+      github: input.github,
+      repo: input.repo,
+      ref: pull.sha,
+      changed,
+      step: input.step,
+    });
+    const affectedTests =
+      impact.tests.length > 0 ? impact.tests.map((item) => item.test) : scan.affectedTests;
 
     let check: PrCheckResult;
     if (input.command.name === "retest") {
       const testRun = await this.runAffected({
         repo: input.repo,
         ref: pull.sha,
-        tests: scan.affectedTests,
+        tests: affectedTests,
         step: input.step,
       });
       check = buildPrCheck({
         changedFiles: changed,
         gaps: scan.gaps,
-        affectedTests: scan.affectedTests,
+        affectedTests,
+        impact: impact.tests,
+        partialImpact: impact.partial,
         runner: Boolean(this.env.SANDBOX_RUNNER_URL?.trim()) && (!testRun || testRun.executed),
         ...(testRun ? { testRun } : {}),
       });
@@ -228,7 +272,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       const testRun = await this.runAffected({
         repo: input.repo,
         ref: pull.sha,
-        tests: scan.affectedTests,
+        tests: affectedTests,
         step: input.step,
         coverage: true,
       });

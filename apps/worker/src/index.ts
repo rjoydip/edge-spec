@@ -78,6 +78,7 @@ import {
   syncBacklog,
 } from "./db";
 import type { BacklogState } from "@edge-spec/core/backlog";
+import { impactForChanges } from "./impact";
 import { ownerLookup } from "./ownership";
 import { runScheduled } from "./scheduled";
 import { evaluatePullPolicy, parsePullPolicy, policyBlocked } from "@edge-spec/core/policy";
@@ -501,6 +502,25 @@ app.post("/api/scan", async (c) => {
       coverageStatus: "not-run",
       overview,
     });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.post("/api/impact", async (c) => {
+  try {
+    const body = await readJson(c);
+    const repo = repoOf(body);
+    const ref = parseRef(str(body.ref));
+    const changed = (Array.isArray(body.changedPaths) ? body.changedPaths : [])
+      .filter((path): path is string => typeof path === "string" && path.trim().length > 0)
+      .map((path) => path.trim())
+      .slice(0, 100);
+    if (changed.length === 0) throw new HttpError(400, "Pass at least one changed path.");
+    const github = githubFor(c);
+    const tree = await github.tree(repo, ref);
+    const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
+    return c.json(await impactForChanges({ github, repo, ref, blobs, changed }));
   } catch (err) {
     return fail(err);
   }

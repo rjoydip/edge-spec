@@ -219,6 +219,18 @@ gate name and reason. The dashboard shows that error in the pull request
 dialog. The webhook workflow enforces the server policy and returns
 `status: "blocked"` without opening a pull request.
 
+## Test impact graph
+
+PR checks and `/edgespec retest|coverage` fetch test files and their relative
+imports (up to 200 files, six at a time) and walk reverse edges to find direct
+and transitive test dependents of the changed files. The selected tests and
+their import chains appear under **Impact** in the check summary, and the same
+answer is at `POST /api/impact`. The graph is cached per `repo@ref` in the
+isolate; a bounded or unreadable fetch is labelled `partial`, never “no
+dependents”. Regex parsing covers static/export/require/dynamic imports and
+relative paths only. Package aliases and tsconfig path mappings are not
+resolved yet.
+
 ## Test-debt backlog (optional)
 
 With `RUNS_DB`, scans maintain a durable backlog instead of a transient list.

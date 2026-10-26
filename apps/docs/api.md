@@ -257,6 +257,29 @@ Behaviour:
 
 ---
 
+## `POST /api/impact`
+
+Returns the changed files' direct and transitive test dependents and the import
+chain that selected each one. It is the same bounded graph the PR check uses.
+
+```json
+{ "repo": "acme/api", "ref": "main", "changedPaths": ["src/util.ts"] }
+```
+
+```json
+{
+  "tests": [
+    { "test": "src/auth.test.ts", "via": ["src/util.ts", "src/auth.ts", "src/auth.test.ts"] }
+  ],
+  "partial": false
+}
+```
+
+`partial: true` means the 200-file fetch cap (or an unreadable file) cut the
+graph short; it never means “no dependents”.
+
+---
+
 ## `POST /api/coverage`
 
 Runs the repository's own test command in a sandbox runner with coverage, and
@@ -670,9 +693,11 @@ event:"pull_request"}`. Other actions return `202 {"ignored":"…"}` without
 Check mode is advisory: it scans the changed files, reports changed sources
 without tests, runs their existing tests when a runner is configured, and
 upserts one check run plus one marked comment. Re-runs update those instead of
-adding more. It never commits, generates a test, or opens a PR. Changed-file
-scope only: import-graph dependents are not analyzed yet. Without a runner the
-check is `neutral` and its annotations say static only.
+adding more. It never commits, generates a test, or opens a PR. It runs the
+changed files plus their direct and transitive test dependents from a bounded
+import graph (test files and their relative imports, up to 200 files); the
+summary says when the graph is partial. Without a runner the check is `neutral`
+and its annotations say static only.
 
 `issue_comment` events support three commands in a pull request comment:
 `/edgespec retest`, `/edgespec coverage`, and `/edgespec explain <file|METHOD

@@ -66,6 +66,22 @@ describe("buildPrCheck", () => {
     expect(check.output.annotations[0]?.message).toContain("expected 2, got 3");
   });
 
+  it("explains why a test was selected and admits a partial graph", () => {
+    const check = buildPrCheck({
+      changedFiles: ["src/c.ts"],
+      gaps: [],
+      affectedTests: ["src/a.test.ts"],
+      runner: true,
+      impact: [{ test: "src/a.test.ts", via: ["src/c.ts", "src/b.ts", "src/a.test.ts"] }],
+      partialImpact: true,
+    });
+    expect(check.output.summary).toContain("### Impact");
+    expect(check.output.summary).toContain(
+      "`src/a.test.ts` ← `src/c.ts` → `src/b.ts` → `src/a.test.ts`",
+    );
+    expect(check.output.summary).toContain("Partial graph");
+  });
+
   it("caps annotations at GitHub's limit but keeps the gap count", () => {
     const gaps = Array.from({ length: 60 }, (_, index) => gap(`src/f${index}.ts`));
     const check = buildPrCheck({
