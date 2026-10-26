@@ -280,6 +280,29 @@ graph short; it never means “no dependents”.
 
 ---
 
+## `POST /api/record`
+
+Records HTTP exchanges from a running app once, for later replay without it.
+Requires a sandbox runner and the app origin.
+
+```json
+{
+  "repo": "acme/api",
+  "ref": "main",
+  "specPath": "docs/openapi.yaml",
+  "baseUrl": "https://staging.example.test",
+  "authFixture": { "headers": { "Authorization": "Bearer …" } }
+}
+```
+
+The route generates the deterministic contract suite, runs it with
+`EDGESPEC_RECORD_FILE=recorded-fixtures.json`, and returns
+`{enabled:true, specPath, fixtures}`. Fixture bodies are returned to the caller;
+they are not logged or stored by the deployment. Pass the returned `fixtures` to
+`POST /api/run` (or keep the JSON wherever CI can read it; R2 is recommended).
+
+---
+
 ## `POST /api/coverage`
 
 Runs the repository's own test command in a sandbox runner with coverage, and
@@ -460,6 +483,10 @@ total, score, command, budgetStopped?}` or `{status:"not-measured", reason}`.
   Contract tests also exercise a missing required body field, a wrong scalar
   type, and an unauthenticated request; the generated file contains only
   placeholder env reads.
+- `fixtures` (a recorded fixture file) makes the contract suite start a tiny
+  in-test mock server from `EDGESPEC_FIXTURES`; no live app is needed. If a
+  deliberate spec change makes a recorded status invalid, the replay fails.
+  Record with `POST /api/record`.
 - Quota and 5xx responses fall back once to the next model of the same
   provider; the fallback appears as a `warn` log.
 - A retest sends `retestOperations: [{specPath, method, path}]`. The run is

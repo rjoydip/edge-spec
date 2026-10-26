@@ -25,6 +25,7 @@ import {
 } from "./validate";
 import { sandboxRepo, runInSandbox } from "./sandbox";
 import { coverageTargetFor, type CoverageReport, type CoverageTarget } from "./coverage";
+import type { FixtureFile } from "./fixtures";
 import { apiGaps, contractTestsFor, parseJUnit } from "./openapi";
 import {
   HttpError,
@@ -152,6 +153,8 @@ export interface PipelineOptions {
    * generated code, events, history or the PR.
    */
   authFixture?: { headers?: Record<string, string>; query?: Record<string, string> };
+  /** Recorded exchanges; contract tests replay them without a live app. */
+  fixtures?: FixtureFile;
   ai?: AiBinding;
   fetchImpl?: typeof fetch;
 }
@@ -971,8 +974,11 @@ export async function* runPipeline(
           };
         } else {
           const started = Date.now();
-          const sandbox: SandboxConfig = { ...options.sandbox };
-          const readyUrl = options.sandbox.server?.readyUrl;
+          // Replay does not need the app booted; the generated mock serves it.
+          const sandbox: SandboxConfig = options.fixtures
+            ? { ...options.sandbox, server: undefined }
+            : { ...options.sandbox };
+          const readyUrl = sandbox.server?.readyUrl;
           if (readyUrl) {
             try {
               const base = new URL(readyUrl).origin;
@@ -981,21 +987,26 @@ export async function* runPipeline(
               // A malformed ready URL is the runner's problem, not ours.
             }
           }
-          const authEnv = options.authFixture
-            ? {
-                ...(options.authFixture.headers &&
-                Object.keys(options.authFixture.headers).length > 0
-                  ? { EDGESPEC_AUTH_HEADERS: JSON.stringify(options.authFixture.headers) }
-                  : {}),
-                ...(options.authFixture.query && Object.keys(options.authFixture.query).length > 0
-                  ? { EDGESPEC_AUTH_QUERY: JSON.stringify(options.authFixture.query) }
-                  : {}),
-              }
-            : {};
+          const contractEnv = {
+            ...(options.authFixture
+              ? {
+                  ...(options.authFixture.headers &&
+                  Object.keys(options.authFixture.headers).length > 0
+                    ? { EDGESPEC_AUTH_HEADERS: JSON.stringify(options.authFixture.headers) }
+                    : {}),
+                  ...(options.authFixture.query && Object.keys(options.authFixture.query).length > 0
+                    ? { EDGESPEC_AUTH_QUERY: JSON.stringify(options.authFixture.query) }
+                    : {}),
+                }
+              : {}),
+            ...(options.fixtures ? { EDGESPEC_FIXTURES: JSON.stringify(options.fixtures) } : {}),
+          };
           const run = await runInSandbox({
             sandbox,
             ...(repoArg ? { repo: repoArg } : {}),
-            ...(Object.keys(authEnv).length > 0 ? { env: { ...sandbox.env, ...authEnv } } : {}),
+            ...(Object.keys(contractEnv).length > 0
+              ? { env: { ...sandbox.env, ...contractEnv } }
+              : {}),
             files: {
               [spec.path]: spec.content ?? "",
               [contract.path]: contract.code,

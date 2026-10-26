@@ -23,6 +23,7 @@ import {
   slugOf,
   validBranchName,
 } from "@edge-spec/core/pr";
+import { parseFixtureFile, type FixtureFile } from "@edge-spec/core/fixtures";
 import { pullRequestBody } from "@edge-spec/core/provenance";
 import { authorizedCommenter, parsePrCommand } from "@edge-spec/core/pr-command";
 import { assertTestOnly } from "@edge-spec/core/policy";
@@ -34,7 +35,7 @@ import {
   parseOpenApiSpec,
   riskOf,
 } from "@edge-spec/core/scanner";
-import { apiGaps } from "@edge-spec/core/openapi";
+import { apiGaps, contractTestsFor } from "@edge-spec/core/openapi";
 import { coverageGaps } from "@edge-spec/core/coverage";
 import {
   formatWithRunner,
@@ -554,6 +555,67 @@ app.post("/api/impact", async (c) => {
   }
 });
 
+app.post("/api/record", async (c) => {
+  try {
+    const body = await readJson(c);
+    const repo = repoOf(body);
+    const ref = parseRef(str(body.ref));
+    const sandbox = sandboxFor(c);
+    if (!sandbox?.url) throw new HttpError(400, "Recording needs a sandbox runner.");
+    const github = githubFor(c);
+    const tree = await github.tree(repo, ref);
+    const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
+    const specPath =
+      str(body.specPath) ??
+      blobs.find((path) => /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i.test(path));
+    if (!specPath) throw new HttpError(400, "No OpenAPI spec found; pass specPath.");
+    const spec = parseOpenApiSpec(await github.file(repo, specPath, ref), specPath);
+    if (!spec) throw new HttpError(400, `${specPath} is not a usable OpenAPI spec.`);
+    const baseUrl =
+      str(body.baseUrl) ??
+      (sandbox.server?.readyUrl ? new URL(sandbox.server.readyUrl).origin : undefined);
+    if (!baseUrl) throw new HttpError(400, "Pass baseUrl (the running app origin).");
+    const authFixture = authFixtureOf(body);
+    const contract = contractTestsFor(spec, undefined, {
+      auth: Boolean(authFixture),
+      negative: false,
+    });
+    const repoArg = sandboxRepo({
+      repo,
+      ref,
+      sandbox,
+      ...(sandbox.allowRepoToken ? { token: c.req.header(TOKEN_HEADER) ?? "" } : {}),
+    });
+    const env = {
+      ...sandbox.env,
+      BASE_URL: baseUrl,
+      EDGESPEC_RECORD_FILE: "recorded-fixtures.json",
+      ...(authFixture?.headers
+        ? { EDGESPEC_AUTH_HEADERS: JSON.stringify(authFixture.headers) }
+        : {}),
+      ...(authFixture?.query ? { EDGESPEC_AUTH_QUERY: JSON.stringify(authFixture.query) } : {}),
+    };
+    const run = await runInSandbox({
+      sandbox,
+      ...(repoArg ? { repo: repoArg } : {}),
+      env,
+      files: { [specPath]: spec.content ?? "", [contract.path]: contract.code },
+      command: `bun test ${contract.path}`,
+    });
+    if (run.unreachable || run.environmentError) {
+      throw new HttpError(502, run.output || "The runner could not record fixtures.");
+    }
+    const text = run.artifacts["recorded-fixtures.json"] ?? run.files["recorded-fixtures.json"];
+    const fixtures = text ? parseFixtureFile(text) : undefined;
+    if (!fixtures) {
+      throw new HttpError(502, run.output || "The runner returned no recorded fixtures.");
+    }
+    return c.json({ enabled: true, specPath, fixtures });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
 app.post("/api/coverage", async (c) => {
   try {
     const body = await readJson(c);
@@ -648,6 +710,7 @@ app.post("/api/run", async (c) => {
     sandbox?: SandboxConfig;
     repoToken?: string;
     authFixture?: { headers?: Record<string, string>; query?: Record<string, string> };
+    fixtures?: FixtureFile;
     input: ReturnType<typeof pipelineConfig> & {
       repo: string;
       ref: string;
@@ -665,6 +728,11 @@ app.post("/api/run", async (c) => {
     const retestOperations = retestOperationsOf(body.retestOperations);
     const sandbox = sandboxFor(c);
     const authFixture = authFixtureOf(body);
+    const fixtures =
+      body.fixtures === undefined ? undefined : parseFixtureFile(JSON.stringify(body.fixtures));
+    if (body.fixtures !== undefined && !fixtures) {
+      throw new HttpError(400, "fixtures must contain at least one valid exchange.");
+    }
     const repoToken = sandbox?.allowRepoToken
       ? c.req.header(TOKEN_HEADER)?.trim() || undefined
       : undefined;
@@ -676,6 +744,7 @@ app.post("/api/run", async (c) => {
       ...(sandbox ? { sandbox } : {}),
       ...(repoToken ? { repoToken } : {}),
       ...(authFixture ? { authFixture } : {}),
+      ...(fixtures ? { fixtures } : {}),
       input: {
         repo,
         ref,
@@ -692,7 +761,7 @@ app.post("/api/run", async (c) => {
     return fail(err);
   }
 
-  const { github, aiConfig, sandbox, repoToken, authFixture, input } = prepared;
+  const { github, aiConfig, sandbox, repoToken, authFixture, fixtures, input } = prepared;
   const history = runsDb(c.env);
   const runId = crypto.randomUUID();
   const run: RunSummary = {
@@ -731,6 +800,7 @@ app.post("/api/run", async (c) => {
         ...(sandbox ? { sandbox } : {}),
         ...(repoToken ? { repoToken } : {}),
         ...(authFixture ? { authFixture } : {}),
+        ...(fixtures ? { fixtures } : {}),
       })) {
         if (event.type === "gaps") {
           scannedGaps = event.gaps;

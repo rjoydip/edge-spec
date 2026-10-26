@@ -46,6 +46,7 @@ measures something it actually ran, or says "not measured".
 | Flaky detection                                              | Shipped (repeats, quarantined, never verified)                 |
 | Mutation score                                               | Shipped (opt-in Stryker report, budget stop labelled)          |
 | Contract negatives / auth fixtures                           | Shipped (env-only fixtures, missing/wrong/unauthorized cases)  |
+| Record/replay API fixtures                                   | Shipped (`/api/record`, in-test mock replay, no live app)      |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run
 database. That is the largest structural gap.

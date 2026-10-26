@@ -252,6 +252,18 @@ describe("contractTestsFor", () => {
     expect(contract.code).not.toContain("wrongType");
   });
 
+  it("embeds a replay mock and a record hook, with no fixture values", () => {
+    const spec = parseOpenApiSpec(NEGATIVE_SPEC, "openapi.json");
+    if (!spec) throw new Error("fixture did not parse");
+    const contract = contractTestsFor(spec, undefined, { auth: true });
+    expect(contract.code).toContain('envJson("EDGESPEC_FIXTURES")');
+    expect(contract.code).toContain("Bun.serve");
+    expect(contract.code).toContain("EDGESPEC_RECORD_FILE");
+    expect(contract.code).toContain("if (!REPLAY)");
+    // Recorded values are env/file only; no credential is baked in.
+    expect(contract.code).not.toContain("Bearer");
+  });
+
   it("can hold only the operations a retest asks for", () => {
     const spec = parseOpenApiSpec(
       JSON.stringify({

@@ -228,6 +228,16 @@ declared (expecting 401/403) and, with a JSON body example and required schema
 fields, a missing-field and wrong-type request (expecting a documented 4xx or
 400/422). These are deterministic extras, not AI output.
 
+## API fixtures (record/replay)
+
+`POST /api/record` runs the contract suite against a booted app once and returns
+a versioned fixture file. Passing that file as `fixtures` to `/api/run` makes the
+generated contract tests start a tiny in-test mock server from
+`EDGESPEC_FIXTURES`; no live app is required. The mock serves the recorded
+status, headers and body, and the normal status assertion still runs, so a
+deliberate spec status change fails replay. Recorded bodies may contain real
+data: keep them outside the PR, preferably in R2, and apply retention there.
+
 ## Pull request policy (optional)
 
 Dashboard policy lives in `localStorage` (Settings → Policy) and travels with
