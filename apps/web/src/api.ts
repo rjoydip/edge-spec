@@ -148,6 +148,7 @@ export async function regenerate(
     maxAiRetries: settings.maxAiRetries,
     flakyRuns: settings.flakyRuns,
     mutationCommand: settings.mutationCommand,
+    propertyTests: settings.propertyTests,
     ...(previous ? { previous } : {}),
     ...(targeting?.uncoveredLines?.length ? { uncoveredLines: targeting.uncoveredLines } : {}),
     ...(targeting?.uncoveredBranches?.length
@@ -342,6 +343,7 @@ export async function runPipelineStream(
         maxTokens: settings.maxTokens,
         flakyRuns: settings.flakyRuns,
         mutationCommand: settings.mutationCommand,
+        propertyTests: settings.propertyTests,
         ...(authFixture ? { authFixture } : {}),
         strictTypes: settings.strictTypes,
         coverageTarget: settings.coverageTarget,

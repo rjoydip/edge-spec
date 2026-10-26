@@ -913,6 +913,9 @@ app.post("/api/generate", async (c) => {
       checks = await readRepositoryChecks(github, repo, ref, blobs);
     }
 
+    const fastCheck = /"fast-check"\s*:/.test(checks?.support["package.json"] ?? "");
+    const properties = config.propertyTests && fastCheck ? { runs: 50, seed: 42 } : undefined;
+
     let rateLimit: RateLimitInfo | undefined;
     const notices: string[] = [];
     const write = (previous?: { code: string; output: string }) =>
@@ -922,6 +925,7 @@ app.post("/api/generate", async (c) => {
         config: aiConfig,
         coverageTarget: config.coverageTarget,
         ...(coverageHint ? { coverageHint } : {}),
+        ...(properties ? { propertyTests: properties } : {}),
         ...(previous ? { previous } : {}),
         onNotice: (text) => notices.push(text),
         ...(checks && checks.style.length ? { style: checks.style } : {}),
@@ -955,6 +959,7 @@ app.post("/api/generate", async (c) => {
         strictTypes: config.strictTypes,
         flakyRuns: config.flakyRuns,
         mutationCommand: config.mutationCommand,
+        requireProperties: Boolean(properties),
         ...(sandbox ? { sandbox } : {}),
         ...(repoArg ? { repo: repoArg } : {}),
       });

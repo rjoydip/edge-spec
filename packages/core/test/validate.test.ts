@@ -25,6 +25,31 @@ describe("staticCheck", () => {
     );
   });
 
+  it("requires a labelled, seeded, bounded property when opted in", () => {
+    const property = `import * as fc from "fast-check";
+import { describe, it, expect } from "bun:test";
+
+describe("add", () => {
+  it("[property] adds integers", () => {
+    fc.assert(fc.property(fc.integer(), (n) => expect(typeof n).toBe("number")), {
+      numRuns: 50,
+      seed: 42,
+    });
+  });
+});`;
+    expect(staticCheck(property, true, true)).toEqual([]);
+    expect(
+      staticCheck(GOOD, true, true)
+        .map((problem) => problem.problem)
+        .join(" "),
+    ).toContain("fast-check");
+    expect(
+      staticCheck(property.replace("seed: 42", ""), true, true)
+        .map((problem) => problem.problem)
+        .join(" "),
+    ).toContain("seed");
+  });
+
   it("enforces strict mode when asked", () => {
     const loose = GOOD.replace("add(1, 2)", "add(1 as any, 2)");
     expect(staticCheck(GOOD, true)).toEqual([]);

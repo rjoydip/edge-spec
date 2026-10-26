@@ -18,7 +18,11 @@ export interface StaticProblem {
 }
 
 /** Deliberately shallow checks — a parser would be a dependency for little gain. */
-export function staticCheck(test: string, strictTypes: boolean): StaticProblem[] {
+export function staticCheck(
+  test: string,
+  strictTypes: boolean,
+  requireProperties = false,
+): StaticProblem[] {
   const problems: StaticProblem[] = [];
   const code = test.trim();
 
@@ -52,6 +56,21 @@ export function staticCheck(test: string, strictTypes: boolean): StaticProblem[]
     }
   }
 
+  if (requireProperties) {
+    if (!/from\s+["']fast-check["']/.test(code)) {
+      problems.push({ problem: "Property tests were requested but fast-check is not imported." });
+    }
+    if (!/\[property\]/.test(code)) {
+      problems.push({ problem: 'Property tests need a "[property]" label.' });
+    }
+    if (!/numRuns\s*:/.test(code)) {
+      problems.push({ problem: "Property tests need a bounded numRuns." });
+    }
+    if (!/\bseed\s*:/.test(code)) {
+      problems.push({ problem: "Property tests need an explicit seed." });
+    }
+  }
+
   return problems;
 }
 
@@ -68,6 +87,8 @@ export interface ValidateInput {
   flakyRuns?: number;
   /** A Stryker-compatible command; empty or absent means mutation is not measured. */
   mutationCommand?: string;
+  /** Fail static checks unless a labelled, seeded, bounded property exists. */
+  requireProperties?: boolean;
   /** Ask the runner for LCOV and attach a per-file delta to the result. */
   measureCoverage?: boolean;
   /** The before report; a delta needs both reports. */
@@ -77,7 +98,7 @@ export interface ValidateInput {
 
 export async function validateTest(input: ValidateInput): Promise<Validation> {
   const started = Date.now();
-  const problems = staticCheck(input.test, input.strictTypes);
+  const problems = staticCheck(input.test, input.strictTypes, input.requireProperties === true);
   if (problems.length > 0) {
     return {
       ok: false,

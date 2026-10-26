@@ -163,6 +163,8 @@ export const DEFAULT_PIPELINE = {
   flakyRuns: 2,
   /** Empty means mutation is not measured. `{file}`/`{test}` are substituted. */
   mutationCommand: "",
+  /** Opt-in fast-check properties; off by default because cost and flake are real. */
+  propertyTests: false,
 } as const;
 
 export function providerById(id: string): Provider | undefined {
@@ -370,6 +372,8 @@ export interface PipelineConfigInput {
   flakyRuns?: unknown;
   /** Stryker-compatible command; empty means not measured. */
   mutationCommand?: unknown;
+  /** Opt-in fast-check properties. */
+  propertyTests?: unknown;
 }
 
 export function pipelineConfig(input: PipelineConfigInput): {
@@ -384,6 +388,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
   maxTokens: number;
   flakyRuns: number;
   mutationCommand: string;
+  propertyTests: boolean;
 } {
   const retries = Number(input.maxRetries);
   const aiRetries = Number(input.maxAiRetries);
@@ -408,6 +413,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
     maxTokens: Number.isFinite(tokens) ? Math.min(2_000_000, Math.max(0, Math.round(tokens))) : 0,
     flakyRuns: Number.isFinite(flaky) ? Math.min(5, Math.max(0, Math.round(flaky))) : 2,
     mutationCommand,
+    propertyTests: input.propertyTests === true,
   };
 }
 

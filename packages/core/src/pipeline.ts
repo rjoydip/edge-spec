@@ -63,6 +63,8 @@ export interface PipelineInput {
   flakyRuns?: number;
   /** Stryker-compatible command; empty means mutation is not measured. */
   mutationCommand?: string;
+  /** Opt-in fast-check properties; only runs when fast-check is a dependency. */
+  propertyTests?: boolean;
   /** When set, run only these failed operations and label the run a retest. */
   retestOperations?: RetestOperation[];
 }
@@ -461,6 +463,17 @@ export async function* runPipeline(
     const blobsForChecks = input.retryGaps && input.retryGaps.length > 0 ? [] : blobs;
     const checks = await readRepositoryChecks(github, input.repo, input.ref, blobsForChecks);
 
+    // Property tests stay opt-in and need the dependency the prompt will name.
+    const fastCheck = /"fast-check"\s*:/.test(checks.support["package.json"] ?? "");
+    const properties =
+      input.propertyTests === true && fastCheck ? { runs: 50, seed: 42 } : undefined;
+    if (input.propertyTests === true && !fastCheck) {
+      yield log(
+        "warn",
+        "Property tests were requested, but fast-check is not a dependency; skipped.",
+      );
+    }
+
     // Coverage is measured only when the visitor asked for it and a runner can
     // clone the repo. This first report is the baseline for every file's delta.
     const sandbox = options.sandbox;
@@ -519,6 +532,7 @@ export async function* runPipeline(
           config: aiConfig,
           coverageTarget: input.coverageTarget,
           ...(hint ? { coverageHint: hint } : {}),
+          ...(properties ? { propertyTests: properties } : {}),
           ...(checks.style.length ? { style: checks.style } : {}),
           ...(checks.checks.length
             ? {
@@ -582,6 +596,7 @@ export async function* runPipeline(
           config: aiConfig,
           coverageTarget: input.coverageTarget,
           ...(coverageHint ? { coverageHint } : {}),
+          ...(properties ? { propertyTests: properties } : {}),
           onUsage: (usage: TokenUsage) => {
             usageSeen = true;
             spentTokens += usage.input + usage.output;
@@ -689,6 +704,7 @@ export async function* runPipeline(
           ...(baselineCoverage ? { baselineCoverage } : {}),
           flakyRuns: input.flakyRuns ?? 0,
           ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
+          requireProperties: Boolean(properties),
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         });
 
@@ -757,6 +773,7 @@ export async function* runPipeline(
             previous: { code, output: validation.output },
             coverageTarget: input.coverageTarget,
             ...(coverageHint ? { coverageHint } : {}),
+            ...(properties ? { propertyTests: properties } : {}),
             onUsage: (usage: TokenUsage) => {
               usageSeen = true;
               spentTokens += usage.input + usage.output;
@@ -825,6 +842,7 @@ export async function* runPipeline(
             ...(baselineCoverage ? { baselineCoverage } : {}),
             flakyRuns: input.flakyRuns ?? 0,
             ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
+            requireProperties: Boolean(properties),
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
           });
           const retryChecks = await runRepositoryChecks({

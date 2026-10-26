@@ -92,6 +92,16 @@ describe("buildPrompt", () => {
   it("adds no targeting note without a measured hint", () => {
     expect(buildPrompt(input({ provider: "openai" }))).not.toContain("Uncovered lines");
   });
+
+  it("asks for labelled, seeded, bounded fast-check properties when opted in", () => {
+    const prompt = buildPrompt(
+      input({ provider: "openai", propertyTests: { runs: 50, seed: 42 } }),
+    );
+    expect(prompt).toContain("fast-check");
+    expect(prompt).toContain("numRuns: 50");
+    expect(prompt).toContain("seed: 42");
+    expect(prompt).toContain("[property]");
+  });
 });
 
 describe("generateTest", () => {

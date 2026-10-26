@@ -179,6 +179,7 @@ custom path is simpler.
 | `maxTokens`          | 0       | 0–2M    | Provider-reported token cap for one run; `0` means no cap             |
 | `flakyRuns`          | 2       | 0–5     | Extra repeats after a passing suite; `0` disables flaky detection     |
 | `mutationCommand`    | empty   | ≤500    | Stryker-compatible command; empty means mutation is not measured      |
+| `propertyTests`      | false   | boolean | Opt-in fast-check properties with 50 runs and seed 42                 |
 | `concurrency`        | 3       | 1–6     | Files generated and validated at once; a lower sandbox cap wins       |
 | `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments         |
 
@@ -200,6 +201,13 @@ input, the result is `flaky: true`, `ok: false`, `verified: false`; it is
 quarantined in Review and labelled in the PR body instead of being counted as a
 pass. This can multiply runner time, so `0` turns it off. The same command and
 environment are reused; there is no per-run seed control yet.
+
+Property tests are opt-in and only run when `fast-check` is already a dependency
+in `package.json`. The prompt asks for a `[property]`-labelled test with
+`fc.assert(..., { numRuns: 50, seed: 42 })`; static validation rejects a missing
+import, label, bound or seed, so the correction loop can fix it. fast-check’s own
+failure output carries the seed and counterexample. Off by default because the
+extra runs cost real runner time and can expose real flakiness.
 
 Mutation is opt-in through `mutationCommand`. `{file}` and `{test}` are
 shell-quoted and substituted. The command runs only after a stable pass, in the

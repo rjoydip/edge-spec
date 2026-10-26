@@ -200,6 +200,7 @@ describe("pipelineConfig", () => {
       maxTokens: 0,
       flakyRuns: 2,
       mutationCommand: "",
+      propertyTests: false,
     });
     expect(pipelineConfig({ maxRetries: "x" }).maxRetries).toBe(2);
     expect(pipelineConfig({ maxFiles: 0 }).maxFiles).toBe(1);
@@ -211,6 +212,8 @@ describe("pipelineConfig", () => {
     expect(pipelineConfig({ flakyRuns: 3 }).flakyRuns).toBe(3);
     expect(pipelineConfig({ flakyRuns: -1 }).flakyRuns).toBe(0);
     expect(pipelineConfig({ flakyRuns: 99 }).flakyRuns).toBe(5);
+    expect(pipelineConfig({ propertyTests: true }).propertyTests).toBe(true);
+    expect(pipelineConfig({ propertyTests: "yes" }).propertyTests).toBe(false);
   });
 });
 

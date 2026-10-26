@@ -373,6 +373,7 @@ Request:
   "maxTokens": 0,
   "flakyRuns": 2,
   "mutationCommand": "npx stryker run --mutate {file}",
+  "propertyTests": false,
   "authFixture": {
     "headers": { "Authorization": "Bearer …" },
     "query": { "api_key": "…" }
@@ -483,6 +484,10 @@ total, score, command, budgetStopped?}` or `{status:"not-measured", reason}`.
   Contract tests also exercise a missing required body field, a wrong scalar
   type, and an unauthenticated request; the generated file contains only
   placeholder env reads.
+- `propertyTests` is opt-in and only applied when the repository depends on
+  `fast-check`. Properties must be `[property]`-labelled with `numRuns: 50` and
+  `seed: 42`; static validation fails otherwise, and fast-check surfaces the
+  seed/counterexample on a failure.
 - `fixtures` (a recorded fixture file) makes the contract suite start a tiny
   in-test mock server from `EDGESPEC_FIXTURES`; no live app is needed. If a
   deliberate spec change makes a recorded status invalid, the replay fails.

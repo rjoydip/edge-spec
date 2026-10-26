@@ -37,6 +37,8 @@ export interface Settings {
   flakyRuns: number;
   /** Stryker-compatible command; empty means mutation is not measured. */
   mutationCommand: string;
+  /** Opt-in fast-check properties, only when the repository has fast-check. */
+  propertyTests: boolean;
   /** JSON object of contract auth headers; sandbox env only. */
   contractAuthHeaders: string;
   /** JSON object of contract auth query values; sandbox env only. */
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxTokens: DEFAULT_PIPELINE.maxTokens,
   flakyRuns: DEFAULT_PIPELINE.flakyRuns,
   mutationCommand: DEFAULT_PIPELINE.mutationCommand,
+  propertyTests: DEFAULT_PIPELINE.propertyTests,
   contractAuthHeaders: "",
   contractAuthQuery: "",
   policy: {},
@@ -192,6 +195,7 @@ function load(): Settings {
       ),
       mutationCommand:
         typeof parsed.mutationCommand === "string" ? parsed.mutationCommand.slice(0, 500) : "",
+      propertyTests: parsed.propertyTests === true,
       contractAuthHeaders:
         typeof parsed.contractAuthHeaders === "string"
           ? parsed.contractAuthHeaders.slice(0, 4000)

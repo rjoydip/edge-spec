@@ -39,6 +39,8 @@ export interface GenerateInput {
   coverageTarget?: number;
   /** Uncovered lines and branches from the last executed report, when measured. */
   coverageHint?: CoverageTarget;
+  /** Opt-in fast-check properties, bounded and seeded. */
+  propertyTests?: { runs: number; seed: number };
   /** The style rules the repository formats with. */
   style?: string[];
   /** The commands CI runs, so the test satisfies them. */
@@ -78,6 +80,10 @@ export function buildPrompt(input: GenerateInput): string {
       ? `\nA real coverage report for this file found gaps. Target them directly:\n${hintLines ? `- Uncovered lines: ${hintLines}. Add assertions for the behavior on these lines.\n` : ""}${hintBranches ? `- Uncovered branches on lines: ${hintBranches}. Exercise both outcomes.\n` : ""}`
       : "";
 
+  const properties = input.propertyTests
+    ? `\nProperty-based tests are enabled and fast-check is already a dependency:\n- Import it as \`import * as fc from "fast-check";\`.\n- Add at least one property using \`fc.assert(fc.property(...), { numRuns: ${input.propertyTests.runs}, seed: ${input.propertyTests.seed} })\`.\n- Put \`[property]\` in that \`it(...)\` name.\n- Do not catch or rewrite fast-check failures; its seed and counterexample must surface.\n`
+    : "";
+
   return `Write a complete unit test file for the source below.
 
 File: ${input.filePath}
@@ -92,7 +98,7 @@ Rules:
 - Keep it one file and make it pass against the source exactly as written.
 - Write the code in the style of the repository, so a formatter does not change it.
 - Do not add a coverage comment or prose outside the code block.
-${style}${checks}${targeting}
+${style}${checks}${targeting}${properties}
 Source:
 \`\`\`ts
 ${input.source.slice(0, 24000)}

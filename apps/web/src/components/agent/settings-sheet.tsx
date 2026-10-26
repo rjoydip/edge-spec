@@ -530,6 +530,22 @@ export function SettingsSheet({
                     placeholder="npx stryker run --mutate {file}"
                   />
                 </Field>
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
+                  <span>
+                    <span className="block text-[11px] font-medium text-zinc-300">
+                      Property-based tests
+                    </span>
+                    <span className="block text-[10px] text-zinc-500">
+                      Opt-in fast-check, 50 runs, seed 42. Skipped when fast-check is absent.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={settings.propertyTests}
+                    onCheckedChange={(propertyTests) => update({ propertyTests })}
+                    size="sm"
+                    aria-label="Property-based tests"
+                  />
+                </label>
                 <Field
                   label="Contract auth headers (JSON)"
                   hint="Sandbox env only; never in generated code, logs or the PR."
