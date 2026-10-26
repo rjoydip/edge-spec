@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { AiConfig } from "@edge-spec/core/ai";
-import { generateTest, probeRateLimit } from "@edge-spec/core/ai";
+import { PROMPT_VERSION, generateTest, probeRateLimit } from "@edge-spec/core/ai";
 import {
   DEFAULT_AI,
   DEFAULT_PIPELINE,
@@ -62,15 +62,18 @@ import type { Env } from "./env";
 import {
   claimPrCommand,
   createRun,
+  deleteMemory,
   deletePolicy,
   deleteRunHistory,
   deleteScheduledRepo,
   finishRun,
+  getMemory,
   getPolicy,
   getRun,
   listBacklog,
   listRuns,
   listScheduledRepos,
+  putMemory,
   putPolicy,
   putScheduledRepo,
   runsDb,
@@ -82,6 +85,7 @@ import type { BacklogState } from "@edge-spec/core/backlog";
 import { impactForChanges } from "./impact";
 import { ownerLookup } from "./ownership";
 import { runScheduled } from "./scheduled";
+import { parseRepoMemory } from "@edge-spec/core/memory";
 import { evaluatePullPolicy, parsePullPolicy, policyBlocked } from "@edge-spec/core/policy";
 import type { RunDecision, RunFile, RunSummary } from "@edge-spec/core/history";
 
@@ -764,6 +768,7 @@ app.post("/api/run", async (c) => {
 
   const { github, aiConfig, sandbox, repoToken, authFixture, fixtures, input } = prepared;
   const history = runsDb(c.env);
+  const memory = history ? await getMemory(history, input.repo).catch(() => undefined) : undefined;
   const runId = crypto.randomUUID();
   const run: RunSummary = {
     id: runId,
@@ -802,6 +807,7 @@ app.post("/api/run", async (c) => {
         ...(repoToken ? { repoToken } : {}),
         ...(authFixture ? { authFixture } : {}),
         ...(fixtures ? { fixtures } : {}),
+        ...(memory ? { memory } : {}),
       })) {
         if (event.type === "gaps") {
           scannedGaps = event.gaps;
@@ -875,6 +881,9 @@ app.post("/api/generate", async (c) => {
     const config = pipelineConfig(body);
     const aiConfig = aiConfigFor(c, body);
     const sandbox = sandboxFor(c);
+    const memoryDb = runsDb(c.env);
+    const memory =
+      repo && memoryDb ? await getMemory(memoryDb, repo).catch(() => undefined) : undefined;
     const repoToken = sandbox?.allowRepoToken
       ? c.req.header(TOKEN_HEADER)?.trim() || undefined
       : undefined;
@@ -927,6 +936,7 @@ app.post("/api/generate", async (c) => {
         source,
         config: aiConfig,
         runner,
+        ...(memory ? { memory } : {}),
         coverageTarget: config.coverageTarget,
         ...(coverageHint ? { coverageHint } : {}),
         ...(properties ? { propertyTests: properties } : {}),
@@ -1001,6 +1011,7 @@ app.post("/api/generate", async (c) => {
         provider: aiConfig.provider.id,
         model: aiConfig.model,
         corrected,
+        promptVersion: PROMPT_VERSION,
         source,
       },
       validation,
@@ -1063,6 +1074,7 @@ app.post("/api/pull-request", async (c) => {
       testPath: file.path,
       ...(file.provider ? { provider: file.provider } : {}),
       ...(file.model ? { model: file.model } : {}),
+      ...(file.promptVersion ? { promptVersion: file.promptVersion } : {}),
       ...(file.corrected ? { corrected: true } : {}),
       ...(file.flaky ? { flaky: true } : {}),
       ...(file.verified !== undefined ? { verified: file.verified } : {}),
@@ -1308,6 +1320,52 @@ app.delete("/api/schedules", async (c) => {
     const parsed = parseRepo(c.req.query("repo"));
     if (!parsed) throw new HttpError(400, "Pass ?repo=owner/name.");
     await deleteScheduledRepo(db, `${parsed.owner}/${parsed.name}`);
+    return c.json({ deleted: true });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.get("/api/memory", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, memory: {} });
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    return c.json({
+      enabled: true,
+      memory: await getMemory(db, `${repo.owner}/${repo.name}`),
+    });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.put("/api/memory", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Repository memory needs the RUNS_DB binding.");
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    const body = await readJson(c);
+    const memory = await putMemory(
+      db,
+      `${repo.owner}/${repo.name}`,
+      parseRepoMemory(body.memory ?? body),
+    );
+    return c.json({ enabled: true, memory });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.delete("/api/memory", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Repository memory needs the RUNS_DB binding.");
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    await deleteMemory(db, `${repo.owner}/${repo.name}`);
     return c.json({ deleted: true });
   } catch (err) {
     return fail(err);

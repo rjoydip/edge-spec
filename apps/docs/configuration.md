@@ -258,6 +258,15 @@ status, headers and body, and the normal status assertion still runs, so a
 deliberate spec status change fails replay. Recorded bodies may contain real
 data: keep them outside the PR, preferably in R2, and apply retention there.
 
+## Repository memory (optional)
+
+With `RUNS_DB`, a repository can opt into a small memory of approved
+conventions, helper paths, fixture paths and test naming. Only short strings are
+stored; source text is never retained by this feature. The memory is loaded into
+dashboard generation, single-file generation, and webhook prompts, and every
+generation is stamped with `PROMPT_VERSION` so results can be attributed. Manage
+it at `GET/PUT/DELETE /api/memory?repo=owner/name`.
+
 ## Pull request policy (optional)
 
 Dashboard policy lives in `localStorage` (Settings → Policy) and travels with

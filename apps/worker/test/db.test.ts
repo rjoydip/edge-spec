@@ -1,5 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { claimPrCommand, deleteRunHistory, getPolicy, listRuns, putPolicy } from "../src/db";
+import {
+  claimPrCommand,
+  deleteRunHistory,
+  getMemory,
+  getPolicy,
+  listRuns,
+  putMemory,
+  putPolicy,
+} from "../src/db";
 import type { D1Database, D1PreparedStatement } from "../src/env";
 
 /** A D1 stand-in: records bound values and returns one prepared result set. */
@@ -136,6 +144,44 @@ describe("run history queries", () => {
     expect(await claimPrCommand(db, "acme/api", 1, "alice", "retest", 60_000, 1_000)).toBe(true);
     expect(await claimPrCommand(db, "acme/api", 1, "alice", "retest", 60_000, 30_000)).toBe(false);
     expect(await claimPrCommand(db, "acme/api", 1, "alice", "retest", 60_000, 62_000)).toBe(true);
+  });
+
+  it("round-trips approved repository memory", async () => {
+    let stored: string | undefined;
+    const db = {
+      prepare(sql: string) {
+        let values: unknown[] = [];
+        const statement: D1PreparedStatement = {
+          bind(...next: unknown[]) {
+            values = next;
+            return statement;
+          },
+          async first<T>(): Promise<T | null> {
+            return (stored ? { memory_json: stored } : null) as T | null;
+          },
+          async all<T>(): Promise<{ results?: T[] }> {
+            return { results: [] };
+          },
+          async run() {
+            if (sql.startsWith("INSERT")) stored = String(values[1]);
+            return {};
+          },
+        };
+        return statement;
+      },
+      async batch() {
+        return [];
+      },
+    } as D1Database;
+
+    await putMemory(db, "acme/api", {
+      naming: "sibling .test.ts",
+      helpers: ["src/test-utils.ts"],
+    });
+    expect(await getMemory(db, "acme/api")).toEqual({
+      naming: "sibling .test.ts",
+      helpers: ["src/test-utils.ts"],
+    });
   });
 
   it("deletes run files and runs for one repository in one batch", async () => {

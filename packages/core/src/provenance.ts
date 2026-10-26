@@ -17,6 +17,8 @@ export interface ProvenanceFile {
   provider?: string;
   model?: string;
   corrected?: boolean;
+  /** The prompt version that produced the code. */
+  promptVersion?: string;
   /** The suite passed and failed on identical input; never accepted as verified. */
   flaky?: boolean;
   /** `true` executed, `false` static only, absent not reported. */
@@ -124,8 +126,10 @@ export function pullRequestBody(input: PullProvenance): string {
     .slice(0, MAX_SKIPPED)
     .map((item) => `- \`${item.method} ${item.path}\`: ${item.reason}.`);
 
+  const promptVersion = files.find((file) => file.promptVersion)?.promptVersion;
   const summary: string[] = [];
   if (model) summary.push(`Generated with ${model}.`, "");
+  if (promptVersion) summary.push(`- Prompt version: ${promptVersion}.`, "");
   summary.push(...files.map((file) => `- \`${file.testPath}\` for \`${file.sourcePath}\`.`));
   if (files.length === 0) summary.push("- No files were reported.");
 

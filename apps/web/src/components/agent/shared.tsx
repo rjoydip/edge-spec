@@ -319,6 +319,7 @@ export function provenanceFiles(items: readonly AgentTest[]): ProvenanceFile[] {
     testPath: generation.testPath,
     provider: generation.provider,
     model: generation.model,
+    ...(generation.promptVersion ? { promptVersion: generation.promptVersion } : {}),
     corrected: generation.corrected,
     ...(validation.flaky ? { flaky: true } : {}),
     verified: validation.verified,

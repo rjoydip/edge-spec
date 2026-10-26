@@ -481,6 +481,7 @@ export function App() {
         code: item.generation.code,
         provider: item.generation.provider,
         model: item.generation.model,
+        ...(item.generation.promptVersion ? { promptVersion: item.generation.promptVersion } : {}),
         corrected: item.generation.corrected,
         ...(item.validation.flaky ? { flaky: true } : {}),
         verified: item.validation.verified,

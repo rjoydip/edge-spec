@@ -224,6 +224,7 @@ export function openPullWithFiles(
         sourcePath: file.sourcePath,
         ...(file.provider ? { provider: file.provider } : {}),
         ...(file.model ? { model: file.model } : {}),
+        ...(file.promptVersion ? { promptVersion: file.promptVersion } : {}),
         ...(file.corrected ? { corrected: true } : {}),
         ...(file.flaky ? { flaky: true } : {}),
         ...(file.verified !== undefined ? { verified: file.verified } : {}),

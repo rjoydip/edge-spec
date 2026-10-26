@@ -4,6 +4,7 @@
  */
 import type { Provider } from "./catalog";
 import { lineRanges, type CoverageTarget } from "./coverage";
+import { memoryPrompt, type RepoMemory } from "./memory";
 import { HttpError, type RateLimitInfo, type TestRunner } from "./types";
 
 /** Minimal shape of the Workers AI binding; avoids pulling Worker types into DOM. */
@@ -29,6 +30,9 @@ export interface TokenUsage {
   output: number;
 }
 
+/** Stamped on every generation so a result can be attributed to a prompt. */
+export const PROMPT_VERSION = "2026-10-26.1";
+
 export interface GenerateInput {
   filePath: string;
   source: string;
@@ -43,6 +47,8 @@ export interface GenerateInput {
   propertyTests?: { runs: number; seed: number };
   /** The repository's detected test runner; Bun is the fallback. */
   runner?: TestRunner;
+  /** Approved per-repository conventions and helpers. */
+  memory?: RepoMemory;
   /** The style rules the repository formats with. */
   style?: string[];
   /** The commands CI runs, so the test satisfies them. */
@@ -102,6 +108,8 @@ export function buildPrompt(input: GenerateInput): string {
       ? `\nA real coverage report for this file found gaps. Target them directly:\n${hintLines ? `- Uncovered lines: ${hintLines}. Add assertions for the behavior on these lines.\n` : ""}${hintBranches ? `- Uncovered branches on lines: ${hintBranches}. Exercise both outcomes.\n` : ""}`
       : "";
 
+  const memory = memoryPrompt(input.memory);
+
   const properties = input.propertyTests
     ? `\nProperty-based tests are enabled and fast-check is already a dependency:\n- Import it as \`import * as fc from "fast-check";\`.\n- Add at least one property using \`fc.assert(fc.property(...), { numRuns: ${input.propertyTests.runs}, seed: ${input.propertyTests.seed} })\`.\n- Put \`[property]\` in that \`it(...)\` name.\n- Do not catch or rewrite fast-check failures; its seed and counterexample must surface.\n`
     : "";
@@ -122,7 +130,7 @@ ${runner.shape ? `- ${runner.shape}\n` : ""}- Import the subject from \`./${impo
 - Keep it one file and make it pass against the source exactly as written.
 - Write the code in the style of the repository, so a formatter does not change it.
 - Do not add a coverage comment or prose outside the code block.
-${style}${checks}${targeting}${properties}
+${style}${checks}${targeting}${properties}${memory}
 Source:
 \`\`\`ts
 ${input.source.slice(0, 24000)}

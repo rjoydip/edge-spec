@@ -9,6 +9,7 @@ import type {
 } from "@edge-spec/core/history";
 import type { BacklogGap, BacklogItem, BacklogState } from "@edge-spec/core/backlog";
 import type { DriftSnapshot } from "@edge-spec/core/drift";
+import { parseRepoMemory, type RepoMemory } from "@edge-spec/core/memory";
 import { parsePullPolicy, type PullPolicy } from "@edge-spec/core/policy";
 import type { CoverageDelta, ScanTotals } from "@edge-spec/core/types";
 import type { D1Database, Env } from "./env";
@@ -173,6 +174,31 @@ export async function deleteRunHistory(db: D1Database, repo: string): Promise<nu
     db.prepare("DELETE FROM runs WHERE repo = ?").bind(repo),
   ]);
   return Number(count?.count ?? 0);
+}
+
+export async function getMemory(db: D1Database, repo: string): Promise<RepoMemory> {
+  const row = await db
+    .prepare("SELECT memory_json FROM repo_memory WHERE repo = ?")
+    .bind(repo)
+    .first<{ memory_json: string }>();
+  return row ? parseRepoMemory(json(row.memory_json, {})) : {};
+}
+
+export async function putMemory(
+  db: D1Database,
+  repo: string,
+  memory: RepoMemory,
+): Promise<RepoMemory> {
+  const parsed = parseRepoMemory(memory);
+  await db
+    .prepare("INSERT OR REPLACE INTO repo_memory (repo, memory_json, updated_at) VALUES (?, ?, ?)")
+    .bind(repo, JSON.stringify(parsed), Date.now())
+    .run();
+  return parsed;
+}
+
+export async function deleteMemory(db: D1Database, repo: string): Promise<void> {
+  await db.prepare("DELETE FROM repo_memory WHERE repo = ?").bind(repo).run();
 }
 
 /** The opt-in CI policy for one repository; absent means no gates. */

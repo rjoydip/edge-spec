@@ -12,6 +12,7 @@ describe("pullRequestBody", () => {
           testPath: "src/a.test.ts",
           verified: true,
           corrected: true,
+          promptVersion: "2026-10-26.1",
           checks: [
             {
               name: "bun test",
@@ -49,6 +50,7 @@ describe("pullRequestBody", () => {
     expect(body).toContain("`bun test` (bun test) · 1200 ms · passed");
     expect(body).toContain("+3 covered lines (4/10), +1 branches (1/2)");
     expect(body).toContain("mutation 80%");
+    expect(body).toContain("Prompt version: 2026-10-26.1");
     expect(body).toContain("self-corrected");
     expect(body).toContain("GET /users`: missing auth fixture");
     expect(body).toContain("Only test artifacts");

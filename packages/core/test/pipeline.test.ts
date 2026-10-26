@@ -94,6 +94,9 @@ describe("runPipeline", () => {
     expect(
       generation && "generation" in generation ? generation.generation.source : undefined,
     ).toBe("export const add = (a: number, b: number) => a + b;");
+    expect(
+      generation && "generation" in generation ? generation.generation.promptVersion : undefined,
+    ).toBe("2026-10-26.1");
     const validation = events.find((event) => event.type === "validation");
     expect(validation).toMatchObject({
       type: "validation",

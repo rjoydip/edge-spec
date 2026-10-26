@@ -49,6 +49,7 @@ measures something it actually ran, or says "not measured".
 | Record/replay API fixtures                                   | Shipped (`/api/record`, in-test mock replay, no live app)      |
 | Property-based tests                                         | Shipped (opt-in fast-check, labelled/seeded/bounded)           |
 | Test runner adapters                                         | Shipped (Bun/Vitest/Jest/Playwright detected per repo)         |
+| Repository memory / prompt version                           | Shipped (opt-in D1 strings, prompt version stamped)            |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run
 database. That is the largest structural gap.

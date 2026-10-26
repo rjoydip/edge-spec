@@ -3,7 +3,7 @@
  * route and (step by step) the durable Workflow.
  */
 import type { AiBinding } from "./ai";
-import { estimatePromptTokens, generateTest, type TokenUsage } from "./ai";
+import { PROMPT_VERSION, estimatePromptTokens, generateTest, type TokenUsage } from "./ai";
 import type { AiConfig } from "./ai";
 import type { GitHub } from "./github";
 import { detectChecks, SUPPORT_FILES } from "./ci";
@@ -26,6 +26,7 @@ import {
 import { sandboxRepo, runInSandbox } from "./sandbox";
 import { coverageTargetFor, type CoverageReport, type CoverageTarget } from "./coverage";
 import type { FixtureFile } from "./fixtures";
+import type { RepoMemory } from "./memory";
 import { apiGaps, contractTestsFor, parseJUnit } from "./openapi";
 import {
   HttpError,
@@ -158,6 +159,8 @@ export interface PipelineOptions {
   authFixture?: { headers?: Record<string, string>; query?: Record<string, string> };
   /** Recorded exchanges; contract tests replay them without a live app. */
   fixtures?: FixtureFile;
+  /** Approved repository conventions, loaded from opt-in memory. */
+  memory?: RepoMemory;
   ai?: AiBinding;
   fetchImpl?: typeof fetch;
 }
@@ -536,6 +539,7 @@ export async function* runPipeline(
           source: file.source,
           config: aiConfig,
           runner: checks.runner,
+          ...(options.memory ? { memory: options.memory } : {}),
           coverageTarget: input.coverageTarget,
           ...(hint ? { coverageHint: hint } : {}),
           ...(properties ? { propertyTests: properties } : {}),
@@ -601,6 +605,7 @@ export async function* runPipeline(
           source,
           config: aiConfig,
           runner: checks.runner,
+          ...(options.memory ? { memory: options.memory } : {}),
           coverageTarget: input.coverageTarget,
           ...(coverageHint ? { coverageHint } : {}),
           ...(properties ? { propertyTests: properties } : {}),
@@ -680,6 +685,7 @@ export async function* runPipeline(
           provider: aiConfig.provider.id,
           model: aiConfig.model,
           corrected: false,
+          promptVersion: PROMPT_VERSION,
           source,
         };
         emit({ type: "generation", generation });
@@ -780,6 +786,7 @@ export async function* runPipeline(
             source,
             config: aiConfig,
             runner: checks.runner,
+            ...(options.memory ? { memory: options.memory } : {}),
             previous: { code, output: validation.output },
             coverageTarget: input.coverageTarget,
             ...(coverageHint ? { coverageHint } : {}),

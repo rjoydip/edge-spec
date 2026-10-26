@@ -484,6 +484,8 @@ total, score, command, budgetStopped?}` or `{status:"not-measured", reason}`.
   Contract tests also exercise a missing required body field, a wrong scalar
   type, and an unauthenticated request; the generated file contains only
   placeholder env reads.
+- Every AI generation carries `promptVersion`; the PR body prints it so a
+  result is attributable to a prompt.
 - The test runner is detected per repository (Playwright, Vitest, Jest, then
   Bun). Generated imports and validation commands use that runner; there is no
   runner override in the request.
@@ -652,6 +654,26 @@ that disappeared; a returning closed item reopens. Explicit `accepted`,
 
 Valid states are `open`, `accepted`, `rejected`, `ignored`, and `closed`. Without
 `RUNS_DB` the list is empty and writes return 501.
+
+---
+
+## `GET | PUT | DELETE /api/memory?repo=owner/name`
+
+Opt-in repository memory (D1): approved conventions, helper paths, fixture
+paths and the test naming convention. It is short strings only — never source.
+
+```json
+{
+  "naming": "sibling .test.ts",
+  "conventions": ["use the repository test helper"],
+  "helpers": ["src/test-utils.ts"],
+  "fixtures": ["tests/fixtures/users.json"]
+}
+```
+
+`GET` returns `{enabled, memory}`; `PUT` sanitizes and stores; `DELETE` removes
+it. Without `RUNS_DB` the list is empty and writes return 501. The memory is
+loaded into `/api/run`, `/api/generate`, and the webhook workflow prompt.
 
 ---
 

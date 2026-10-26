@@ -13,6 +13,7 @@ export interface PullFile {
   provider?: string;
   model?: string;
   corrected?: boolean;
+  promptVersion?: string;
   flaky?: boolean;
   verified?: boolean;
   checks?: ProvenanceCheck[];
@@ -113,12 +114,14 @@ function mutationOf(value: unknown): MutationResult | undefined {
 function provenanceOf(item: Record<string, unknown>): Partial<PullFile> {
   const provider = text(item.provider).slice(0, 80);
   const model = text(item.model).slice(0, 120);
+  const promptVersion = text(item.promptVersion).slice(0, 40);
   const checks = checksOf(item.checks);
   const coverage = coverageOf(item.coverage);
   const mutation = mutationOf(item.mutation);
   return {
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
+    ...(promptVersion ? { promptVersion } : {}),
     ...(item.corrected === true ? { corrected: true } : {}),
     ...(item.flaky === true ? { flaky: true } : {}),
     ...(typeof item.verified === "boolean" ? { verified: item.verified } : {}),

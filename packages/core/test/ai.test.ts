@@ -93,6 +93,24 @@ describe("buildPrompt", () => {
     expect(buildPrompt(input({ provider: "openai" }))).not.toContain("Uncovered lines");
   });
 
+  it("feeds approved repository memory into the prompt", () => {
+    const prompt = buildPrompt(
+      input({
+        provider: "openai",
+        memory: {
+          naming: "sibling .test.ts",
+          conventions: ["use the repository helper"],
+          helpers: ["src/test-utils.ts"],
+          fixtures: ["tests/fixtures/users.json"],
+        },
+      }),
+    );
+    expect(prompt).toContain("Approved repository memory");
+    expect(prompt).toContain("sibling .test.ts");
+    expect(prompt).toContain("src/test-utils.ts");
+    expect(prompt).toContain("tests/fixtures/users.json");
+  });
+
   it("uses the detected runner's imports instead of bun:test", () => {
     const vitest = buildPrompt(input({ provider: "openai", runner: "vitest" }));
     expect(vitest).toContain("Vitest");

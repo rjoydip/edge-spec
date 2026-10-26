@@ -196,6 +196,8 @@ export interface Generation {
   provider: string;
   model: string;
   corrected: boolean;
+  /** The prompt version that produced this code, for attribution. */
+  promptVersion?: string;
   /** The original file, so the review can show it beside the generated test. */
   source?: string;
 }

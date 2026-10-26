@@ -5,7 +5,7 @@
  * params are persisted; a visitor's API key must never end up in that state.
  */
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { generateTest } from "@edge-spec/core/ai";
+import { PROMPT_VERSION, generateTest } from "@edge-spec/core/ai";
 import { DEFAULT_AI, pipelineConfig, providerById } from "@edge-spec/core/catalog";
 import { detectPackageManager, detectRunner } from "@edge-spec/core/ci";
 import { GitHub } from "@edge-spec/core/github";
@@ -21,7 +21,7 @@ import {
   policyBlocked,
   type PullPolicy,
 } from "@edge-spec/core/policy";
-import { getPolicy, runsDb } from "./db";
+import { getMemory, getPolicy, runsDb } from "./db";
 import { sandboxRepo, runInSandbox } from "@edge-spec/core/sandbox";
 import { validateTest } from "@edge-spec/core/validate";
 import type { Env } from "./env";
@@ -482,6 +482,8 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       );
     }
     const github = new GitHub(token);
+    const memoryDb = runsDb(this.env);
+    const memory = memoryDb ? await getMemory(memoryDb, repo).catch(() => undefined) : undefined;
 
     if (params.event === "pr_command" && params.pullRequest && params.command) {
       return this.runCommand({
@@ -543,6 +545,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
           filePath: scanned.path,
           source: scanned.source,
           runner: scanned.runner,
+          ...(memory ? { memory } : {}),
           config: {
             provider,
             model,
@@ -556,6 +559,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
           provider: provider.id,
           model,
           corrected: false,
+          promptVersion: PROMPT_VERSION,
         };
       },
       { retries: { limit: 2, delay: "5 seconds", backoff: "exponential" } },
@@ -590,6 +594,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
           filePath: scanned.path,
           source: scanned.source,
           runner: scanned.runner,
+          ...(memory ? { memory } : {}),
           config: {
             provider,
             model,
