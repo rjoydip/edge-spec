@@ -37,6 +37,10 @@ export interface Settings {
   flakyRuns: number;
   /** Stryker-compatible command; empty means mutation is not measured. */
   mutationCommand: string;
+  /** JSON object of contract auth headers; sandbox env only. */
+  contractAuthHeaders: string;
+  /** JSON object of contract auth query values; sandbox env only. */
+  contractAuthQuery: string;
   /** Pull-request gates. Stored locally; sent with the PR request, never a secret. */
   policy: PullPolicy;
   /** A runner the visitor owns; it executes the suite. */
@@ -76,6 +80,8 @@ export const DEFAULT_SETTINGS: Settings = {
   maxTokens: DEFAULT_PIPELINE.maxTokens,
   flakyRuns: DEFAULT_PIPELINE.flakyRuns,
   mutationCommand: DEFAULT_PIPELINE.mutationCommand,
+  contractAuthHeaders: "",
+  contractAuthQuery: "",
   policy: {},
   sandboxUrl: "",
   sandboxProvider: "auto",
@@ -186,6 +192,12 @@ function load(): Settings {
       ),
       mutationCommand:
         typeof parsed.mutationCommand === "string" ? parsed.mutationCommand.slice(0, 500) : "",
+      contractAuthHeaders:
+        typeof parsed.contractAuthHeaders === "string"
+          ? parsed.contractAuthHeaders.slice(0, 4000)
+          : "",
+      contractAuthQuery:
+        typeof parsed.contractAuthQuery === "string" ? parsed.contractAuthQuery.slice(0, 4000) : "",
       policy: parsePullPolicy(parsed.policy),
       sandboxUrl: typeof parsed.sandboxUrl === "string" ? parsed.sandboxUrl : "",
       sandboxProvider: sandboxProvidersFor(isLocalDashboard() ? "local" : "deployed").some(

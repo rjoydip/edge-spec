@@ -214,6 +214,20 @@ writes waits in **Review** for a pull request. Files run through a bounded pool:
 `ready` stays in scan order even though events interleave, and each event names
 its `sourcePath`. One file that exhausts its retries fails alone.
 
+## Contract auth fixtures
+
+Settings holds two optional JSON objects per environment: auth headers and auth
+query values. They travel with the run, are injected into the sandbox as
+`EDGESPEC_AUTH_HEADERS` and `EDGESPEC_AUTH_QUERY`, and are never embedded in
+generated code, events, run history, logs or the PR. A secured operation is
+skipped with “no auth fixture was configured” until a fixture exists, then it
+runs normally.
+
+Generated contract tests also send an unauthenticated request where security is
+declared (expecting 401/403) and, with a JSON body example and required schema
+fields, a missing-field and wrong-type request (expecting a documented 4xx or
+400/422). These are deterministic extras, not AI output.
+
 ## Pull request policy (optional)
 
 Dashboard policy lives in `localStorage` (Settings → Policy) and travels with

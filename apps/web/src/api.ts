@@ -255,6 +255,31 @@ export function updateBacklog(
   });
 }
 
+function jsonMapOf(raw: string): Record<string, string> | undefined {
+  if (!raw.trim()) return undefined;
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+    const entries = Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    );
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Contract auth values travel to the Worker only to become sandbox env. */
+function authFixtureOf(
+  settings: Settings,
+): { headers?: Record<string, string>; query?: Record<string, string> } | undefined {
+  const headers = jsonMapOf(settings.contractAuthHeaders);
+  const query = jsonMapOf(settings.contractAuthQuery);
+  return headers || query
+    ? { ...(headers ? { headers } : {}), ...(query ? { query } : {}) }
+    : undefined;
+}
+
 export interface RunsResponse {
   enabled: boolean;
   runs: RunSummary[];
@@ -298,6 +323,7 @@ export async function runPipelineStream(
   /** Re-run only these failed contract operations, not a fresh run. */
   retestOperations?: RetestOperation[],
 ): Promise<void> {
+  const authFixture = authFixtureOf(settings);
   let response: Response;
   try {
     response = await fetch("/api/run", {
@@ -316,6 +342,7 @@ export async function runPipelineStream(
         maxTokens: settings.maxTokens,
         flakyRuns: settings.flakyRuns,
         mutationCommand: settings.mutationCommand,
+        ...(authFixture ? { authFixture } : {}),
         strictTypes: settings.strictTypes,
         coverageTarget: settings.coverageTarget,
         mode: "both",

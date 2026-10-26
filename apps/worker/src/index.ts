@@ -151,6 +151,34 @@ function allowCommandInMemory(key: string, windowMs = 60_000): boolean {
   return true;
 }
 
+function stringMapOf(
+  value: unknown,
+  keyPattern: RegExp,
+  maxValue = 2_000,
+): Record<string, string> | undefined {
+  const result: Record<string, string> = {};
+  let count = 0;
+  for (const [key, content] of Object.entries(asRecord(value))) {
+    if (count >= 20 || !keyPattern.test(key) || key.length > 100) continue;
+    if (typeof content !== "string" || content.length > maxValue) continue;
+    result[key] = content;
+    count += 1;
+  }
+  return count > 0 ? result : undefined;
+}
+
+/** Contract auth values from the request; they only reach sandbox env. */
+function authFixtureOf(
+  body: Record<string, unknown>,
+): { headers?: Record<string, string>; query?: Record<string, string> } | undefined {
+  const raw = asRecord(body.authFixture);
+  const headers = stringMapOf(raw.headers, /^[A-Za-z0-9_.-]+$/);
+  const query = stringMapOf(raw.query, /^[A-Za-z0-9_.-]+$/);
+  return headers || query
+    ? { ...(headers ? { headers } : {}), ...(query ? { query } : {}) }
+    : undefined;
+}
+
 /** A failed attempt the client sends back to the self-correction loop. */
 function previousOf(body: Record<string, unknown>): { code: string; output: string } | undefined {
   const previous = asRecord(body.previous);
@@ -619,6 +647,7 @@ app.post("/api/run", async (c) => {
     aiConfig: AiConfig;
     sandbox?: SandboxConfig;
     repoToken?: string;
+    authFixture?: { headers?: Record<string, string>; query?: Record<string, string> };
     input: ReturnType<typeof pipelineConfig> & {
       repo: string;
       ref: string;
@@ -635,6 +664,7 @@ app.post("/api/run", async (c) => {
       : undefined;
     const retestOperations = retestOperationsOf(body.retestOperations);
     const sandbox = sandboxFor(c);
+    const authFixture = authFixtureOf(body);
     const repoToken = sandbox?.allowRepoToken
       ? c.req.header(TOKEN_HEADER)?.trim() || undefined
       : undefined;
@@ -645,6 +675,7 @@ app.post("/api/run", async (c) => {
       aiConfig: aiConfigFor(c, body),
       ...(sandbox ? { sandbox } : {}),
       ...(repoToken ? { repoToken } : {}),
+      ...(authFixture ? { authFixture } : {}),
       input: {
         repo,
         ref,
@@ -661,7 +692,7 @@ app.post("/api/run", async (c) => {
     return fail(err);
   }
 
-  const { github, aiConfig, sandbox, repoToken, input } = prepared;
+  const { github, aiConfig, sandbox, repoToken, authFixture, input } = prepared;
   const history = runsDb(c.env);
   const runId = crypto.randomUUID();
   const run: RunSummary = {
@@ -699,6 +730,7 @@ app.post("/api/run", async (c) => {
         aiConfig,
         ...(sandbox ? { sandbox } : {}),
         ...(repoToken ? { repoToken } : {}),
+        ...(authFixture ? { authFixture } : {}),
       })) {
         if (event.type === "gaps") {
           scannedGaps = event.gaps;

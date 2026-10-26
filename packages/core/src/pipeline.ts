@@ -147,6 +147,11 @@ export interface PipelineOptions {
   sandbox?: SandboxConfig;
   /** Sent to the sandbox only when `sandbox.allowRepoToken` is set. */
   repoToken?: string;
+  /**
+   * Contract auth values. They are injected as sandbox env, never embedded in
+   * generated code, events, history or the PR.
+   */
+  authFixture?: { headers?: Record<string, string>; query?: Record<string, string> };
   ai?: AiBinding;
   fetchImpl?: typeof fetch;
 }
@@ -904,6 +909,7 @@ export async function* runPipeline(
                     item.path === operation.path,
                 )
             : undefined,
+          { auth: Boolean(options.authFixture), negative: true },
         );
         // A retest runs no operation from a spec that had no failures.
         if (contract.operations.length === 0) continue;
@@ -975,9 +981,21 @@ export async function* runPipeline(
               // A malformed ready URL is the runner's problem, not ours.
             }
           }
+          const authEnv = options.authFixture
+            ? {
+                ...(options.authFixture.headers &&
+                Object.keys(options.authFixture.headers).length > 0
+                  ? { EDGESPEC_AUTH_HEADERS: JSON.stringify(options.authFixture.headers) }
+                  : {}),
+                ...(options.authFixture.query && Object.keys(options.authFixture.query).length > 0
+                  ? { EDGESPEC_AUTH_QUERY: JSON.stringify(options.authFixture.query) }
+                  : {}),
+              }
+            : {};
           const run = await runInSandbox({
             sandbox,
             ...(repoArg ? { repo: repoArg } : {}),
+            ...(Object.keys(authEnv).length > 0 ? { env: { ...sandbox.env, ...authEnv } } : {}),
             files: {
               [spec.path]: spec.content ?? "",
               [contract.path]: contract.code,

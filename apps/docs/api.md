@@ -350,6 +350,10 @@ Request:
   "maxTokens": 0,
   "flakyRuns": 2,
   "mutationCommand": "npx stryker run --mutate {file}",
+  "authFixture": {
+    "headers": { "Authorization": "Bearer …" },
+    "query": { "api_key": "…" }
+  },
   "concurrency": 3,
   "mode": "unit",
   "strictTypes": true,
@@ -449,6 +453,13 @@ Flow details:
   is `validation.mutation` with either `{status:"measured", killed, survived,
 total, score, command, budgetStopped?}` or `{status:"not-measured", reason}`.
   No report means not measured; a timeout is a labelled budget stop.
+- `authFixture` carries optional `headers`/`query` values for contract tests.
+  They are injected as `EDGESPEC_AUTH_HEADERS`/`EDGESPEC_AUTH_QUERY` into the
+  sandbox environment only — never into generated code, events, run history or
+  the PR. Without a fixture, a secured operation is skipped with that reason.
+  Contract tests also exercise a missing required body field, a wrong scalar
+  type, and an unauthenticated request; the generated file contains only
+  placeholder env reads.
 - Quota and 5xx responses fall back once to the next model of the same
   provider; the fallback appears as a `warn` log.
 - A retest sends `retestOperations: [{specPath, method, path}]`. The run is

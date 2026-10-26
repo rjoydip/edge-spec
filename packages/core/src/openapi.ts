@@ -116,9 +116,17 @@ function allowedStatuses(operation: OpenApiEndpoint): number[] {
     : [200, 201, 202, 204, 301, 302, 400, 401, 403, 404, 405, 409, 422];
 }
 
+export interface ContractOptions {
+  /** A fixture exists; generated code reads it from sandbox env, never includes it. */
+  auth?: boolean;
+  /** Add missing-field, wrong-type and unauthorized cases. Default true. */
+  negative?: boolean;
+}
+
 function testCode(
   operation: OpenApiEndpoint,
   spec: OpenApiSpec,
+  options: ContractOptions = {},
 ): {
   code: string;
   skipped?: SkippedOperation;
@@ -126,6 +134,7 @@ function testCode(
   const name = contractTestName(operation);
   const resolved = resolveParameters(operation);
   const baseUrl = baseUrlOf(spec);
+  const secured = (operation.security?.length ?? 0) > 0;
   if (!baseUrl) {
     return {
       code: `  it.skip(${asLiteral(name)}, () => {\n    // no base URL: set servers[0].url in the spec or BASE_URL in the environment.\n  });`,
@@ -138,43 +147,118 @@ function testCode(
       skipped: { method: operation.method, path: operation.path, reason: resolved.reason },
     };
   }
+  if (secured && !options.auth) {
+    const reason = "security scheme present; no auth fixture was configured";
+    return {
+      code: `  it.skip(${asLiteral(name)}, () => {\n    // ${reason}\n  });`,
+      skipped: { method: operation.method, path: operation.path, reason },
+    };
+  }
 
-  const url = `${baseUrl.replace(/\/+$/, "")}${resolved.path}`;
-  const search = resolved.query.length
-    ? ` + "?" + new URLSearchParams(${JSON.stringify(Object.fromEntries(resolved.query))}).toString()`
-    : "";
+  const path = resolved.path;
   const headers = Object.fromEntries(resolved.headers);
   const bodyExample =
     operation.requestBody?.example ??
     (operation.requestBody?.schema?.example as unknown) ??
     undefined;
-  const init = [
-    `method: ${asLiteral(operation.method.toUpperCase())}`,
-    ...(Object.keys(headers).length > 0 ? [`headers: ${JSON.stringify(headers)}`] : []),
-    ...(bodyExample !== undefined
-      ? [
-          `headers: ${JSON.stringify({
-            "content-type": operation.requestBody?.contentType ?? "application/json",
-            ...headers,
-          })}`,
-          `body: JSON.stringify(${asLiteral(bodyExample)})`,
-        ]
-      : []),
-  ];
-  const allowed = allowedStatuses(operation);
   const json = operation.requestBody?.contentType?.includes("json") ?? false;
+  const contentType = operation.requestBody?.contentType ?? "application/json";
+  const requestHeaders = {
+    ...headers,
+    ...(bodyExample !== undefined ? { "content-type": contentType } : {}),
+  };
+  const allowed = allowedStatuses(operation);
+  const validationStatuses = [
+    ...new Set([
+      400,
+      422,
+      ...allowed.filter(
+        (status) => status >= 400 && status < 500 && ![401, 403, 404, 405].includes(status),
+      ),
+    ]),
+  ].sort((left, right) => left - right);
+  const schema = operation.requestBody?.schema as Record<string, unknown> | undefined;
+  const required = Array.isArray(schema?.required)
+    ? schema.required.filter((field): field is string => typeof field === "string")
+    : [];
+  const properties =
+    typeof schema?.properties === "object" && schema.properties !== null
+      ? (schema.properties as Record<string, Record<string, unknown>>)
+      : {};
+  const bodyObject =
+    bodyExample !== undefined &&
+    typeof bodyExample === "object" &&
+    bodyExample !== null &&
+    !Array.isArray(bodyExample)
+      ? (bodyExample as Record<string, unknown>)
+      : undefined;
+
+  const negative: string[] = [];
+  if (options.negative !== false) {
+    if (secured) {
+      negative.push(
+        `    const unauthorized = await fetch(url, { method: ${asLiteral(operation.method.toUpperCase())}, headers: ${JSON.stringify(headers)}${bodyExample !== undefined ? `, body: JSON.stringify(bodyExample)` : ""} });`,
+        `    expect([401, 403]).toContain(unauthorized.status);`,
+      );
+    }
+    if (json && bodyObject) {
+      const missingField = required.find((field) => Object.hasOwn(bodyObject, field));
+      if (missingField) {
+        negative.push(
+          `    const missing = { ...bodyExample };`,
+          `    delete missing[${asLiteral(missingField)}];`,
+          `    const missingResponse = await fetch(url, { method: ${asLiteral(operation.method.toUpperCase())}, headers: { ...${JSON.stringify(requestHeaders)}, ...${options.auth ? "AUTH_HEADERS" : "{}"} }, body: JSON.stringify(missing) });`,
+          `    expect(${JSON.stringify(validationStatuses)}).toContain(missingResponse.status);`,
+        );
+      }
+      const typedField = required.find((field) => {
+        if (!Object.hasOwn(bodyObject, field)) return false;
+        const type = properties[field]?.type;
+        return type === "string" || type === "number" || type === "integer" || type === "boolean";
+      });
+      if (typedField) {
+        const type = properties[typedField]?.type;
+        const wrong =
+          type === "string" ? 12345 : type === "boolean" ? "not-a-boolean" : "not-a-number";
+        negative.push(
+          `    const wrongType = { ...bodyExample, ${asLiteral(typedField)}: ${asLiteral(wrong)} };`,
+          `    const wrongResponse = await fetch(url, { method: ${asLiteral(operation.method.toUpperCase())}, headers: { ...${JSON.stringify(requestHeaders)}, ...${options.auth ? "AUTH_HEADERS" : "{}"} }, body: JSON.stringify(wrongType) });`,
+          `    expect(${JSON.stringify(validationStatuses)}).toContain(wrongResponse.status);`,
+        );
+      }
+    }
+  }
 
   return {
     code: [
       `  it(${asLiteral(name)}, async () => {`,
-      `    const response = await fetch(BASE_URL + ${asLiteral(url.slice(baseUrl.replace(/\/+$/, "").length))}${search}, {`,
-      ...init.map((line) => `      ${line},`),
+      `    const query = new URLSearchParams(${JSON.stringify(Object.fromEntries(resolved.query))});`,
+      ...(options.auth
+        ? [
+            `    for (const [key, value] of Object.entries(AUTH_QUERY)) query.set(key, String(value));`,
+          ]
+        : []),
+      `    const url = BASE_URL + ${asLiteral(path)} + (query.toString() ? \`?\${query}\` : "");`,
+      ...(bodyExample !== undefined ? [`    const bodyExample = ${asLiteral(bodyExample)};`] : []),
+      `    const response = await fetch(url, {`,
+      `      method: ${asLiteral(operation.method.toUpperCase())},`,
+      ...(Object.keys(requestHeaders).length > 0
+        ? [
+            `      headers: { ...${JSON.stringify(requestHeaders)}, ...${
+              options.auth ? "AUTH_HEADERS" : "{}"
+            } },`,
+          ]
+        : options.auth
+          ? [`      headers: AUTH_HEADERS,`]
+          : []),
+      ...(bodyExample !== undefined ? [`      body: JSON.stringify(bodyExample),`] : []),
       `    });`,
       `    expect(${JSON.stringify(allowed)}).toContain(response.status);`,
       ...(json
         ? [`    if (response.ok && response.headers.get("content-type")?.includes("json")) {`]
         : []),
       ...(json ? [`      await response.json();`, `    }`] : []),
+      ...negative,
       `  });`,
     ].join("\n"),
   };
@@ -187,12 +271,13 @@ function testCode(
 export function contractTestsFor(
   spec: OpenApiSpec,
   filter?: (operation: OpenApiEndpoint) => boolean,
+  options: ContractOptions = {},
 ): ContractFile {
   const baseUrl = baseUrlOf(spec);
   const skipped: SkippedOperation[] = [];
   const operations = filter ? spec.endpoints.filter(filter) : spec.endpoints;
   const tests = operations.map((operation) => {
-    const result = testCode(operation, spec);
+    const result = testCode(operation, spec, options);
     if (result.skipped) skipped.push(result.skipped);
     return result.code;
   });
@@ -205,6 +290,20 @@ export function contractTestsFor(
     `import { describe, expect, it } from "bun:test";`,
     ``,
     `const BASE_URL = (process.env.BASE_URL ?? ${asLiteral(baseUrl ?? "")}).replace(/\\/+$/, "");`,
+    ...(options.auth
+      ? [
+          `const envJson = (name: string) => {`,
+          `  try {`,
+          `    const value = JSON.parse(process.env[name] ?? "{}");`,
+          `    return value && typeof value === "object" ? value : {};`,
+          `  } catch {`,
+          `    return {};`,
+          `  }`,
+          `};`,
+          `const AUTH_HEADERS = envJson("EDGESPEC_AUTH_HEADERS");`,
+          `const AUTH_QUERY = envJson("EDGESPEC_AUTH_QUERY");`,
+        ]
+      : []),
     ``,
     `describe(${asLiteral(`contract: ${spec.title ?? spec.path}`)}, () => {`,
     `  expect(typeof BASE_URL).toBe("string");`,

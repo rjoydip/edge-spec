@@ -195,6 +195,63 @@ describe("parseJUnit", () => {
 });
 
 describe("contractTestsFor", () => {
+  const NEGATIVE_SPEC = JSON.stringify({
+    openapi: "3.0.0",
+    info: { title: "Users", version: "1" },
+    servers: [{ url: "https://api.example.test" }],
+    paths: {
+      "/users": {
+        post: {
+          security: [{ bearer: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["email"],
+                  properties: { email: { type: "string" } },
+                  example: { email: "test@example.test" },
+                },
+              },
+            },
+          },
+          responses: { "201": { description: "ok" }, "400": { description: "bad" } },
+        },
+      },
+    },
+  });
+
+  it("skips a secured operation until a fixture exists", () => {
+    const spec = parseOpenApiSpec(NEGATIVE_SPEC, "openapi.json");
+    if (!spec) throw new Error("fixture did not parse");
+    const contract = contractTestsFor(spec);
+    expect(contract.skipped[0]?.reason).toContain("auth fixture");
+    expect(contract.code).toContain("it.skip");
+  });
+
+  it("reads fixtures from sandbox env and adds negative cases", () => {
+    const spec = parseOpenApiSpec(NEGATIVE_SPEC, "openapi.json");
+    if (!spec) throw new Error("fixture did not parse");
+    const contract = contractTestsFor(spec, undefined, { auth: true });
+    expect(contract.code).not.toContain("it.skip");
+    expect(contract.code).toContain("EDGESPEC_AUTH_HEADERS");
+    expect(contract.code).toContain("EDGESPEC_AUTH_QUERY");
+    expect(contract.code).toContain("unauthorized");
+    expect(contract.code).toContain("missing");
+    expect(contract.code).toContain("wrongType");
+    // Fixtures are env only; no credential value enters the generated file.
+    expect(contract.code).not.toContain("Bearer");
+  });
+
+  it("can disable negative cases", () => {
+    const spec = parseOpenApiSpec(NEGATIVE_SPEC, "openapi.json");
+    if (!spec) throw new Error("fixture did not parse");
+    const contract = contractTestsFor(spec, undefined, { auth: true, negative: false });
+    expect(contract.code).not.toContain("unauthorized");
+    expect(contract.code).not.toContain("wrongType");
+  });
+
   it("can hold only the operations a retest asks for", () => {
     const spec = parseOpenApiSpec(
       JSON.stringify({

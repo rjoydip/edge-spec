@@ -530,6 +530,32 @@ export function SettingsSheet({
                     placeholder="npx stryker run --mutate {file}"
                   />
                 </Field>
+                <Field
+                  label="Contract auth headers (JSON)"
+                  hint="Sandbox env only; never in generated code, logs or the PR."
+                >
+                  <Textarea
+                    rows={2}
+                    value={settings.contractAuthHeaders}
+                    onChange={(event) =>
+                      update({ contractAuthHeaders: event.target.value.slice(0, 4000) })
+                    }
+                    placeholder='{"Authorization": "Bearer …"}'
+                  />
+                </Field>
+                <Field
+                  label="Contract auth query (JSON)"
+                  hint="Sandbox env only; never in generated code, logs or the PR."
+                >
+                  <Textarea
+                    rows={2}
+                    value={settings.contractAuthQuery}
+                    onChange={(event) =>
+                      update({ contractAuthQuery: event.target.value.slice(0, 4000) })
+                    }
+                    placeholder='{"api_key": "…"}'
+                  />
+                </Field>
                 <Field label="Verification" hint="Runner or static only.">
                   <Badge
                     variant={settings.sandboxUrl.trim() ? "success" : "warning"}
