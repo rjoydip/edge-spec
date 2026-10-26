@@ -478,6 +478,17 @@ export function SettingsSheet({
                     onChange={(event) => update({ maxAiRetries: Number(event.target.value) || 0 })}
                   />
                 </Field>
+                <Field label="Token budget" hint="Provider-reported tokens per run; 0 = no cap.">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={settings.maxTokens}
+                    onChange={(event) =>
+                      update({ maxTokens: Math.max(0, Number(event.target.value) || 0) })
+                    }
+                  />
+                </Field>
                 <Field label="Coverage target (%)" hint="Used for coverage gaps.">
                   <Input
                     type="number"

@@ -14,11 +14,19 @@ export interface AiBinding {
 export interface AiConfig {
   provider: Provider;
   model: string;
+  /** Another model of the same provider, tried once on quota/5xx. */
+  fallbackModel?: string;
   apiKey?: string;
   baseUrl?: string;
   /** Cloudflare account for Workers AI BYOK. */
   accountId?: string;
   ai?: AiBinding;
+}
+
+/** Tokens a provider says it used. Only reported numbers are counted. */
+export interface TokenUsage {
+  input: number;
+  output: number;
 }
 
 export interface GenerateInput {
@@ -37,6 +45,10 @@ export interface GenerateInput {
   checks?: { name: string; command: string }[];
   /** Called when the provider states how many calls are left. */
   onRateLimit?: (info: RateLimitInfo) => void;
+  /** Called with the usage the provider reported for the answer it returned. */
+  onUsage?: (usage: TokenUsage) => void;
+  /** A fallback, a caveat: something the reader should see in the log. */
+  onNotice?: (text: string) => void;
   fetchImpl?: typeof fetch;
 }
 
@@ -113,6 +125,21 @@ export function isPlausibleTest(code: string): boolean {
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+
+/** Reads the token usage each protocol reports, if it reports any. */
+function usageOf(value: unknown): TokenUsage | undefined {
+  const record = asRecord(value);
+  const usage = asRecord(record.usage ?? record.usageMetadata);
+  const input = Number(usage.prompt_tokens ?? usage.input_tokens ?? usage.promptTokenCount);
+  const output = Number(
+    usage.completion_tokens ?? usage.output_tokens ?? usage.candidatesTokenCount,
+  );
+  if (!Number.isFinite(input) && !Number.isFinite(output)) return undefined;
+  return {
+    input: Number.isFinite(input) ? input : 0,
+    output: Number.isFinite(output) ? output : 0,
+  };
+}
 
 function str(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -207,10 +234,10 @@ async function postJson(
     }
     // Provider bodies can echo request headers; keep the message short and never
     // include the key ourselves.
-    throw new HttpError(
-      response.status === 401 || response.status === 403 ? 400 : 502,
-      `AI provider returned ${response.status}: ${text.slice(0, 300)}`,
-    );
+    // Keep the distinction the fallback rule needs: a client error is final,
+    // quota and server errors are worth one model fallback.
+    const status = response.status === 429 ? 429 : response.status >= 500 ? 502 : 400;
+    throw new HttpError(status, `AI provider returned ${response.status}: ${text.slice(0, 300)}`);
   }
   let data: unknown;
   try {
@@ -299,6 +326,8 @@ async function callWorkersAi(input: GenerateInput): Promise<string> {
   if (typeof record.error === "string") {
     throw new HttpError(502, `Workers AI: ${record.error.slice(0, 300)}`);
   }
+  const usage = usageOf(result);
+  if (usage) input.onUsage?.(usage);
   const reply = textFrom(record.response ?? record.result ?? result);
   if (!reply) throw new HttpError(502, "Workers AI returned an empty reply.");
   return reply;
@@ -326,6 +355,8 @@ async function callOpenAi(input: GenerateInput): Promise<string> {
     model,
   );
   if (rateLimit) input.onRateLimit?.(rateLimit);
+  const usage = usageOf(data);
+  if (usage) input.onUsage?.(usage);
   const choices = Array.isArray(asRecord(data).choices)
     ? (asRecord(data).choices as unknown[])
     : [];
@@ -358,6 +389,8 @@ async function callAnthropic(input: GenerateInput): Promise<string> {
     model,
   );
   if (rateLimit) input.onRateLimit?.(rateLimit);
+  const usage = usageOf(data);
+  if (usage) input.onUsage?.(usage);
   const content = asRecord(data).content;
   const reply = Array.isArray(content) ? textFrom(content) : "";
   if (!reply) throw new HttpError(502, "Anthropic returned an empty reply.");
@@ -384,6 +417,8 @@ async function callGoogle(input: GenerateInput): Promise<string> {
     model,
   );
   if (rateLimit) input.onRateLimit?.(rateLimit);
+  const usage = usageOf(data);
+  if (usage) input.onUsage?.(usage);
   const candidates = asRecord(data).candidates;
   const first = Array.isArray(candidates) ? asRecord(candidates[0]) : {};
   const parts = asRecord(asRecord(first.content).parts);
@@ -404,8 +439,13 @@ async function callGoogle(input: GenerateInput): Promise<string> {
   return reply;
 }
 
-/** One generation attempt. Throws `HttpError` with a status the route can use. */
-export async function generateTest(input: GenerateInput): Promise<string> {
+/** The prompt size as an order-of-magnitude token range. Never a billed number. */
+export function estimatePromptTokens(input: GenerateInput): { low: number; high: number } {
+  const tokens = Math.ceil(buildPrompt(input).length / 4);
+  return { low: Math.round(tokens * 0.75), high: Math.round(tokens * 1.25) };
+}
+
+async function generateOnce(input: GenerateInput): Promise<string> {
   let reply: string;
   switch (input.config.provider.protocol) {
     case "workers-ai":
@@ -428,4 +468,27 @@ export async function generateTest(input: GenerateInput): Promise<string> {
     );
   }
   return code;
+}
+
+/**
+ * One generation attempt. When the chosen model is rate-limited or the
+ * provider fails, try the next model of the same provider once and say so.
+ */
+export async function generateTest(input: GenerateInput): Promise<string> {
+  try {
+    return await generateOnce(input);
+  } catch (error) {
+    const status = error instanceof HttpError ? error.status : 0;
+    const fallback = input.config.fallbackModel?.trim();
+    if (!fallback || fallback === input.config.model || (status !== 429 && status < 500)) {
+      throw error;
+    }
+    input.onNotice?.(
+      `${input.config.model} did not answer (${status}); falling back to ${fallback}.`,
+    );
+    return generateOnce({
+      ...input,
+      config: { ...input.config, model: fallback, fallbackModel: undefined },
+    });
+  }
 }

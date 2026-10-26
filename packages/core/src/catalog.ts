@@ -157,6 +157,8 @@ export const DEFAULT_PIPELINE = {
   parallelGeneration: true,
   maxFiles: 10,
   concurrency: 3,
+  /** 0 means no cap. Measured from provider-reported usage. */
+  maxTokens: 0,
 } as const;
 
 export function providerById(id: string): Provider | undefined {
@@ -165,6 +167,12 @@ export function providerById(id: string): Provider | undefined {
 
 export function modelById(provider: Provider, id: string): ModelChoice | undefined {
   return provider.models.find((m) => m.id === id);
+}
+
+/** The next catalog model for a provider, used once when one is unavailable. */
+export function nextModel(provider: Provider, model: string): string | undefined {
+  const index = provider.models.findIndex((m) => m.id === model);
+  return index >= 0 ? provider.models[index + 1]?.id : provider.models[0]?.id;
 }
 
 /** Keeps a stored model only while the provider still offers it. */
@@ -352,6 +360,8 @@ export interface PipelineConfigInput {
   maxFiles?: unknown;
   parallelGeneration?: unknown;
   concurrency?: unknown;
+  /** Provider-reported tokens one run may spend; 0 means no cap. */
+  maxTokens?: unknown;
 }
 
 export function pipelineConfig(input: PipelineConfigInput): {
@@ -363,12 +373,14 @@ export function pipelineConfig(input: PipelineConfigInput): {
   maxFiles: number;
   parallelGeneration: boolean;
   concurrency: number;
+  maxTokens: number;
 } {
   const retries = Number(input.maxRetries);
   const aiRetries = Number(input.maxAiRetries);
   const target = Number(input.coverageTarget);
   const files = Number(input.maxFiles);
   const concurrency = Number(input.concurrency);
+  const tokens = Number(input.maxTokens);
   return {
     maxRetries: Number.isFinite(retries) ? Math.min(5, Math.max(0, Math.round(retries))) : 2,
     maxAiRetries: Number.isFinite(aiRetries) ? Math.min(5, Math.max(0, Math.round(aiRetries))) : 2,
@@ -380,6 +392,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
     concurrency: Number.isFinite(concurrency)
       ? Math.min(6, Math.max(1, Math.round(concurrency)))
       : 3,
+    maxTokens: Number.isFinite(tokens) ? Math.min(2_000_000, Math.max(0, Math.round(tokens))) : 0,
   };
 }
 

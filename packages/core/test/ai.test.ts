@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import {
   buildPrompt,
+  estimatePromptTokens,
   extractCode,
   generateTest,
   isPlausibleTest,
   probeRateLimit,
   type GenerateInput,
+  type TokenUsage,
 } from "../src/ai";
 import { providerById } from "../src/catalog";
 import type { RateLimitInfo } from "../src/types";
@@ -289,5 +291,74 @@ describe("generateTest", () => {
     await expect(
       generateTest({ ...input({ provider: "openai" }), fetchImpl: fakeFetch }),
     ).rejects.toThrow(/did not return a test file/);
+  });
+
+  it("reports the usage the provider states", async () => {
+    const seen: TokenUsage[] = [];
+    const fakeFetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }],
+          usage: { prompt_tokens: 120, completion_tokens: 80 },
+        }),
+      )) as unknown as typeof fetch;
+
+    await generateTest({
+      ...input({ provider: "openai" }),
+      fetchImpl: fakeFetch,
+      onUsage: (usage) => seen.push(usage),
+    });
+
+    expect(seen).toEqual([{ input: 120, output: 80 }]);
+  });
+
+  it("falls back to the next model once on a retryable failure and says so", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const notices: string[] = [];
+    let calls = 0;
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      calls += 1;
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (calls === 1) return new Response("busy", { status: 429 });
+      return openAiReply(TEST_CODE);
+    }) as unknown as typeof fetch;
+
+    const base = input({ provider: "openai" });
+    const code = await generateTest({
+      ...base,
+      config: { ...base.config, fallbackModel: "gpt-6.1-sol" },
+      fetchImpl: fakeFetch,
+      onNotice: (text) => notices.push(text),
+    });
+
+    expect(code).toBe(TEST_CODE);
+    expect(bodies[1]?.model).toBe("gpt-6.1-sol");
+    expect(notices[0]).toContain("falling back to gpt-6.1-sol");
+  });
+
+  it("does not fall back on a non-retryable refusal", async () => {
+    let calls = 0;
+    const fakeFetch = (async () => {
+      calls += 1;
+      return new Response("bad request", { status: 400 });
+    }) as unknown as typeof fetch;
+
+    const base = input({ provider: "openai" });
+    await expect(
+      generateTest({
+        ...base,
+        config: { ...base.config, fallbackModel: "gpt-6.1-sol" },
+        fetchImpl: fakeFetch,
+      }),
+    ).rejects.toThrow(/returned 400/);
+    expect(calls).toBe(1);
+  });
+});
+
+describe("estimatePromptTokens", () => {
+  it("returns a bounded range from the prompt size", () => {
+    const estimate = estimatePromptTokens(input({ provider: "openai" }));
+    expect(estimate.low).toBeGreaterThan(0);
+    expect(estimate.high).toBeGreaterThan(estimate.low);
   });
 });

@@ -311,6 +311,47 @@ describe("runPipeline", () => {
     });
   });
 
+  it("stops starting files when the reported token budget is reached", async () => {
+    const calls: string[] = [];
+    const events: RunEvent[] = [];
+    const github = fakeGitHub(calls);
+    github.tree = async () => [
+      { path: "src/a.ts", type: "blob" },
+      { path: "src/b.ts", type: "blob" },
+    ];
+    const aiWithUsage = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }],
+          usage: { prompt_tokens: 100, completion_tokens: 50 },
+        }),
+      )) as unknown as typeof fetch;
+
+    const provider = providerById("openai");
+    if (!provider) throw new Error("catalog lost openai");
+    for await (const event of runPipeline(
+      { ...input, ref: "main", maxFiles: 2, concurrency: 1, maxTokens: 100 },
+      {
+        github,
+        aiConfig: { provider, model: "gpt-6-astra", apiKey: "sk-test" },
+        fetchImpl: aiWithUsage,
+      },
+    )) {
+      events.push(event);
+    }
+
+    expect(events.filter((event) => event.type === "generation")).toHaveLength(1);
+    expect(
+      events.some((event) => event.type === "log" && event.text.includes("Token budget reached")),
+    ).toBe(true);
+    const result = events.find((event) => event.type === "result");
+    expect(result).toMatchObject({
+      type: "result",
+      ok: false,
+      reason: expect.stringContaining("Token budget"),
+    });
+  });
+
   it("stops before the PR when validation fails", async () => {
     const calls: string[] = [];
     const events: RunEvent[] = [];

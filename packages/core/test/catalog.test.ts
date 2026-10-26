@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   DEFAULT_AI,
+  nextModel,
   normalizeModel,
   parseRef,
   parseRepo,
@@ -196,11 +197,24 @@ describe("pipelineConfig", () => {
       maxFiles: 50,
       parallelGeneration: true,
       concurrency: 3,
+      maxTokens: 0,
     });
     expect(pipelineConfig({ maxRetries: "x" }).maxRetries).toBe(2);
     expect(pipelineConfig({ maxFiles: 0 }).maxFiles).toBe(1);
     expect(pipelineConfig({ concurrency: 99 }).concurrency).toBe(6);
     expect(pipelineConfig({ concurrency: 0 }).concurrency).toBe(1);
+    expect(pipelineConfig({ maxTokens: 5000 }).maxTokens).toBe(5000);
+    expect(pipelineConfig({ maxTokens: -5 }).maxTokens).toBe(0);
+    expect(pipelineConfig({ maxTokens: 9_000_000 }).maxTokens).toBe(2_000_000);
+  });
+});
+
+describe("nextModel", () => {
+  it("picks the next catalog model and stops at the end", () => {
+    const google = providerById("google");
+    if (!google) throw new Error("catalog lost google");
+    expect(nextModel(google, "gemini-3.8-flash")).toBe("gemini-3.6-flash");
+    expect(nextModel(google, "gemini-2.5-flash")).toBeUndefined();
   });
 });
 

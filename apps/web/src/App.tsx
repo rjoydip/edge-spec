@@ -522,6 +522,7 @@ export function App() {
         targeting,
       );
       if (result.rateLimit) setQuota(result.rateLimit);
+      for (const notice of result.notices ?? []) addGapLog("warn", notice);
       setProviderError(undefined);
       setLive((current) => ({
         ...current,

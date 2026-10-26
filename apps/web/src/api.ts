@@ -129,6 +129,8 @@ export async function regenerate(
   validation: Validation;
   attempts: number;
   rateLimit?: RateLimitInfo;
+  /** Fallbacks and caveats the provider path produced. */
+  notices?: string[];
 }> {
   const body: Record<string, unknown> = {
     path,
@@ -273,6 +275,7 @@ export async function runPipelineStream(
         maxAiRetries: settings.maxAiRetries,
         maxFiles: settings.maxFiles,
         concurrency: settings.concurrency,
+        maxTokens: settings.maxTokens,
         strictTypes: settings.strictTypes,
         coverageTarget: settings.coverageTarget,
         mode: "both",

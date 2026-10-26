@@ -324,6 +324,7 @@ Request:
   "accountId": "0123456789abcdef0123456789abcdef",
   "maxRetries": 2,
   "maxFiles": 10,
+  "maxTokens": 0,
   "concurrency": 3,
   "mode": "unit",
   "strictTypes": true,
@@ -412,6 +413,12 @@ Flow details:
 - A run covers the first `maxFiles` gaps, highest risk first. Every file it
   covers streams its own `generation` and `validation` events, and `ready`
   lists the source paths whose tests passed.
+- `maxTokens` caps the provider-reported tokens for the run (`0` = no cap).
+  Reaching it ends the run with `result.ok: false`, the reason, and any
+  tests that already passed. With no cap, the run still logs an estimated
+  input-token range before spending.
+- Quota and 5xx responses fall back once to the next model of the same
+  provider; the fallback appears as a `warn` log.
 - If an error occurs after streaming starts, the HTTP status is already 200;
   clients must inspect the events, not just the status.
 

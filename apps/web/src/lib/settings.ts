@@ -30,6 +30,8 @@ export interface Settings {
   maxFiles: number;
   /** Per-file tasks in flight. Clamped 1–6, default 3. */
   concurrency: number;
+  /** Provider-reported tokens one run may spend. 0 means no cap. */
+  maxTokens: number;
   /** A runner the visitor owns; it executes the suite. */
   sandboxUrl: string;
   /** Which driver the runner must use; `auto` asserts nothing. */
@@ -64,6 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
   parallelGeneration: DEFAULT_PIPELINE.parallelGeneration,
   maxFiles: DEFAULT_PIPELINE.maxFiles,
   concurrency: DEFAULT_PIPELINE.concurrency,
+  maxTokens: DEFAULT_PIPELINE.maxTokens,
   sandboxUrl: "",
   sandboxProvider: "auto",
   sandboxSetup: "",
@@ -162,6 +165,10 @@ function load(): Settings {
       concurrency: Math.min(
         6,
         Math.max(1, Math.round(pickNumber(parsed.concurrency, DEFAULT_PIPELINE.concurrency))),
+      ),
+      maxTokens: Math.min(
+        2_000_000,
+        Math.max(0, Math.round(pickNumber(parsed.maxTokens, DEFAULT_PIPELINE.maxTokens))),
       ),
       sandboxUrl: typeof parsed.sandboxUrl === "string" ? parsed.sandboxUrl : "",
       sandboxProvider: sandboxProvidersFor(isLocalDashboard() ? "local" : "deployed").some(

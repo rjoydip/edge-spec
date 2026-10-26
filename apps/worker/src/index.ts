@@ -6,6 +6,7 @@ import {
   DEFAULT_AI,
   DEFAULT_PIPELINE,
   PROVIDERS,
+  nextModel,
   parseRef,
   parseRepo,
   parseSandboxUrl,
@@ -140,9 +141,11 @@ function aiConfigFor(c: AppContext, body: Record<string, unknown>): AiConfig {
   // A deployed Worker only spends it when the request asks for it, so a
   // visitor always runs on their own provider.
   const useBinding = c.req.header(DEPLOYMENT_AI_HEADER) === "1";
+  const fallback = nextModel(choice.provider, choice.model);
   return {
     provider: choice.provider,
     model: choice.model,
+    ...(fallback ? { fallbackModel: fallback } : {}),
     ...(choice.apiKey ? { apiKey: choice.apiKey } : {}),
     ...(choice.baseUrl ? { baseUrl: choice.baseUrl } : {}),
     ...(choice.accountId ? { accountId: choice.accountId } : {}),
@@ -691,6 +694,7 @@ app.post("/api/generate", async (c) => {
     }
 
     let rateLimit: RateLimitInfo | undefined;
+    const notices: string[] = [];
     const write = (previous?: { code: string; output: string }) =>
       generateTest({
         filePath: path,
@@ -699,6 +703,7 @@ app.post("/api/generate", async (c) => {
         coverageTarget: config.coverageTarget,
         ...(coverageHint ? { coverageHint } : {}),
         ...(previous ? { previous } : {}),
+        onNotice: (text) => notices.push(text),
         ...(checks && checks.style.length ? { style: checks.style } : {}),
         ...(checks && checks.checks.length
           ? { checks: checks.checks.map((check) => ({ name: check.name, command: check.command })) }
@@ -768,6 +773,7 @@ app.post("/api/generate", async (c) => {
       validation,
       attempts,
       ...(rateLimit ? { rateLimit } : {}),
+      ...(notices.length > 0 ? { notices } : {}),
     });
   } catch (err) {
     return fail(err);

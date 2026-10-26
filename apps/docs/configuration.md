@@ -176,12 +176,22 @@ custom path is simpler.
 | `maxRetries`         | 2       | 0–5     | Extra generations after a failed validation                           |
 | `parallelGeneration` | true    | boolean | Generate the picked tests in parallel instead of one by one           |
 | `maxFiles`           | 10      | 1–50    | How many gap files one pipeline run generates a test for              |
+| `maxTokens`          | 0       | 0–2M    | Provider-reported token cap for one run; `0` means no cap             |
 | `concurrency`        | 3       | 1–6     | Files generated and validated at once; a lower sandbox cap wins       |
 | `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments         |
 
 Bad values are clamped, not rejected. `strictTypes` and `parallelGeneration`
 default to true
 unless the request explicitly sends `false`.
+
+Before generation the run logs an estimated **input-token range** for the loaded
+files. That estimate is not a bill. When `maxTokens` is set, the run counts only
+the token usage the provider reports; once the cap is reached it finishes the
+current file, starts no new files, and returns the tests that are ready with
+`result.ok: false`. If a provider reports no usage, the log says the cap could
+not be enforced. On a quota or 5xx response the Worker retries once with the
+next model of the same provider and logs the fallback; a failed call never
+contributes a cost.
 
 A run covers the first `maxFiles` gaps, highest risk first, and every test it
 writes waits in **Review** for a pull request. Files run through a bounded pool:

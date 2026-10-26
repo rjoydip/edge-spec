@@ -3,7 +3,7 @@
  * route and (step by step) the durable Workflow.
  */
 import type { AiBinding } from "./ai";
-import { generateTest } from "./ai";
+import { estimatePromptTokens, generateTest, type TokenUsage } from "./ai";
 import type { AiConfig } from "./ai";
 import type { GitHub } from "./github";
 import { detectChecks, SUPPORT_FILES } from "./ci";
@@ -55,6 +55,8 @@ export interface PipelineInput {
   mode?: "unit" | "api" | "both";
   /** When re-running after a failure, skip scan and regenerate only these paths. */
   retryGaps?: string[];
+  /** Provider-reported tokens this run may spend; 0 or absent means no cap. */
+  maxTokens?: number;
 }
 
 const DEFAULT_CONCURRENCY = 3;
@@ -467,6 +469,42 @@ export async function* runPipeline(
       }
     }
 
+    // The budget is provider-reported tokens. With no cap, the run still shows
+    // an estimate so the reader knows the order of magnitude before spending.
+    const cap = Math.max(0, Math.round(input.maxTokens ?? 0));
+    let spentTokens = 0;
+    let usageSeen = false;
+    let budgetStopped = false;
+    if (loaded.length > 0) {
+      let low = 0;
+      let high = 0;
+      for (const file of loaded) {
+        const hint = coverageHints.get(file.gap.path);
+        const estimate = estimatePromptTokens({
+          filePath: file.gap.path,
+          source: file.source,
+          config: aiConfig,
+          coverageTarget: input.coverageTarget,
+          ...(hint ? { coverageHint: hint } : {}),
+          ...(checks.style.length ? { style: checks.style } : {}),
+          ...(checks.checks.length
+            ? {
+                checks: checks.checks.map((check) => ({
+                  name: check.name,
+                  command: check.command,
+                })),
+              }
+            : {}),
+        });
+        low += estimate.low;
+        high += estimate.high;
+      }
+      yield log(
+        "info",
+        `Estimated input tokens: ${low}–${high} for ${loaded.length} file(s)${cap > 0 ? ` · budget ${cap}` : " · no budget cap"}.`,
+      );
+    }
+
     const ready = new Set<string>();
     // A sandbox may cap its own runs; honour the tighter of the two.
     const effective = Math.min(
@@ -483,6 +521,16 @@ export async function* runPipeline(
         const { gap, source } = file;
         const position = `${index + 1}/${loaded.length}`;
         const coverageHint = coverageHints.get(gap.path);
+
+        if (cap > 0 && spentTokens >= cap) {
+          if (!budgetStopped) {
+            budgetStopped = true;
+            emit(
+              log("warn", `Token budget reached (${spentTokens}/${cap}); no new files will start.`),
+            );
+          }
+          return false;
+        }
 
         emit({
           type: "step",
@@ -501,6 +549,20 @@ export async function* runPipeline(
           config: aiConfig,
           coverageTarget: input.coverageTarget,
           ...(coverageHint ? { coverageHint } : {}),
+          onUsage: (usage: TokenUsage) => {
+            usageSeen = true;
+            spentTokens += usage.input + usage.output;
+            if (cap > 0 && spentTokens >= cap && !budgetStopped) {
+              budgetStopped = true;
+              emit(
+                log(
+                  "warn",
+                  `Token budget reached (${spentTokens}/${cap}); finishing the current file.`,
+                ),
+              );
+            }
+          },
+          onNotice: (text: string) => emit(log("warn", text)),
           onRateLimit: (info: RateLimitInfo) => {
             rateLimit = info;
           },
@@ -641,7 +703,7 @@ export async function* runPipeline(
           emit(log("error", `${gap.path} validation failed: ${failureSummary(validation.output)}`));
         }
 
-        while (!validation.ok && attempt < input.maxRetries) {
+        while (!validation.ok && attempt < input.maxRetries && !(cap > 0 && spentTokens >= cap)) {
           attempt += 1;
           emit({
             type: "step",
@@ -660,6 +722,20 @@ export async function* runPipeline(
             previous: { code, output: validation.output },
             coverageTarget: input.coverageTarget,
             ...(coverageHint ? { coverageHint } : {}),
+            onUsage: (usage: TokenUsage) => {
+              usageSeen = true;
+              spentTokens += usage.input + usage.output;
+              if (cap > 0 && spentTokens >= cap && !budgetStopped) {
+                budgetStopped = true;
+                emit(
+                  log(
+                    "warn",
+                    `Token budget reached (${spentTokens}/${cap}); finishing the current file.`,
+                  ),
+                );
+              }
+            },
+            onNotice: (text: string) => emit(log("warn", text)),
             onRateLimit: (info: RateLimitInfo) => {
               retryRateLimit = info;
             },
@@ -910,6 +986,28 @@ export async function* runPipeline(
       ...loaded.map((file) => file.gap.path).filter((path) => ready.has(path)),
       ...(apiMode ? apiSpecs.map((spec) => spec.path).filter((path) => ready.has(path)) : []),
     ];
+
+    if (cap > 0 && !usageSeen && loaded.length > 0) {
+      yield log(
+        "warn",
+        "The provider did not report token usage; the token budget could not be enforced.",
+      );
+    }
+
+    if (budgetStopped) {
+      yield { type: "step", step: "pull-request", status: "failed", note: "Budget" };
+      yield log(
+        "warn",
+        `Token budget reached after ${spentTokens} reported tokens. ${ordered.length} test(s) from the partial run are ready.`,
+      );
+      yield {
+        type: "result",
+        ok: false,
+        reason: `Token budget reached (${spentTokens}/${cap} tokens).`,
+        ready: ordered,
+      };
+      return;
+    }
 
     if (ordered.length === 0) {
       yield { type: "step", step: "pull-request", status: "failed", note: "No PR" };
