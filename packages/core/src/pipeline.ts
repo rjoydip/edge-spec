@@ -39,6 +39,7 @@ import {
   type RunEvent,
   type ScanResult,
   type ScanTotals,
+  type TestRunner,
   type Validation,
 } from "./types";
 
@@ -231,6 +232,8 @@ interface RepositoryRules {
   formatter?: { name: string; command: string };
   style: string[];
   support: Record<string, string>;
+  runner: TestRunner;
+  packageManager: string;
 }
 
 export async function readRepositoryChecks(
@@ -273,6 +276,8 @@ export async function readRepositoryChecks(
     ...(detected.formatter ? { formatter: detected.formatter } : {}),
     style: detected.style,
     support,
+    runner: detected.runner,
+    packageManager: detected.packageManager,
   };
 }
 
@@ -530,6 +535,7 @@ export async function* runPipeline(
           filePath: file.gap.path,
           source: file.source,
           config: aiConfig,
+          runner: checks.runner,
           coverageTarget: input.coverageTarget,
           ...(hint ? { coverageHint: hint } : {}),
           ...(properties ? { propertyTests: properties } : {}),
@@ -594,6 +600,7 @@ export async function* runPipeline(
           filePath: gap.path,
           source,
           config: aiConfig,
+          runner: checks.runner,
           coverageTarget: input.coverageTarget,
           ...(coverageHint ? { coverageHint } : {}),
           ...(properties ? { propertyTests: properties } : {}),
@@ -703,6 +710,8 @@ export async function* runPipeline(
           ...(measureCoverage ? { measureCoverage: true } : {}),
           ...(baselineCoverage ? { baselineCoverage } : {}),
           flakyRuns: input.flakyRuns ?? 0,
+          runner: checks.runner,
+          packageManager: checks.packageManager,
           ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
           requireProperties: Boolean(properties),
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
@@ -770,6 +779,7 @@ export async function* runPipeline(
             filePath: gap.path,
             source,
             config: aiConfig,
+            runner: checks.runner,
             previous: { code, output: validation.output },
             coverageTarget: input.coverageTarget,
             ...(coverageHint ? { coverageHint } : {}),
@@ -841,6 +851,8 @@ export async function* runPipeline(
             ...(measureCoverage ? { measureCoverage: true } : {}),
             ...(baselineCoverage ? { baselineCoverage } : {}),
             flakyRuns: input.flakyRuns ?? 0,
+            runner: checks.runner,
+            packageManager: checks.packageManager,
             ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
             requireProperties: Boolean(properties),
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),

@@ -4,7 +4,7 @@
  */
 import type { Provider } from "./catalog";
 import { lineRanges, type CoverageTarget } from "./coverage";
-import { HttpError, type RateLimitInfo } from "./types";
+import { HttpError, type RateLimitInfo, type TestRunner } from "./types";
 
 /** Minimal shape of the Workers AI binding; avoids pulling Worker types into DOM. */
 export interface AiBinding {
@@ -41,6 +41,8 @@ export interface GenerateInput {
   coverageHint?: CoverageTarget;
   /** Opt-in fast-check properties, bounded and seeded. */
   propertyTests?: { runs: number; seed: number };
+  /** The repository's detected test runner; Bun is the fallback. */
+  runner?: TestRunner;
   /** The style rules the repository formats with. */
   style?: string[];
   /** The commands CI runs, so the test satisfies them. */
@@ -56,6 +58,26 @@ export interface GenerateInput {
 
 const SYSTEM =
   "You write focused, deterministic TypeScript unit tests. You never invent APIs that are not in the provided source.";
+
+const RUNNER_FACTS: Record<TestRunner, { label: string; importLine: string; shape?: string }> = {
+  bun: {
+    label: "Bun (`bun:test`) with TypeScript",
+    importLine: 'import { describe, it, expect, mock, beforeEach } from "bun:test";',
+  },
+  vitest: {
+    label: "Vitest with TypeScript",
+    importLine: 'import { describe, it, expect, vi, beforeEach } from "vitest";',
+  },
+  jest: {
+    label: "Jest with TypeScript",
+    importLine: 'import { describe, it, expect, jest, beforeEach } from "@jest/globals";',
+  },
+  playwright: {
+    label: "Playwright (@playwright/test) with TypeScript",
+    importLine: 'import { test, expect } from "@playwright/test";',
+    shape: "Use `test(...)` for each case; use `test.describe` only when grouping is useful.",
+  },
+};
 
 export function buildPrompt(input: GenerateInput): string {
   const correction = input.previous
@@ -84,14 +106,16 @@ export function buildPrompt(input: GenerateInput): string {
     ? `\nProperty-based tests are enabled and fast-check is already a dependency:\n- Import it as \`import * as fc from "fast-check";\`.\n- Add at least one property using \`fc.assert(fc.property(...), { numRuns: ${input.propertyTests.runs}, seed: ${input.propertyTests.seed} })\`.\n- Put \`[property]\` in that \`it(...)\` name.\n- Do not catch or rewrite fast-check failures; its seed and counterexample must surface.\n`
     : "";
 
+  const runner = RUNNER_FACTS[input.runner ?? "bun"];
+
   return `Write a complete unit test file for the source below.
 
 File: ${input.filePath}
-Runner: Bun (\`bun:test\`) with TypeScript.
+Runner: ${runner.label}.
 
 Rules:
-- Use \`import { describe, it, expect, mock, beforeEach } from "bun:test";\`
-- Import the subject from \`./${importName(input.filePath)}\` (same directory as the test).
+- Use \`${runner.importLine}\`
+${runner.shape ? `- ${runner.shape}\n` : ""}- Import the subject from \`./${importName(input.filePath)}\` (same directory as the test).
 - Mock network, timers and randomness. No real HTTP, no sleeps.
 - Cover exported functions and the edge cases a reviewer would ask for: empty input, invalid input, thrown errors, boundaries.
 - Aim for at least ${input.coverageTarget ?? 90}% branch coverage of the exported surface.

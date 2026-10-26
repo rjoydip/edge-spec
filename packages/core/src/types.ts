@@ -13,6 +13,9 @@ export class HttpError extends Error {
 
 export type Risk = "high" | "medium" | "low";
 
+/** The test runner EdgeSpec detected for the repository. */
+export type TestRunner = "bun" | "vitest" | "jest" | "playwright";
+
 /** Why a source file is a gap. Absent on old callers means "missing". */
 export type GapKind = "missing" | "coverage" | "api" | "unsupported";
 
@@ -174,6 +177,8 @@ export interface RepositoryOverview {
   checks?: Array<{ name: string; kind: CheckKind; command: string }>;
   /** The formatter the repository uses. */
   formatter?: string;
+  /** The test runner the repository's dependencies and config imply. */
+  testRunner?: TestRunner;
   /** OpenAPI specs and Postman/Bruno collections found in the tree. */
   apiArtifacts?: ApiArtifact[];
   /** Parsed OpenAPI documents found in the tree. */

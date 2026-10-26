@@ -187,6 +187,7 @@ export function scanLocalProject(root: string): ScanResult {
     overview.checks = detected.checks.map(({ name, kind, command }) => ({ name, kind, command }));
   }
   if (detected.formatter) overview.formatter = detected.formatter.name;
+  overview.testRunner = detected.runner;
 
   return {
     repo: root,

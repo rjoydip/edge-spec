@@ -490,6 +490,7 @@ app.post("/api/scan", async (c) => {
       }));
     }
     if (detected.formatter) overview.formatter = detected.formatter.name;
+    overview.testRunner = detected.runner;
 
     // A full scan is the backlog's source of truth; a gap that disappeared closes.
     const history = runsDb(c.env);
@@ -915,6 +916,8 @@ app.post("/api/generate", async (c) => {
 
     const fastCheck = /"fast-check"\s*:/.test(checks?.support["package.json"] ?? "");
     const properties = config.propertyTests && fastCheck ? { runs: 50, seed: 42 } : undefined;
+    const runner = checks?.runner ?? "bun";
+    const packageManager = checks?.packageManager ?? "bun";
 
     let rateLimit: RateLimitInfo | undefined;
     const notices: string[] = [];
@@ -923,6 +926,7 @@ app.post("/api/generate", async (c) => {
         filePath: path,
         source,
         config: aiConfig,
+        runner,
         coverageTarget: config.coverageTarget,
         ...(coverageHint ? { coverageHint } : {}),
         ...(properties ? { propertyTests: properties } : {}),
@@ -958,6 +962,8 @@ app.post("/api/generate", async (c) => {
         test: candidate,
         strictTypes: config.strictTypes,
         flakyRuns: config.flakyRuns,
+        runner,
+        packageManager,
         mutationCommand: config.mutationCommand,
         requireProperties: Boolean(properties),
         ...(sandbox ? { sandbox } : {}),

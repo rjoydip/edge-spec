@@ -484,6 +484,9 @@ total, score, command, budgetStopped?}` or `{status:"not-measured", reason}`.
   Contract tests also exercise a missing required body field, a wrong scalar
   type, and an unauthenticated request; the generated file contains only
   placeholder env reads.
+- The test runner is detected per repository (Playwright, Vitest, Jest, then
+  Bun). Generated imports and validation commands use that runner; there is no
+  runner override in the request.
 - `propertyTests` is opt-in and only applied when the repository depends on
   `fast-check`. Properties must be `[property]`-labelled with `numRuns: 50` and
   `seed: 42`; static validation fails otherwise, and fast-check surfaces the

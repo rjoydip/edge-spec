@@ -222,6 +222,18 @@ writes waits in **Review** for a pull request. Files run through a bounded pool:
 `ready` stays in scan order even though events interleave, and each event names
 its `sourcePath`. One file that exhausts its retries fails alone.
 
+## Test runners
+
+The runner is detected per repository, in this order: Playwright
+(`@playwright/test` or `playwright.config.*`), Vitest (`vitest` or
+`vitest.config.*`), Jest (`jest`/`ts-jest` or `jest.config.*`), then Bun
+(`bun:test`) as the fallback. The prompt imports from that runner, and validation
+runs the matching command with the repository's package manager
+(`bunx vitest run …`, `npx jest … --runInBand`, `npx playwright test …`, or
+`bun test …`). The dashboard's Facts dialog shows the detected runner. The
+runner must be installed in the sandbox; static validation still works without a
+runner but cannot claim an execution.
+
 ## Contract auth fixtures
 
 Settings holds two optional JSON objects per environment: auth headers and auth

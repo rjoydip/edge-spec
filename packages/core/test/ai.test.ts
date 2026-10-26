@@ -93,6 +93,17 @@ describe("buildPrompt", () => {
     expect(buildPrompt(input({ provider: "openai" }))).not.toContain("Uncovered lines");
   });
 
+  it("uses the detected runner's imports instead of bun:test", () => {
+    const vitest = buildPrompt(input({ provider: "openai", runner: "vitest" }));
+    expect(vitest).toContain("Vitest");
+    expect(vitest).toContain('from "vitest"');
+    expect(vitest).not.toContain('from "bun:test"');
+
+    const playwright = buildPrompt(input({ provider: "openai", runner: "playwright" }));
+    expect(playwright).toContain('from "@playwright/test"');
+    expect(playwright).toContain("test(...)");
+  });
+
   it("asks for labelled, seeded, bounded fast-check properties when opted in", () => {
     const prompt = buildPrompt(
       input({ provider: "openai", propertyTests: { runs: 50, seed: 42 } }),

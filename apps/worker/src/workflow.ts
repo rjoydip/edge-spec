@@ -7,6 +7,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { generateTest } from "@edge-spec/core/ai";
 import { DEFAULT_AI, pipelineConfig, providerById } from "@edge-spec/core/catalog";
+import { detectPackageManager, detectRunner } from "@edge-spec/core/ci";
 import { GitHub } from "@edge-spec/core/github";
 import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github-app";
 import { coverageForFile } from "@edge-spec/core/coverage";
@@ -24,7 +25,7 @@ import { getPolicy, runsDb } from "./db";
 import { sandboxRepo, runInSandbox } from "@edge-spec/core/sandbox";
 import { validateTest } from "@edge-spec/core/validate";
 import type { Env } from "./env";
-import type { Generation, Validation } from "@edge-spec/core/types";
+import type { Generation, TestRunner, Validation } from "@edge-spec/core/types";
 
 export interface WorkflowParams {
   repo: string;
@@ -63,6 +64,8 @@ interface Scanned {
   source: string;
   scanned: number;
   gaps: number;
+  runner: TestRunner;
+  packageManager: string;
 }
 
 export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
@@ -516,12 +519,18 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       const gap = gaps[0];
       if (!gap) return null;
       const source = await github.file(repo, gap.path, ref);
+      const packageJson = await github.file(repo, "package.json", ref).catch(() => undefined);
       return {
         path: gap.path,
         testPath: gap.testPath,
         source,
         scanned: blobs.length,
         gaps: gaps.length,
+        runner: detectRunner({
+          paths: blobs,
+          ...(packageJson ? { packageJson } : {}),
+        }),
+        packageManager: detectPackageManager(blobs),
       };
     });
 
@@ -533,6 +542,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
         const code = await generateTest({
           filePath: scanned.path,
           source: scanned.source,
+          runner: scanned.runner,
           config: {
             provider,
             model,
@@ -559,6 +569,8 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
         test: generation.code,
         strictTypes: config.strictTypes,
         flakyRuns: config.flakyRuns,
+        runner: scanned.runner,
+        packageManager: scanned.packageManager,
         mutationCommand: config.mutationCommand,
         ...(this.env.SANDBOX_RUNNER_URL
           ? {
@@ -577,6 +589,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
         const code = await generateTest({
           filePath: scanned.path,
           source: scanned.source,
+          runner: scanned.runner,
           config: {
             provider,
             model,
@@ -596,6 +609,8 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
             test: generation.code,
             strictTypes: config.strictTypes,
             flakyRuns: config.flakyRuns,
+            runner: scanned.runner,
+            packageManager: scanned.packageManager,
             mutationCommand: config.mutationCommand,
             ...(this.env.SANDBOX_RUNNER_URL
               ? {

@@ -919,6 +919,7 @@ export function FactsDialog({
             {overview.formatter && (
               <Badge variant="neutral">formatter · {overview.formatter}</Badge>
             )}
+            {overview.testRunner && <Badge variant="neutral">runner · {overview.testRunner}</Badge>}
             <Badge variant={coverageStatus === "measured" ? "success" : "warning"}>
               Coverage · {coverageLabel(coverageStatus)}
               {coverageReason ? ` · ${coverageReason}` : ""}

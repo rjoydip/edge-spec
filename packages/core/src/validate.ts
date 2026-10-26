@@ -2,9 +2,10 @@
  * Validation. A real runner is optional: without one, EdgeSpec says so instead
  * of claiming a test passed.
  */
+import { testCommandFor } from "./ci";
 import { coverageDelta, type CoverageReport } from "./coverage";
 import { mutationCommandFor, parseMutationReport } from "./mutation";
-import type { CheckKind, CheckResult, MutationResult, Validation } from "./types";
+import type { CheckKind, CheckResult, MutationResult, TestRunner, Validation } from "./types";
 import { runInSandbox, type SandboxConfig, type SandboxRepo } from "./sandbox";
 
 export { runInSandbox } from "./sandbox";
@@ -89,6 +90,9 @@ export interface ValidateInput {
   mutationCommand?: string;
   /** Fail static checks unless a labelled, seeded, bounded property exists. */
   requireProperties?: boolean;
+  /** The detected runner and package manager for the test command. */
+  runner?: TestRunner;
+  packageManager?: string;
   /** Ask the runner for LCOV and attach a per-file delta to the result. */
   measureCoverage?: boolean;
   /** The before report; a delta needs both reports. */
@@ -118,6 +122,10 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
     };
   }
 
+  const runner = input.runner ?? "bun";
+  const command = input.repo
+    ? testCommandFor(runner, shellWord(input.testPath), input.packageManager)
+    : testCommandFor(runner, "", input.packageManager);
   const run = await runInSandbox({
     sandbox: input.sandbox,
     ...(input.repo ? { repo: input.repo } : {}),
@@ -125,7 +133,7 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
       [input.sourcePath]: input.source,
       [input.testPath]: input.test,
     },
-    command: input.repo ? `bun test ${shellWord(input.testPath)}` : "bun test",
+    command,
     ...(input.measureCoverage ? { coverage: { format: "lcov" as const } } : {}),
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
   });
@@ -159,7 +167,7 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
         [input.sourcePath]: input.source,
         [input.testPath]: input.test,
       },
-      command: input.repo ? `bun test ${shellWord(input.testPath)}` : "bun test",
+      command,
       ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
     });
     runs += 1;

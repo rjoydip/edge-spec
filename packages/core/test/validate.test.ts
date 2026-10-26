@@ -180,6 +180,26 @@ describe("validateTest", () => {
     expect(result.coverage).toEqual({ status: "not-measured" });
   });
 
+  it("runs the detected runner command for a repository", async () => {
+    let body: Record<string, unknown> = {};
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ exitCode: 0, stdout: "1 pass" }));
+    }) as unknown as typeof fetch;
+
+    await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example", v2: true },
+      repo: { url: "https://github.com/acme/api.git", ref: "main" },
+      runner: "vitest",
+      packageManager: "npm",
+      flakyRuns: 0,
+      fetchImpl: fakeFetch,
+    });
+
+    expect(body.command).toBe("npx vitest run 'src/math.test.ts'");
+  });
+
   it("marks a pass/fail split flaky, quarantined and never verified", async () => {
     let calls = 0;
     const fakeFetch = (async () => {
