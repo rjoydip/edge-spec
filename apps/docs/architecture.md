@@ -25,9 +25,11 @@ Outbound from the Worker:
 ```
 
 The Worker holds no session and no user configuration. A request carries
-everything needed to serve it. Run history is an optional D1 binding
-(`RUNS_DB`): when it is absent the history routes answer `enabled: false` and
-nothing is stored. There is no KV or R2 binding yet.
+everything needed to serve it. Run history, backlog, policies, memory, schedules,
+workspace settings and audit are an optional D1 binding (`RUNS_DB`); the raw
+validation bundles and drift summaries live in R2 (`ARTIFACTS`). Without the
+bindings the related routes answer `enabled: false` and nothing is stored.
+Generated test source, prompts and keys are never written to either store.
 
 ## Frontend bundle
 

@@ -862,6 +862,60 @@ with a readable error.
 
 ---
 
+## Run history
+
+History is optional and lives in D1 (`RUNS_DB`). Without the binding every
+route below answers `{ "enabled": false }` and nothing is stored. Summaries are
+kept in D1; raw checks and coverage facts are kept in R2 (`ARTIFACTS`); generated
+test source is never stored in either.
+
+### `GET /api/runs?repo=owner/name&limit=20`
+
+Lists recent runs for one repository, newest first.
+
+```json
+{
+  "enabled": true,
+  "runs": [
+    {
+      "id": "01234567-89ab-cdef-0123-456789abcdef",
+      "repo": "acme/api",
+      "ref": "main",
+      "status": "ready",
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "startedAt": 1793000000000,
+      "finishedAt": 1793000012000,
+      "totals": { "missing": 4, "coverage": 0, "api": 0, "unsupported": 0, "skipped": 0 }
+    }
+  ]
+}
+```
+
+### `DELETE /api/runs?repo=owner/name`
+
+Deletes that repository's runs, their files, and their stored R2 bundles.
+Returns `{ "deleted": 3 }`. `501` means the deployment has no D1 binding.
+
+### `GET /api/runs/:id/files`
+
+Returns one run and its per-file rows (`sourcePath`, `testPath`, `decision`,
+`verified`, `checks`, optional `coverage`). `404` when the id is unknown.
+History ids must be 8–64 URL-safe characters.
+
+### `POST /api/runs/:id/decisions`
+
+Records review decisions for files in a run.
+
+```json
+{ "decisions": [{ "sourcePath": "src/a.ts", "decision": "accepted" }] }
+```
+
+`decision` is `accepted`, `rejected` or `pending`; up to 200 entries are
+applied. Unknown paths are ignored. Returns `{ "updated": 1 }`.
+
+---
+
 ## `GET /api/runs/:id`
 
 Returns the Cloudflare Workflow instance status (passthrough), for polling a
@@ -896,7 +950,17 @@ outlives the SSE stream; generated test source is not stored.
 ```
 
 `404` means the run stored no bundle; `{ "enabled": false }` means the
-deployment has no `ARTIFACTS` binding.
+deployment has no `ARTIFACTS` binding. Deleting a repository's history also
+deletes its bundles.
+
+---
+
+## Local development routes
+
+`GET /local-api/scan` and `GET /local-api/file` exist for the Vite dev server.
+The Worker itself answers `403` for any non-localhost `Host` and `400` on
+localhost; the real filesystem read happens in the Vite middleware, so a
+deployed Worker never touches a visitor's disk.
 
 ---
 

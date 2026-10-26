@@ -65,7 +65,7 @@ import {
   type Validation,
 } from "@edge-spec/core/types";
 import type { Env } from "./env";
-import { getRunArtifact, putRunArtifact } from "./artifacts";
+import { deleteRunArtifacts, getRunArtifact, putRunArtifact } from "./artifacts";
 import {
   claimPrCommand,
   createRun,
@@ -1608,7 +1608,9 @@ app.delete("/api/runs", async (c) => {
     if (!db) throw new HttpError(501, "Run history is not enabled on this deployment.");
     const repo = parseRepo(c.req.query("repo"));
     if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
-    const deleted = await deleteRunHistory(db, `${repo.owner}/${repo.name}`);
+    const repoName = `${repo.owner}/${repo.name}`;
+    const { deleted, ids } = await deleteRunHistory(db, repoName);
+    await deleteRunArtifacts(c.env, ids).catch(() => 0);
     return c.json({ deleted });
   } catch (err) {
     return fail(err);

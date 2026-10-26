@@ -18,8 +18,8 @@ features:
     details: Workers AI out of the box, or OpenAI, Anthropic, Gemini, Groq, DeepSeek, Mistral, OpenRouter and any OpenAI-compatible custom endpoint.
   - title: Honest validation
     details: Static checks always run. A suite is only reported as verified when a sandbox runner actually executed `bun test`.
-  - title: No server-side state
-    details: Repository, provider, knobs and keys stay in the browser and travel with each request. The deployment persists nothing.
+  - title: No server-side user config
+    details: Repository, provider, knobs and keys stay in the browser and travel with each request. Optional D1 stores shared run history, not credentials.
 ---
 
 ## Start here
@@ -31,15 +31,18 @@ features:
 | [CLI](/cli)                     | Scan, generate, run and open PRs from a terminal                                 |
 | [MCP server](/mcp)              | Expose EdgeSpec tools to Claude Desktop, Cursor and other agents                 |
 | [Configuration](/configuration) | Browser settings, providers, pipeline knobs, sandbox runner, deployment secrets  |
-| [UI](/ui)                       | Header, tabs, pipeline states, settings, theme and layout rules                  |
+| [Deployment](/deployment)       | D1, R2, secrets, Worker and Sandbox bridge deployment, CI                        |
+| [UI](/ui)                       | Workspace steps, pipeline states, settings, theme and layout rules               |
 
 The repository also carries `README.md` for setup, `PLAN.md` for requirements and
 `AGENTS.md` for conventions.
 
 ## The mental model
 
-1. **The deployment stores nothing user-specific.** Settings live in the browser.
+1. **The deployment stores no user configuration.** Settings live in the browser.
    Keys are sent as headers on each request and forwarded to the chosen provider.
+   Run history, the backlog, policies and audit are optional shared D1 state;
+   they never hold source text, prompts or keys.
 2. **One pipeline, two transports.** `runPipeline()` streams the interactive run
    over SSE (`POST /api/run`). GitHub webhooks use the durable
    `TestGenerationWorkflow` with deployment-owned credentials.
@@ -55,14 +58,16 @@ The repository also carries `README.md` for setup, `PLAN.md` for requirements an
 bun install
 bun run dev:worker     # API + built assets on http://127.0.0.1:8787
 bun run dev            # Vite dashboard on http://127.0.0.1:5173
+bun run dev:all        # both, plus the sandbox bridge when the host can run it
 ```
 
-Open the dashboard, enter `owner/name` in the header (or a folder path inside
-it to start there), pick a provider in **Settings**, then press the run icon
-in the **Pipeline** tab. For a private repository or to open a pull request,
-add a GitHub token in Settings. On localhost you can also enter a local folder
-path such as `./examples/hono`; the dev server scans it read-only, so you can
-generate and validate tests without a GitHub repository.
+Open the dashboard, enter `owner/name` in **01 Repository** (or a folder path),
+pick a provider in **Settings**, then scan and start a run. For a private
+repository or to open a pull request, add a GitHub token in Settings. On
+localhost you can also enter a local folder path such as
+`./examples/missing-openapi`; the dev server scans it read-only, so you can
+generate and validate tests without a GitHub repository. A folder path is only
+available through the Vite dev server.
 
 CLI and MCP clients use the same Worker API:
 
@@ -93,9 +98,11 @@ apps/worker/src/     Hono routes, bindings, durable Workflow
 apps/sandbox-worker/ Cloudflare Sandbox bridge (Containers + Sandbox SDK)
 apps/web/src/        React dashboard
 apps/docs/           this documentation site
+evals/               golden-scan harness and optional provider scoring
 ```
 
-Tests live in each workspace's `test/` directory.
+Tests live in each workspace's `test/` directory. Deployment steps are in
+[Deployment](/deployment).
 
 ## Limits at a glance
 

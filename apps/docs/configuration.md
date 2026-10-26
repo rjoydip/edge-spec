@@ -441,13 +441,14 @@ rows are safe to share with the team.
 The daily cron applies retention before scanning:
 
 - runs and their `run_files` rows older than `retentionDays` are deleted;
+- the matching `runs/<id>.json` R2 bundles are deleted;
 - audit events older than `retentionDays` are deleted;
 - `pr_commands` rate-limit rows older than `retentionDays` are deleted.
 
 Retention is clamped to 1–365 days (default 30). A purge writes one
-`retention_purge` event with the deleted counts. There is no per-repository
-retention override and no export or archive step; R2 artifacts are not deleted
-by this job.
+`retention_purge` event with the deleted run, audit and artifact counts. There is
+no per-repository retention override and no export or archive step. Drift
+summaries (`drift/…`) have no D1 row to age out, so they are not pruned yet.
 
 ## Sandbox runner (optional)
 

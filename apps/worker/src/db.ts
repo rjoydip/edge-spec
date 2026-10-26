@@ -162,18 +162,22 @@ export async function getRun(db: D1Database, id: string): Promise<RunDetail | un
 }
 
 /** Deletes every run for one repository and returns how many runs went. */
-export async function deleteRunHistory(db: D1Database, repo: string): Promise<number> {
-  const count = await db
-    .prepare("SELECT COUNT(*) AS count FROM runs WHERE repo = ?")
-    .bind(repo)
-    .first<{ count: number }>();
+/** Deletes a repository's history and returns the deleted ids for R2 cleanup. */
+export async function deleteRunHistory(
+  db: D1Database,
+  repo: string,
+): Promise<{ deleted: number; ids: string[] }> {
+  const ids =
+    (
+      await db.prepare("SELECT id FROM runs WHERE repo = ?").bind(repo).all<{ id: string }>()
+    ).results?.map((row) => row.id) ?? [];
   await db.batch([
     db
       .prepare("DELETE FROM run_files WHERE run_id IN (SELECT id FROM runs WHERE repo = ?)")
       .bind(repo),
     db.prepare("DELETE FROM runs WHERE repo = ?").bind(repo),
   ]);
-  return Number(count?.count ?? 0);
+  return { deleted: ids.length, ids };
 }
 
 export async function getMemory(db: D1Database, repo: string): Promise<RepoMemory> {

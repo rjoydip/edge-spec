@@ -4,9 +4,57 @@ Find source files with no tests, generate a test with the AI model you choose,
 validate it, and open a pull request. One Cloudflare Worker serves the API and
 the dashboard.
 
+## Prerequisites
+
+EdgeSpec is a Bun workspace. Install these once, then `bun install` from the
+repository root.
+
+| Tool     | Version / notes                                                  |
+| -------- | ---------------------------------------------------------------- |
+| Git      | Any recent version; needed for cloning and PR workflows          |
+| Bun      | `1.4.4` (pinned by `packageManager`); runs install, tests, build |
+| Node.js  | `>=22.12` (declared in `engines`); used by some tooling          |
+| Docker   | Optional: local sandbox bridge / containerised runner            |
+| Wrangler | Installed by `bun install`; no global install needed             |
+
+**Linux**
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+# Node 22.12+ via your distribution, nvm, or fnm
+curl -fsSL https://get.docker.com | sh   # optional sandbox bridge
+```
+
+`packages/sandbox` can also use `bwrap` or Podman instead of Docker.
+
+**Windows**
+
+Use PowerShell for Bun and Node, and keep the repository on a local drive:
+
+```powershell
+powershell -c "irm bun.sh/install.ps1 | iex"
+winget install OpenJS.NodeJS.LTS
+```
+
+WSL2 with Docker Desktop is required for the Cloudflare Sandbox bridge —
+`wrangler dev` cannot run Containers on native Windows. Everything else (API,
+dashboard, CLI, MCP, tests) runs natively. See
+[`apps/docs/deployment.md`](apps/docs/deployment.md).
+
+**macOS**
+
+```bash
+brew install oven-sh/bun/bun node@22
+xcode-select --install                    # native build tools
+brew install --cask docker                # optional sandbox bridge
+```
+
+Docker Desktop must be running before `bun run dev:all` starts the bridge.
+
 ## Documentation
 
 - [`apps/docs/`](apps/docs/index.md) — documentation site (VitePress); run `bun run docs:dev`.
+- [`apps/docs/deployment.md`](apps/docs/deployment.md) — D1, R2, secrets and deployment.
 - [`PLAN.md`](PLAN.md) — requirements and design decisions.
 - [`AGENTS.md`](AGENTS.md) — repository conventions.
 
@@ -20,17 +68,25 @@ bun run docs:preview  # serve the build locally
 
 ```bash
 bun install
-bun run dev:worker     # http://127.0.0.1:8787 — API + assets
+bun run dev:worker     # http://127.0.0.1:8787 — API + assets, migrates local D1
 bun run dev            # http://127.0.0.1:5173 — Vite, proxies /api
+bun run dev:all        # both, plus the sandbox bridge when this host can run it
 ```
 
-Build and check:
+`bun run dev:all` starts the Sandbox bridge only when Docker is available on a
+non-Windows host; on Windows it prints the WSL2 and deployed-bridge options.
+
+Build, check and evaluate:
 
 ```bash
 bun run check          # format, lint, types, tests
 bun run build          # dist/web + dist/worker
+bun run eval           # golden example scans (no AI, no network)
 bun run deploy -- --dry-run
 ```
+
+Run `bun run db:migrate:local` if an existing checkout predates the migration
+hook in `dev:worker`; `bun run db:migrate` applies the same migrations remotely.
 
 ## CLI and MCP
 
@@ -62,6 +118,8 @@ packages/cli/    terminal client
 packages/mcp/    stdio MCP server
 packages/sandbox/ self-hosted sandbox runner (bwrap/Docker/Podman/hosted)
 examples/        local test-generation fixtures and reference tests
+evals/           golden-scan harness and optional provider scoring
+scripts/         combined dev stack
 ```
 
 `packages/core` is consumed as `@edge-spec/core/<module>` and the UI primitives

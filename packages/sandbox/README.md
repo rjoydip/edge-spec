@@ -4,6 +4,8 @@ The reference self-hosted runner for the EdgeSpec sandbox contract. It is a
 plain Bun HTTP service: no Dockerfile, no image build.
 
 ```bash
+bun test packages/sandbox
+bun run --filter @edge-spec/sandbox typecheck
 bun run sandbox                        # 127.0.0.1:8788, auto-detect
 SANDBOX_PROVIDER=docker bun run sandbox
 SANDBOX_PROVIDER=podman SANDBOX_IMAGE=node:22 bun run sandbox

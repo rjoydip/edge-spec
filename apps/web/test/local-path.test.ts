@@ -5,7 +5,7 @@ describe("isLocalPathInput", () => {
   test("accepts explicit local paths", () => {
     for (const value of [
       "/Users/ada/project",
-      "./examples/hono",
+      "./examples/missing-openapi",
       "../hono",
       "~/code/hono",
       "C:\\code\\hono",

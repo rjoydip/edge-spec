@@ -50,12 +50,12 @@ Run `bun run check` before claiming a change works. For a UI change, also run
   MCP server. It may import core types but must not call core pipeline code.
 - `packages/ui/src/` — shared React primitives and `theme.css` brand tokens. The
   dashboard imports the components; the VitePress site imports only the tokens.
-- `packages/cli/src/` — `scan`, `generate`, `run`, and `catalog` commands.
+- `packages/cli/src/` — `scan`, `generate`, `run`, `watch`, and `catalog` commands.
 - `packages/mcp/src/` — stdio MCP server wrapping the shared client.
 - `packages/sandbox/src/` — reference self-hosted runner; `bwrap`/Docker/Podman plus
   hosted E2B/Vercel/Daytona SDK drivers, no image build.
 - `examples/` — scenario apps for local test generation: framework examples
-  (`hono/`, `express/`, `elysia/`), `pure-node/`, `openapi/`, and dependency-free
+  (`missing-openapi/`, `express/`, `elysia/`), `node/`, `openapi/`, and dependency-free
   fixtures in `src/`. Reference tests stay in each `tests/` folder;
   `complete-app/` deliberately has sibling tests.
 - `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
@@ -64,6 +64,8 @@ Run `bun run check` before claiming a change works. For a UI change, also run
   Containers and `@cloudflare/sandbox`; the Dockerfile tag must match the SDK.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
+- `evals/` — golden-scan harness (`harness.ts`, `run.ts`, `golden.json`) and its
+  test; `bun run eval` spends no AI. `scripts/dev.ts` is the combined dev stack.
 - `PLAN.md` — product requirements and review feedback.
 
 Tests live in each workspace's `test/` directory. The exception is `examples/`:
@@ -72,7 +74,7 @@ EdgeSpec still sees the incomplete examples as gaps. `examples/complete-app/`
 deliberately keeps its test beside the source. Do not colocate `*.test.ts` under
 `src/` elsewhere.
 
-Bun workspaces live under `apps/*`, `packages/*`, and `examples/`. `packages/`
+Bun workspaces live under `apps/*`, `packages/*`, `evals/`, and `examples/`. `packages/`
 holds what you import or run yourself: `packages/core`
 (`@edge-spec/core/<module>`), `packages/client` (`@edge-spec/client`),
 `packages/ui` (`@edge-spec/ui`, plus `theme.css`), the `bin` entry points

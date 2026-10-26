@@ -33,13 +33,15 @@ const children = commands.map(([name, cmd]) => {
   return { name, child };
 });
 
-const stop = () => {
+const shutdown = () => {
   for (const { child } of children) child.kill();
   process.exit(0);
 };
-process.on("SIGINT", stop);
-process.on("SIGTERM", stop);
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 const exitCode = await Promise.race(children.map(({ child }) => child.exited));
 for (const { child } of children) child.kill();
 process.exit(exitCode ?? 0);
+
+export {};

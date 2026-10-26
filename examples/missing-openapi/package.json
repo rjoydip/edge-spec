@@ -1,5 +1,5 @@
 {
-  "name": "edgespec-example-hono",
+  "name": "edgespec-example-missing-openapi",
   "private": true,
   "type": "module",
   "dependencies": {

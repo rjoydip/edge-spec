@@ -17,16 +17,16 @@ EdgeSpec still reports the incomplete examples as gaps.
 
 ## Framework and shape examples
 
-| Folder           | Shape                    | What is incomplete                                  |
-| ---------------- | ------------------------ | --------------------------------------------------- |
-| `hono/`          | Hono routes              | `app.ts` has no `app.test.ts`                       |
-| `express/`       | Express routes           | `app.ts` has no `app.test.ts`                       |
-| `elysia/`        | Elysia routes            | `app.ts` has no `app.test.ts`                       |
-| `node/`          | `node:http` server       | `server.ts` has no `server.test.ts`                 |
-| `openapi/`       | OpenAPI spec + server    | `server.ts` has no test; the spec is `openapi.json` |
-| `missing-files/` | Three plain modules      | Every file in `src/` has no sibling test            |
-| `coverage-gaps/` | One module, partial test | `pricing.test.ts` exists but covers only one branch |
-| `complete-app/`  | Minimal complete app     | Nothing: source and sibling test are both present   |
+| Folder             | Shape                    | What is incomplete                                  |
+| ------------------ | ------------------------ | --------------------------------------------------- |
+| `missing-openapi/` | Hono routes, no spec     | `app.ts` has no `app.test.ts`; the spec is inferred |
+| `express/`         | Express routes           | `app.ts` has no `app.test.ts`                       |
+| `elysia/`          | Elysia routes            | `app.ts` has no `app.test.ts`                       |
+| `node/`            | `node:http` server       | `server.ts` has no `server.test.ts`                 |
+| `openapi/`         | OpenAPI spec + server    | `server.ts` has no test; the spec is `openapi.json` |
+| `missing-files/`   | Three plain modules      | Every file in `src/` has no sibling test            |
+| `coverage-gaps/`   | One module, partial test | `pricing.test.ts` exists but covers only one branch |
+| `complete-app/`    | Minimal complete app     | Nothing: source and sibling test are both present   |
 
 The reference tests show what a passing suite looks like, including `supertest`
 for Express and `app.request` / `app.handle` for Hono and Elysia.

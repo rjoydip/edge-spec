@@ -190,8 +190,11 @@ describe("run history queries", () => {
   });
 
   it("deletes run files and runs for one repository in one batch", async () => {
-    const { db, calls } = fakeDb([], 3);
-    expect(await deleteRunHistory(db, "acme/api")).toBe(3);
+    const { db, calls } = fakeDb([{ id: "run-1" }, { id: "run-2" }, { id: "run-3" }]);
+    expect(await deleteRunHistory(db, "acme/api")).toEqual({
+      deleted: 3,
+      ids: ["run-1", "run-2", "run-3"],
+    });
     const deletes = calls.filter((call) => call.sql.startsWith("DELETE"));
     expect(deletes).toHaveLength(2);
     expect(deletes.every((call) => call.values[0] === "acme/api")).toBe(true);

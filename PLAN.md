@@ -143,17 +143,18 @@ name = "test-generation-workflow"
 binding = "TEST_GENERATION_WORKFLOW"
 class_name = "TestGenerationWorkflow"
 
-# Optional: run history, backlog, memory, policies, workspace and audit.
-# Create the database, apply `migrations/0001`–`0007`, then uncomment.
-# [[d1_databases]]
-# binding = "RUNS_DB"
-# database_name = "edge-spec-runs"
-# database_id = "<paste-the-id-here>"
+# Run history, backlog, memory, policies, workspace and audit.
+# Create the database, apply the migrations in `migrations/`, then deploy.
+[[d1_databases]]
+binding = "RUNS_DB"
+database_name = "edge-spec-runs"
+database_id = "<paste-the-id-here>"
 
-# Optional: drift summaries. Retention does not prune R2 yet (see TASKS.md).
-# [[r2_buckets]]
-# binding = "ARTIFACTS"
-# bucket_name = "edge-spec-artifacts"
+# Run artifacts and drift summaries. Retention prunes run bundles; drift
+# summaries have no D1 row to age out yet (see TASKS.md).
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "edge-spec-artifacts"
 ```
 
 - Without `RUNS_DB` the Worker still scans, generates and opens pull requests;
@@ -386,8 +387,7 @@ Deliberately not built:
   report, never inferred from the path heuristic.
 - KV caching — add it only if repeated scans of the same commit become a cost
   problem.
-- R2 run artifacts and Cloudflare Queues — drift summaries are the only R2
-  object, and the cron plus synchronous paths handle current volume.
+- Cloudflare Queues — the cron and synchronous paths handle current volume.
 
 ---
 
