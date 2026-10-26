@@ -17,12 +17,10 @@ Stack: TypeScript, Hono, React 19, Tailwind v4, Vite, Wrangler, Bun.
 bun install
 bun run dev:worker     # API on http://127.0.0.1:8787
 bun run dev            # dashboard on http://127.0.0.1:5173 (proxies /api)
-bun run dev:all        # both, plus the sandbox bridge when the host has Docker
+bun run dev:all        # both
 bun --silent run cli -- --help  # terminal client
 bun run mcp -- --help  # stdio MCP server
 bun run sandbox        # self-hosted test runner on http://127.0.0.1:8788
-bun run dev:sandbox-worker    # Cloudflare Sandbox bridge
-bun run deploy:sandbox-worker # deploy it (needs Docker locally)
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
 bun run docs:build     # static site in apps/docs/.vitepress/dist
 bun test               # discovers every workspace's test/ directory
@@ -60,8 +58,6 @@ Run `bun run check` before claiming a change works. For a UI change, also run
   `complete-app/` deliberately has sibling tests.
 - `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
   durable `workflow.ts`.
-- `apps/sandbox-worker/` — Cloudflare Sandbox bridge (`/health`, `/run`) built on
-  Containers and `@cloudflare/sandbox`; its image tag must match the SDK.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `evals/` — golden-scan harness (`harness.ts`, `run.ts`, `golden.json`) and its

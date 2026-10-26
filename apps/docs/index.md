@@ -31,7 +31,7 @@ features:
 | [CLI](/cli)                     | Scan, generate, run and open PRs from a terminal                                 |
 | [MCP server](/mcp)              | Expose EdgeSpec tools to Claude Desktop, Cursor and other agents                 |
 | [Configuration](/configuration) | Browser settings, providers, pipeline knobs, sandbox runner, deployment secrets  |
-| [Deployment](/deployment)       | D1, R2, secrets, Worker and Sandbox bridge deployment, CI                        |
+| [Deployment](/deployment)       | D1, R2, secrets, Worker deployment, CI                                           |
 | [UI](/ui)                       | Workspace steps, pipeline states, settings, theme and layout rules               |
 
 The repository also carries `README.md` for setup, `PLAN.md` for requirements and
@@ -58,7 +58,7 @@ The repository also carries `README.md` for setup, `PLAN.md` for requirements an
 bun install
 bun run dev:worker     # API + built assets on http://127.0.0.1:8787
 bun run dev            # Vite dashboard on http://127.0.0.1:5173
-bun run dev:all        # both, plus the sandbox bridge when the host can run it
+bun run dev:all        # both
 ```
 
 Open the dashboard, enter `owner/name` in **01 Repository** (or a folder path),
@@ -95,7 +95,6 @@ packages/cli/src/    terminal client
 packages/mcp/src/    stdio MCP server
 packages/sandbox/src/ self-hosted sandbox runner
 apps/worker/src/     Hono routes, bindings, durable Workflow
-apps/sandbox-worker/ Cloudflare Sandbox bridge (Containers + Sandbox SDK)
 apps/web/src/        React dashboard
 apps/docs/           this documentation site
 evals/               golden-scan harness and optional provider scoring

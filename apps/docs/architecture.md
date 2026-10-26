@@ -70,7 +70,6 @@ the app code does not invalidate the cached vendor files.
 | `packages/core/src/pipeline.ts`    | Async generator for scan → generate → validate → correct → PR                  | Transport-agnostic; bounded pool + channel               |
 | `apps/worker/src/index.ts`         | Hono routes, header parsing, SSE framing                                       | Translates HTTP to core calls                            |
 | `apps/worker/src/workflow.ts`      | Durable webhook automation                                                     | Deployment credentials only                              |
-| `apps/sandbox-worker/src/`         | Cloudflare Sandbox runner (`/health`, `/run`)                                  | Container per run; key required, destroyed afterwards    |
 | `apps/web/src/`                    | Dashboard                                                                      | `App.tsx` owns run state; components are presentational  |
 | `packages/ui/src/`                 | React primitives and brand tokens                                              | Dashboard imports components; docs imports `theme.css`   |
 | `packages/client/src/`             | Worker API client, SSE parsing, env defaults                                   | No pipeline logic; CLI and MCP use it                    |

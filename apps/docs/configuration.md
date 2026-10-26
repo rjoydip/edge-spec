@@ -248,39 +248,6 @@ runs the matching command with the repository's package manager
 runner must be installed in the sandbox; static validation still works without a
 runner but cannot claim an execution.
 
-## Cloudflare Sandbox runner
-
-`apps/sandbox-worker` is a Cloudflare Worker plus Container that speaks the
-same `/health` and `/run` contract. It is the recommended runner for a
-Cloudflare deployment: the container runs the published Sandbox image pinned to
-the SDK version, and the dashboard only needs its URL and key. Cloudflare
-Containers require the **Workers Paid** plan.
-
-```bash
-bun run deploy:sandbox-worker
-cd apps/sandbox-worker
-bunx wrangler secret put SANDBOX_API_KEY
-```
-
-Then set the main Worker's secret `SANDBOX_RUNNER_URL` to the bridge URL and
-`SANDBOX_API_KEY` to the same key. `/health` reports `provider: "cloudflare"` and
-`isolation: "container"`. The bridge refuses `/run` when its key is missing, so
-a misconfigured deployment cannot execute code for anonymous callers. It clones
-only `https` repositories, keeps a supplied token in `GIT_TOKEN` rather than the
-command line, and destroys the sandbox after every request.
-
-Drivers E2B, Vercel Sandbox, Daytona, Docker, Podman and bwrap still work when
-you point the dashboard at the self-hosted runner; they are alternatives, not
-requirements. `bun run sandbox` remains the local/self-hosted runner.
-
-`bun run dev:all` starts the API (`:8787`) and the dashboard (`:5173`), and adds
-the Sandbox bridge (`:8788`) when the host can build containers. Containers need
-Docker plus a Linux host: `wrangler dev` for `apps/sandbox-worker` fails on
-Windows with "Local development with containers is currently not supported on
-Windows". There, use a deployed bridge as the dashboard's Sandbox URL, or run
-`bun run dev:sandbox-worker` inside WSL2. Without a runner the run still
-completes, but validation stays a static check.
-
 ## Contract auth fixtures
 
 Settings holds two optional JSON objects per environment: auth headers and auth

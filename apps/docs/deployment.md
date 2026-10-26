@@ -11,11 +11,11 @@ configuration or keys: those still travel per request.
 | Bun        | `1.4.4`; installs Wrangler and runs the build                        |
 | Node.js    | `>=22.12` (used by some tooling; Bun runs the tests)                 |
 | Wrangler   | installed by `bun install`; authenticated with `bunx wrangler login` |
-| Docker     | only for local `wrangler dev` of the Sandbox bridge (Linux/WSL2)     |
+| Docker     | optional, for containerised `bun run sandbox` runs (Linux/WSL2)      |
 | GitHub App | optional, for webhook automation without a long-lived `GITHUB_TOKEN` |
 
-Windows can deploy the main Worker and the Sandbox bridge. Only running the
-bridge locally with `wrangler dev` needs Docker on a Linux host (or WSL2).
+Windows can deploy the Worker natively. Containerised sandbox runs
+(`bun run sandbox`) need Docker on a Linux host (or WSL2).
 
 ```bash
 bun install
@@ -89,37 +89,26 @@ serves the dashboard through the `ASSETS` binding and registers the
 
 ## 5. Sandbox runner (optional)
 
-The generated suite is only executed when a runner is configured. Two options:
-
-- **Self-hosted** — `bun run sandbox` on a Linux host with `bwrap`, Docker or
-  Podman; point `SANDBOX_RUNNER_URL` at it.
-- **Cloudflare Sandbox bridge** — `apps/sandbox-worker`, built on Containers and
-  `@cloudflare/sandbox`. It needs the **Workers Paid** plan. The container uses
-  the published Sandbox image pinned to the SDK version, so deploying needs no
-  Docker:
+The generated suite is only executed when a runner is configured. The
+repository ships `packages/sandbox`, a Bun HTTP service that runs each request
+under `bwrap`, Docker or Podman, or in a hosted E2B/Vercel/Daytona sandbox:
 
 ```bash
-bun run deploy:sandbox-worker
-bunx wrangler secret put SANDBOX_API_KEY --config apps/sandbox-worker/wrangler.toml
-bunx wrangler secret put SANDBOX_API_KEY
-bunx wrangler secret put SANDBOX_RUNNER_URL   # https://edge-spec-sandbox.<subdomain>.workers.dev
+bun run sandbox                     # 127.0.0.1:8788, auto-detect
+SANDBOX_API_KEY=... bun run sandbox # required when binding beyond loopback
 ```
 
-Use the same key for both Workers. The bridge exposes `/health` and `/run`; the
-key is required, otherwise anyone could execute code. A bridge without the
-secret answers `/health` with `SANDBOX_API_KEY is not configured on the bridge.`
-and refuses `/run` with 503.
-
-Check both sides:
+Point the main Worker at it with `SANDBOX_RUNNER_URL` and the same
+`SANDBOX_API_KEY`. The runner exposes `/health` and `/run`; without a key it
+binds loopback only. Check the connection:
 
 ```bash
-curl https://edge-spec-sandbox.<subdomain>.workers.dev/health
+curl http://127.0.0.1:8788/health
 curl -X POST https://<worker>/api/sandbox/health -d '{}'
 ```
 
-The first deploy provisions containers for a few minutes; retry until `/run`
-works. Without a runner, validation is **static check only** and
-`validation.verified` is false. Never describe that as passed.
+Without a runner, validation is **static check only** and `validation.verified`
+is false. Never describe that as passed.
 
 ## 6. GitHub webhooks
 

@@ -5,19 +5,6 @@ behaviour lives in the code, tests and docs, and the previous roadmap was
 retired. Each item names the gap and what "done" means. Nothing here is a
 commitment to a date.
 
-## Cloudflare Sandbox
-
-- [ ] **Verify the bridge against a live container.** `apps/sandbox-worker`
-      typechecks and its contract is unit-tested. After deploying, run `/health`
-      and one `/run` with a clone, setup, server and coverage to confirm the SDK
-      calls. Blocked on the Workers Paid plan, which Containers require.
-- [ ] **Server readiness on Cloudflare.** Readiness uses the Sandbox process's
-      `waitForPort`; a repo whose app binds `0.0.0.0` on a non-declared port may
-      need an explicit `readyUrl`. Verify against the Hono/Express examples.
-- [ ] **Keep the bridge image current.** The image tag in
-      `apps/sandbox-worker/wrangler.toml` must equal `@cloudflare/sandbox`
-      (`0.12.14`). Add a test or CI check if the package version is bumped.
-
 ## API inference
 
 - [ ] **Mounted router prefixes.** Route extraction reads direct calls; an

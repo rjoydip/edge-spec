@@ -14,7 +14,7 @@ repository root.
 | Git      | Any recent version; needed for cloning and PR workflows          |
 | Bun      | `1.4.4` (pinned by `packageManager`); runs install, tests, build |
 | Node.js  | `>=22.12` (declared in `engines`); used by some tooling          |
-| Docker   | Optional: local sandbox bridge / containerised runner            |
+| Docker   | Optional: containerised self-hosted sandbox runs                 |
 | Wrangler | Installed by `bun install`; no global install needed             |
 
 **Linux**
@@ -22,7 +22,7 @@ repository root.
 ```bash
 curl -fsSL https://bun.sh/install | bash
 # Node 22.12+ via your distribution, nvm, or fnm
-curl -fsSL https://get.docker.com | sh   # optional sandbox bridge
+curl -fsSL https://get.docker.com | sh   # optional containerised sandbox
 ```
 
 `packages/sandbox` can also use `bwrap` or Podman instead of Docker.
@@ -36,21 +36,20 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 winget install OpenJS.NodeJS.LTS
 ```
 
-WSL2 with Docker Desktop is needed only to run the Sandbox bridge locally —
-`wrangler dev` cannot run Containers on native Windows. Deploying the bridge
-needs no Docker (it uses the published image), but Containers require the
-Workers Paid plan. Everything else (API, dashboard, CLI, MCP, tests) runs
-natively. See [`apps/docs/deployment.md`](apps/docs/deployment.md).
+WSL2 with Docker Desktop is needed only for containerised sandbox runs
+(`bun run sandbox`); without it, validation stays a static check. Everything
+else (API, dashboard, CLI, MCP, tests) runs natively. See
+[`apps/docs/deployment.md`](apps/docs/deployment.md).
 
 **macOS**
 
 ```bash
 brew install oven-sh/bun/bun node@22
 xcode-select --install                    # native build tools
-brew install --cask docker                # optional sandbox bridge
+brew install --cask docker                # optional containerised sandbox
 ```
 
-Docker Desktop must be running before `bun run dev:all` starts the bridge.
+Docker Desktop is optional; `bun run sandbox` uses it when present.
 
 ## Documentation
 
@@ -71,11 +70,11 @@ bun run docs:preview  # serve the build locally
 bun install
 bun run dev:worker     # http://127.0.0.1:8787 — API + assets, migrates local D1
 bun run dev            # http://127.0.0.1:5173 — Vite, proxies /api
-bun run dev:all        # both, plus the sandbox bridge when this host can run it
+bun run dev:all        # both
 ```
 
-`bun run dev:all` starts the Sandbox bridge only when Docker is available on a
-non-Windows host; on Windows it prints the WSL2 and deployed-bridge options.
+`bun run dev:all` starts the API and the dashboard together. Validation stays a
+static check until a sandbox runner is configured.
 
 Build, check and evaluate:
 
@@ -110,7 +109,6 @@ The repository is a Bun workspace monorepo:
 ```text
 apps/web/        React dashboard
 apps/worker/     Hono routes, bindings, durable Workflow
-apps/sandbox-worker/ Cloudflare Sandbox runner (Containers + Sandbox SDK)
 apps/docs/       this documentation site
 packages/core/   pure pipeline logic (scanner, AI, GitHub, validation)
 packages/client/ HTTP client shared by the CLI and MCP server

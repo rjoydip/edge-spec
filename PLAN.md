@@ -95,9 +95,6 @@ edge-spec/
 │   │   └── src/
 │   │       ├── env.ts, cloudflare.d.ts, index.ts
 │   │       ├── workflow.ts, db.ts, scheduled.ts, impact.ts, ownership.ts
-│   ├── sandbox-worker/       # Cloudflare Sandbox bridge (Container)
-│   │   ├── wrangler.toml
-│   │   └── src/{index.ts,contract.ts}
 │   └── docs/                 # VitePress site
 └── packages/
     ├── core/
@@ -371,8 +368,7 @@ their runner did not execute.
 ### Status
 
 The seven foundation phases and every planned feature (0.1 through 4.6) are
-implemented, plus the Cloudflare Sandbox bridge and inferred-OpenAPI health
-matrix. Tests live in each workspace's `test/` directory (never beside the
+implemented, plus the inferred-OpenAPI health matrix. Tests live in each workspace's `test/` directory (never beside the
 sources) and are included in `bun run check`. The dashboard was smoke-tested
 against `wrangler dev`: health, catalog, asset serving, input validation, a real
 repository scan, and the SSE error/result contract. Remaining and incomplete
@@ -435,15 +431,8 @@ bunx wrangler secret put DRIFT_WEBHOOK_URL
 bunx wrangler secret put DRIFT_WEBHOOK_SECRET
 ```
 
-For an all-Cloudflare runner, deploy the Sandbox bridge and point the main
-Worker at it:
-
-```bash
-bun run deploy:sandbox-worker
-cd apps/sandbox-worker && bunx wrangler secret put SANDBOX_API_KEY
-# Then set SANDBOX_RUNNER_URL to the bridge URL and the same SANDBOX_API_KEY
-# on the main Worker.
-```
+Point `SANDBOX_RUNNER_URL` at a self-hosted runner (`bun run sandbox`) or a
+hosted driver, with the same `SANDBOX_API_KEY` on both sides.
 
 Optional D1 setup:
 
