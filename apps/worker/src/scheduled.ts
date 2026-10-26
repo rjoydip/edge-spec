@@ -9,9 +9,11 @@ import {
   markScheduledRun,
   putDriftSnapshot,
   runsDb,
+  syncBacklog,
   type ScheduledRepo,
 } from "./db";
 import type { D1Database, Env } from "./env";
+import { ownerLookup } from "./ownership";
 
 export interface ScheduledController {
   scheduledTime: number;
@@ -80,10 +82,12 @@ async function scanRepo(
     const base = await github.defaultBranch(schedule.repo);
     const tree = await github.tree(schedule.repo, base);
     const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
+    const classification = classifyTree(blobs);
     const current = snapshotOf({
-      missing: classifyTree(blobs).missing.map((gap) => gap.path),
+      missing: classification.missing.map((gap) => gap.path),
       operations: await operationsOf(github, schedule.repo, base, blobs),
     });
+    const owner = await ownerLookup(github, schedule.repo, base, blobs);
     const previous = await getDriftSnapshot(db, schedule.repo);
     const drift = detectDrift(previous, current);
 
@@ -99,6 +103,23 @@ async function scanRepo(
       // Store only after the announcement succeeds; a failed webhook retries.
       await notify(env, schedule.repo, summary);
     }
+    await syncBacklog(
+      db,
+      schedule.repo,
+      classification.missing.map((gap) => {
+        const ownerName = owner(gap.path);
+        return {
+          path: gap.path,
+          kind: "missing",
+          ...(ownerName ? { owner: ownerName } : {}),
+          risk: gap.risk,
+          reason: gap.reason,
+        };
+      }),
+      Date.now(),
+      undefined,
+      ["missing"],
+    );
     await putDriftSnapshot(db, schedule.repo, current, now);
     await markScheduledRun(db, schedule.repo, now);
   } catch (error) {

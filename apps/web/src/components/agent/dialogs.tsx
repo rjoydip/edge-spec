@@ -65,7 +65,8 @@ import {
   Textarea,
   cn,
 } from "@edge-spec/ui";
-import { deleteRuns, fetchRunDetail, fetchRuns } from "@/api";
+import type { BacklogItem, BacklogState } from "@edge-spec/core/backlog";
+import { deleteRuns, fetchBacklog, fetchRunDetail, fetchRuns, updateBacklog } from "@/api";
 import type { Project, Settings } from "@/lib/settings";
 import { HighlightedCode } from "./highlight";
 import {
@@ -1642,6 +1643,151 @@ export function HistoryDialog({
         </div>
       )}
       {error && <p className="mt-3 text-[11px] text-rose-300">{error}</p>}
+    </Dialog>
+  );
+}
+
+/** Durable test-debt items for one repository. */
+export function BacklogDialog({
+  open,
+  onClose,
+  repo,
+}: {
+  open: boolean;
+  onClose: () => void;
+  repo: string;
+}) {
+  const [items, setItems] = useState<BacklogItem[]>([]);
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [filter, setFilter] = useState<"all" | BacklogState>("open");
+  const [busy, setBusy] = useState<string>();
+
+  useEffect(() => {
+    if (!open || !repo) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+    fetchBacklog(repo)
+      .then((result) => {
+        if (cancelled) return;
+        setEnabled(result.enabled);
+        setItems(result.items);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, repo]);
+
+  const act = async (item: BacklogItem, state: BacklogState) => {
+    setBusy(item.path);
+    try {
+      await updateBacklog(repo, item.path, state);
+      setItems((current) =>
+        current.map((entry) => (entry.path === item.path ? { ...entry, state } : entry)),
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const visible = filter === "all" ? items : items.filter((item) => item.state === filter);
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Test-debt backlog"
+      description={`${repo} · scans keep this current`}
+      className="max-w-4xl"
+      footer={
+        <Button variant="outline" size="sm" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      {!enabled ? (
+        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
+          The backlog needs the optional D1 binding (`RUNS_DB`).
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Select value={filter} onValueChange={(value) => setFilter(value as typeof filter)}>
+              <SelectTrigger className="h-8 w-36 text-[11px]" aria-label="Filter backlog">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All states</SelectItem>
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="accepted">Accepted</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="ignored">Ignored</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="ml-auto text-[10px] text-zinc-500">
+              {visible.length} of {items.length} item(s)
+            </span>
+          </div>
+          {loading ? (
+            <p className="flex items-center justify-center gap-2 py-8 text-[11px] text-zinc-500">
+              <Loader2 className="size-3.5 animate-spin" /> Loading backlog…
+            </p>
+          ) : visible.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
+              No backlog items in this state.
+            </p>
+          ) : (
+            <div className="no-scrollbar max-h-[50vh] space-y-1.5 overflow-auto">
+              {visible.map((item) => (
+                <div
+                  key={item.path}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-[11px] text-zinc-200">
+                      {item.path}
+                    </span>
+                    <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-500">
+                      <Badge variant="neutral">{item.kind}</Badge>
+                      {item.risk && <Badge variant="neutral">{item.risk} risk</Badge>}
+                      <span>{item.owner ?? "unowned"}</span>
+                      <span>· last seen {when(item.lastSeen)}</span>
+                    </span>
+                  </span>
+                  <Select
+                    value={item.state}
+                    onValueChange={(value) => void act(item, value as BacklogState)}
+                    disabled={busy === item.path}
+                  >
+                    <SelectTrigger className="h-8 w-28 text-[11px]" aria-label="Backlog state">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="accepted">Accepted</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="ignored">Ignored</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          )}
+          {error && <p className="text-[11px] text-rose-300">{error}</p>}
+        </div>
+      )}
     </Dialog>
   );
 }

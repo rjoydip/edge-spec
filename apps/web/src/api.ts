@@ -9,6 +9,7 @@ import type {
   Validation,
 } from "@edge-spec/core/types";
 import type { PullSummary } from "@edge-spec/core/github";
+import type { BacklogItem, BacklogState } from "@edge-spec/core/backlog";
 import type { RunDecision, RunDetail, RunSummary } from "@edge-spec/core/history";
 import type { PullPolicy } from "@edge-spec/core/policy";
 import type { PullFile } from "@edge-spec/core/pr";
@@ -226,6 +227,27 @@ export function openPullWithFiles(
         ...(file.coverage ? { coverage: file.coverage } : {}),
       })),
     }),
+  });
+}
+
+export interface BacklogResponse {
+  enabled: boolean;
+  items: BacklogItem[];
+}
+
+export function fetchBacklog(repo: string): Promise<BacklogResponse> {
+  return apiJson<BacklogResponse>(`/api/backlog?repo=${encodeURIComponent(repo)}`);
+}
+
+export function updateBacklog(
+  repo: string,
+  path: string,
+  state: BacklogState,
+  owner?: string,
+): Promise<{ updated: boolean }> {
+  return apiJson<{ updated: boolean }>(`/api/backlog?repo=${encodeURIComponent(repo)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ path, state, ...(owner ? { owner } : {}) }),
   });
 }
 

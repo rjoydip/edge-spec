@@ -67,13 +67,18 @@ import {
   finishRun,
   getPolicy,
   getRun,
+  listBacklog,
   listRuns,
   listScheduledRepos,
   putPolicy,
   putScheduledRepo,
   runsDb,
+  setBacklogState,
   setRunDecisions,
+  syncBacklog,
 } from "./db";
+import type { BacklogState } from "@edge-spec/core/backlog";
+import { ownerLookup } from "./ownership";
 import { runScheduled } from "./scheduled";
 import { evaluatePullPolicy, parsePullPolicy, policyBlocked } from "@edge-spec/core/policy";
 import type { RunDecision, RunFile, RunSummary } from "@edge-spec/core/history";
@@ -456,6 +461,29 @@ app.post("/api/scan", async (c) => {
     }
     if (detected.formatter) overview.formatter = detected.formatter.name;
 
+    // A full scan is the backlog's source of truth; a gap that disappeared closes.
+    const history = runsDb(c.env);
+    if (history) {
+      const owner = await ownerLookup(github, repo, ref, blobs);
+      await syncBacklog(
+        history,
+        repo,
+        [...classification.missing, ...contractGaps].map((gap) => {
+          const ownerName = owner(gap.evidence?.specPath ?? gap.path);
+          return {
+            path: gap.path,
+            kind: gap.kind ?? "missing",
+            ...(ownerName ? { owner: ownerName } : {}),
+            risk: gap.risk,
+            reason: gap.reason,
+          };
+        }),
+        Date.now(),
+        undefined,
+        ["missing", "api"],
+      ).catch(() => undefined);
+    }
+
     return c.json({
       repo,
       ref,
@@ -644,6 +672,7 @@ app.post("/api/run", async (c) => {
     });
     const files = new Map<string, RunFile>();
     let status: RunSummary["status"] = "failed";
+    let scannedGaps: Gap[] | undefined;
     try {
       for await (const event of runPipeline(input, {
         github,
@@ -651,7 +680,10 @@ app.post("/api/run", async (c) => {
         ...(sandbox ? { sandbox } : {}),
         ...(repoToken ? { repoToken } : {}),
       })) {
-        if (event.type === "gaps" && event.totals) run.totals = event.totals;
+        if (event.type === "gaps") {
+          scannedGaps = event.gaps;
+          if (event.totals) run.totals = event.totals;
+        }
         if (event.type === "generation") {
           files.set(event.generation.sourcePath, {
             sourcePath: event.generation.sourcePath,
@@ -685,6 +717,21 @@ app.post("/api/run", async (c) => {
       if (history && stored) {
         const finished: RunSummary = { ...run, status, finishedAt: Date.now() };
         await finishRun(history, finished, [...files.values()]).catch(() => undefined);
+      }
+      if (history && scannedGaps) {
+        await syncBacklog(
+          history,
+          input.repo,
+          scannedGaps.map((gap) => ({
+            path: gap.path,
+            kind: gap.kind ?? "missing",
+            risk: gap.risk,
+            reason: gap.reason,
+          })),
+          Date.now(),
+          runId,
+          ["missing", "api", "unsupported"],
+        ).catch(() => undefined);
       }
     }
     await stream.writeSSE({ event: "done", data: "{}" });
@@ -1045,6 +1092,41 @@ app.post("/webhook", async (c) => {
       params: { repo, ref, event: "push", ...installation },
     });
     return c.json({ workflowId: instance.id }, 202);
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.get("/api/backlog", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, items: [] });
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    return c.json({
+      enabled: true,
+      items: await listBacklog(db, `${repo.owner}/${repo.name}`),
+    });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.patch("/api/backlog", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "The backlog needs the RUNS_DB binding.");
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    const body = await readJson(c);
+    const path = str(body.path);
+    const state = str(body.state);
+    if (!path || !state || !["open", "accepted", "rejected", "ignored", "closed"].includes(state)) {
+      throw new HttpError(400, "Pass a path and a valid state.");
+    }
+    const owner = str(body.owner)?.slice(0, 120);
+    await setBacklogState(db, `${repo.owner}/${repo.name}`, path, state as BacklogState, owner);
+    return c.json({ updated: true });
   } catch (err) {
     return fail(err);
   }

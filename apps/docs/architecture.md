@@ -159,6 +159,15 @@ Workflow parameters are persisted by Cloudflare. Therefore the workflow:
 
 The dashboard remains the place for bring-your-own-key runs.
 
+## Test-debt backlog
+
+A full dashboard scan and the scheduled drift scan both call the same backlog
+sync. It upserts the current gaps, preserves accepted/rejected/ignored
+decisions, closes paths that disappeared, and reopens a closed path that
+returns. Ownership is the first `CODEOWNERS` owner for the path (last matching
+rule wins). The dashboard reads and updates the same D1 rows through
+`/api/backlog`.
+
 ## Scheduled drift (`scheduled` handler)
 
 ```text

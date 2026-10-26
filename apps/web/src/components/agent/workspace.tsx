@@ -23,6 +23,7 @@ import {
   History,
   Info,
   KeyRound,
+  ListChecks,
   Loader2,
   Lock,
   Moon,
@@ -136,6 +137,7 @@ import {
   type Tone,
 } from "./shared";
 import {
+  BacklogDialog,
   DiffDialog,
   EndpointDialog,
   FactsDialog,
@@ -282,6 +284,7 @@ export function AgentWorkspace({
   const [specOpen, setSpecOpen] = useState(false);
   const [factsOpen, setFactsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [backlogOpen, setBacklogOpen] = useState(false);
   const [prOpen, setPrOpen] = useState(false);
   const [prDraft, setPrDraft] = useState<PrDraft>({
     title: "",
@@ -809,6 +812,18 @@ export function AgentWorkspace({
                     </Badge>
                   </button>
                 </Hint>
+                {project.repo && !project.localPath && (
+                  <Hint label="Test-debt backlog">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setBacklogOpen(true)}
+                      aria-label="Test-debt backlog"
+                    >
+                      <ListChecks className="text-emerald-300" />
+                    </Button>
+                  </Hint>
+                )}
                 {project.repo && !project.localPath && (
                   <Hint label="Run history">
                     <Button
@@ -2082,6 +2097,11 @@ export function AgentWorkspace({
         <HistoryDialog
           open={historyOpen}
           onClose={() => setHistoryOpen(false)}
+          repo={project.repo}
+        />
+        <BacklogDialog
+          open={backlogOpen}
+          onClose={() => setBacklogOpen(false)}
           repo={project.repo}
         />
         <PrDialog

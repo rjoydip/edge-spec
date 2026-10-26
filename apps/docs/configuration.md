@@ -219,6 +219,19 @@ gate name and reason. The dashboard shows that error in the pull request
 dialog. The webhook workflow enforces the server policy and returns
 `status: "blocked"` without opening a pull request.
 
+## Test-debt backlog (optional)
+
+With `RUNS_DB`, scans maintain a durable backlog instead of a transient list.
+Each gap stores its kind, risk reason, first/last seen, linked run (when the
+pipeline supplied one), state, and owner. `CODEOWNERS` is read from the root,
+`.github/` or `docs/` and the last matching rule owns the item. If the gap
+disappears in a later full scan, the item is `closed`; if it returns, it reopens
+as `open`. Human decisions (`accepted`, `rejected`, `ignored`) are preserved.
+
+The dashboard has a **Test-debt backlog** button beside History. The same data
+is available at `GET/PATCH /api/backlog?repo=owner/name`. Without `RUNS_DB`,
+scans keep working and the backlog is simply unavailable.
+
 ## Scheduled drift scans (optional)
 
 `wrangler.toml` registers a daily cron (`0 8 * * *`). Per-repository schedules

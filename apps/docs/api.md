@@ -556,6 +556,27 @@ Behaviour:
 
 ---
 
+## `GET | PATCH /api/backlog?repo=owner/name`
+
+Durable test-debt items (D1). A full scan upserts every gap and closes items
+that disappeared; a returning closed item reopens. Explicit `accepted`,
+`rejected` and `ignored` states survive later scans. `owner` comes from
+`CODEOWNERS` when one exists.
+
+`GET` returns `{enabled, items}` with `path`, `kind`, `state`, `owner`, `risk`,
+`reason`, `firstSeen`, `lastSeen`, `closedAt` and `lastRunId`.
+
+`PATCH` changes one item:
+
+```json
+{ "path": "src/auth/token.ts", "state": "accepted", "owner": "@security" }
+```
+
+Valid states are `open`, `accepted`, `rejected`, `ignored`, and `closed`. Without
+`RUNS_DB` the list is empty and writes return 501.
+
+---
+
 ## `GET | PUT | DELETE /api/schedules?repo=owner/name`
 
 Opt-in scheduled drift scans (D1). The cron runs daily; each repository decides

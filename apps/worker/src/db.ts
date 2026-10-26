@@ -7,6 +7,7 @@ import type {
   RunSummary,
   StoredCheck,
 } from "@edge-spec/core/history";
+import type { BacklogGap, BacklogItem, BacklogState } from "@edge-spec/core/backlog";
 import type { DriftSnapshot } from "@edge-spec/core/drift";
 import { parsePullPolicy, type PullPolicy } from "@edge-spec/core/policy";
 import type { CoverageDelta, ScanTotals } from "@edge-spec/core/types";
@@ -227,6 +228,145 @@ export async function claimPrCommand(
     .bind(repo, pull, login, command, now)
     .run();
   return true;
+}
+
+interface BacklogRow {
+  repo: string;
+  path: string;
+  kind: string;
+  state: string;
+  owner: string | null;
+  risk: string | null;
+  reason: string | null;
+  first_seen: number;
+  last_seen: number;
+  closed_at: number | null;
+  last_run_id: string | null;
+}
+
+const BACKLOG_STATES: ReadonlySet<string> = new Set([
+  "open",
+  "accepted",
+  "rejected",
+  "ignored",
+  "closed",
+]);
+
+function backlogOf(row: BacklogRow): BacklogItem {
+  return {
+    repo: row.repo,
+    path: row.path,
+    kind: row.kind,
+    state: (BACKLOG_STATES.has(row.state) ? row.state : "open") as BacklogState,
+    ...(row.owner !== null ? { owner: row.owner } : {}),
+    ...(row.risk !== null ? { risk: row.risk } : {}),
+    ...(row.reason !== null ? { reason: row.reason } : {}),
+    firstSeen: row.first_seen,
+    lastSeen: row.last_seen,
+    ...(row.closed_at !== null ? { closedAt: row.closed_at } : {}),
+    ...(row.last_run_id !== null ? { lastRunId: row.last_run_id } : {}),
+  };
+}
+
+export async function listBacklog(db: D1Database, repo: string): Promise<BacklogItem[]> {
+  const result = await db
+    .prepare(
+      "SELECT repo, path, kind, state, owner, risk, reason, first_seen, last_seen, closed_at, last_run_id FROM backlog_items WHERE repo = ? ORDER BY last_seen DESC, path",
+    )
+    .bind(repo)
+    .all<BacklogRow>();
+  return (result.results ?? []).map(backlogOf);
+}
+
+/**
+ * Upserts the gaps a scan found and closes the ones that disappeared.
+ * Accepted/rejected/ignored states survive; a returning closed item reopens.
+ */
+export async function syncBacklog(
+  db: D1Database,
+  repo: string,
+  gaps: readonly BacklogGap[],
+  now = Date.now(),
+  runId?: string,
+  /** Only these kinds may be closed by this scan. Omit to close every kind. */
+  closeKinds?: readonly string[],
+): Promise<void> {
+  const rows = await db
+    .prepare("SELECT path, kind, state FROM backlog_items WHERE repo = ?")
+    .bind(repo)
+    .all<{ path: string; kind: string; state: string }>();
+  const previous = new Map(
+    (rows.results ?? []).map((row) => [row.path, { kind: row.kind, state: row.state }]),
+  );
+  const current = new Set(gaps.map((gap) => gap.path));
+  const statements = gaps.map((gap) =>
+    previous.has(gap.path)
+      ? db
+          .prepare(
+            `UPDATE backlog_items SET
+               kind = ?, owner = COALESCE(?, owner), risk = ?, reason = ?,
+               last_seen = ?,
+               state = CASE WHEN state = 'closed' THEN 'open' ELSE state END,
+               closed_at = NULL,
+               last_run_id = COALESCE(?, last_run_id)
+             WHERE repo = ? AND path = ?`,
+          )
+          .bind(
+            gap.kind,
+            gap.owner ?? null,
+            gap.risk ?? null,
+            gap.reason ?? null,
+            now,
+            runId ?? null,
+            repo,
+            gap.path,
+          )
+      : db
+          .prepare(
+            `INSERT INTO backlog_items
+               (repo, path, kind, state, owner, risk, reason, first_seen, last_seen, closed_at, last_run_id)
+             VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?, NULL, ?)`,
+          )
+          .bind(
+            repo,
+            gap.path,
+            gap.kind,
+            gap.owner ?? null,
+            gap.risk ?? null,
+            gap.reason ?? null,
+            now,
+            now,
+            runId ?? null,
+          ),
+  );
+  for (const [path, row] of previous) {
+    if (current.has(path) || row.state === "closed") continue;
+    if (closeKinds && !closeKinds.includes(row.kind)) continue;
+    statements.push(
+      db
+        .prepare(
+          "UPDATE backlog_items SET state = 'closed', closed_at = ?, last_seen = ? WHERE repo = ? AND path = ?",
+        )
+        .bind(now, now, repo, path),
+    );
+  }
+  if (statements.length > 0) await db.batch(statements);
+}
+
+export async function setBacklogState(
+  db: D1Database,
+  repo: string,
+  path: string,
+  state: BacklogState,
+  owner?: string,
+  now = Date.now(),
+): Promise<void> {
+  await db
+    .prepare(
+      "UPDATE backlog_items SET state = ?, owner = COALESCE(?, owner), closed_at = ? WHERE repo = ? AND path = ?",
+    )
+    .bind(state, owner ?? null, state === "closed" ? now : null, repo, path)
+    .run();
 }
 
 export interface ScheduledRepo {
