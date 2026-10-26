@@ -3,6 +3,8 @@
  * route and (step by step) the durable Workflow.
  */
 import type { AiBinding } from "./ai";
+import { nextModel } from "./catalog";
+import { routeModel } from "./routing";
 import { PROMPT_VERSION, estimatePromptTokens, generateTest, type TokenUsage } from "./ai";
 import type { AiConfig } from "./ai";
 import type { GitHub } from "./github";
@@ -67,6 +69,8 @@ export interface PipelineInput {
   mutationCommand?: string;
   /** Opt-in fast-check properties; only runs when fast-check is a dependency. */
   propertyTests?: boolean;
+  /** Route cheap models to small files and strong models to failures. */
+  autoRouteModels?: boolean;
   /** When set, run only these failed operations and label the run a retest. */
   retestOperations?: RetestOperation[];
 }
@@ -578,6 +582,17 @@ export async function* runPipeline(
         const { gap, source } = file;
         const position = `${index + 1}/${loaded.length}`;
         const coverageHint = coverageHints.get(gap.path);
+        const routedConfig = (retry: boolean) => {
+          if (!input.autoRouteModels) return aiConfig;
+          const model =
+            routeModel(aiConfig.provider, { sourceLength: source.length, retry }) ?? aiConfig.model;
+          const fallback = nextModel(aiConfig.provider, model);
+          return { ...aiConfig, model, ...(fallback ? { fallbackModel: fallback } : {}) };
+        };
+        const generateConfig = routedConfig(false);
+        if (input.autoRouteModels) {
+          emit(log("ai", `Routed ${gap.path} to ${generateConfig.model}.`));
+        }
 
         if (cap > 0 && spentTokens >= cap) {
           if (!budgetStopped) {
@@ -603,7 +618,7 @@ export async function* runPipeline(
         const generateInput = {
           filePath: gap.path,
           source,
-          config: aiConfig,
+          config: generateConfig,
           runner: checks.runner,
           ...(options.memory ? { memory: options.memory } : {}),
           coverageTarget: input.coverageTarget,
@@ -683,7 +698,7 @@ export async function* runPipeline(
           testPath: gap.testPath,
           code,
           provider: aiConfig.provider.id,
-          model: aiConfig.model,
+          model: generateConfig.model,
           corrected: false,
           promptVersion: PROMPT_VERSION,
           source,
@@ -781,10 +796,11 @@ export async function* runPipeline(
           emit(log("ai", `Self-correction ${attempt}/${input.maxRetries}...`));
 
           let retryRateLimit: RateLimitInfo | undefined;
+          const retryConfig = routedConfig(true);
           const retryGenerateInput = {
             filePath: gap.path,
             source,
-            config: aiConfig,
+            config: retryConfig,
             runner: checks.runner,
             ...(options.memory ? { memory: options.memory } : {}),
             previous: { code, output: validation.output },
@@ -843,7 +859,7 @@ export async function* runPipeline(
           }
           if (retryCode === undefined) throw retryGenerateError;
           code = retryCode;
-          generation = { ...generation, code, corrected: true };
+          generation = { ...generation, code, corrected: true, model: retryConfig.model };
           emit({ type: "generation", generation });
           if (retryRateLimit) emit({ type: "quota", rateLimit: retryRateLimit });
 

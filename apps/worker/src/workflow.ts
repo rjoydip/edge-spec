@@ -6,7 +6,8 @@
  */
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { PROMPT_VERSION, generateTest } from "@edge-spec/core/ai";
-import { DEFAULT_AI, pipelineConfig, providerById } from "@edge-spec/core/catalog";
+import { DEFAULT_AI, nextModel, pipelineConfig, providerById } from "@edge-spec/core/catalog";
+import { routeModel } from "@edge-spec/core/routing";
 import { detectPackageManager, detectRunner } from "@edge-spec/core/ci";
 import { GitHub } from "@edge-spec/core/github";
 import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github-app";
@@ -541,6 +542,10 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
     let generation = await step.do(
       "generate-test",
       async (): Promise<Generation> => {
+        const routed = config.autoRouteModels
+          ? (routeModel(provider, { sourceLength: scanned.source.length }) ?? model)
+          : model;
+        const fallback = nextModel(provider, routed);
         const code = await generateTest({
           filePath: scanned.path,
           source: scanned.source,
@@ -548,7 +553,8 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
           ...(memory ? { memory } : {}),
           config: {
             provider,
-            model,
+            model: routed,
+            ...(fallback ? { fallbackModel: fallback } : {}),
             ...(this.env.AI ? { ai: this.env.AI } : {}),
           },
         });
@@ -557,7 +563,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
           testPath: scanned.testPath,
           code,
           provider: provider.id,
-          model,
+          model: routed,
           corrected: false,
           promptVersion: PROMPT_VERSION,
         };
@@ -590,6 +596,10 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
     for (let attempt = 0; !validation.ok && attempt < config.maxRetries; attempt += 1) {
       const previous = { code: generation.code, output: validation.output };
       generation = await step.do(`correct-test-${attempt + 1}`, async (): Promise<Generation> => {
+        const routed = config.autoRouteModels
+          ? (routeModel(provider, { sourceLength: scanned.source.length, retry: true }) ?? model)
+          : model;
+        const fallback = nextModel(provider, routed);
         const code = await generateTest({
           filePath: scanned.path,
           source: scanned.source,
@@ -597,12 +607,13 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
           ...(memory ? { memory } : {}),
           config: {
             provider,
-            model,
+            model: routed,
+            ...(fallback ? { fallbackModel: fallback } : {}),
             ...(this.env.AI ? { ai: this.env.AI } : {}),
           },
           previous,
         });
-        return { ...generation, code, corrected: true };
+        return { ...generation, code, corrected: true, model: routed };
       });
       validation = await step.do(
         `revalidate-test-${attempt + 1}`,

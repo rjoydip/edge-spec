@@ -355,6 +355,29 @@ describe("runPipeline", () => {
     });
   });
 
+  it("routes a small first attempt to the cheap model", async () => {
+    const calls: string[] = [];
+    const events: RunEvent[] = [];
+    const provider = providerById("openai");
+    if (!provider) throw new Error("catalog lost openai");
+
+    for await (const event of runPipeline(
+      { ...input, ref: "main", autoRouteModels: true },
+      {
+        github: fakeGitHub(calls),
+        aiConfig: { provider, model: "gpt-6-astra", apiKey: "sk-test" },
+        fetchImpl: aiFetch,
+      },
+    )) {
+      events.push(event);
+    }
+
+    const generation = events.find((event) => event.type === "generation");
+    expect(generation && "generation" in generation ? generation.generation.model : undefined).toBe(
+      "gpt-6-luna",
+    );
+  });
+
   it("stops before the PR when validation fails", async () => {
     const calls: string[] = [];
     const events: RunEvent[] = [];

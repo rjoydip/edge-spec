@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "mixed-gaps",
+      "path": "examples/mixed-gaps",
+      "expectedGaps": ["src/untested.ts"]
+    },
+    {
+      "id": "complete-app",
+      "path": "examples/complete-app",
+      "expectedGaps": []
+    }
+  ]
+}

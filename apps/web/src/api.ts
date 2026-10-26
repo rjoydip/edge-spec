@@ -149,6 +149,7 @@ export async function regenerate(
     flakyRuns: settings.flakyRuns,
     mutationCommand: settings.mutationCommand,
     propertyTests: settings.propertyTests,
+    autoRouteModels: settings.autoRouteModels,
     ...(previous ? { previous } : {}),
     ...(targeting?.uncoveredLines?.length ? { uncoveredLines: targeting.uncoveredLines } : {}),
     ...(targeting?.uncoveredBranches?.length
@@ -345,6 +346,7 @@ export async function runPipelineStream(
         flakyRuns: settings.flakyRuns,
         mutationCommand: settings.mutationCommand,
         propertyTests: settings.propertyTests,
+        autoRouteModels: settings.autoRouteModels,
         ...(authFixture ? { authFixture } : {}),
         strictTypes: settings.strictTypes,
         coverageTarget: settings.coverageTarget,

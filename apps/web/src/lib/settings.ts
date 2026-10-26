@@ -39,6 +39,8 @@ export interface Settings {
   mutationCommand: string;
   /** Opt-in fast-check properties, only when the repository has fast-check. */
   propertyTests: boolean;
+  /** Opt-in cheap-first model routing. */
+  autoRouteModels: boolean;
   /** JSON object of contract auth headers; sandbox env only. */
   contractAuthHeaders: string;
   /** JSON object of contract auth query values; sandbox env only. */
@@ -83,6 +85,7 @@ export const DEFAULT_SETTINGS: Settings = {
   flakyRuns: DEFAULT_PIPELINE.flakyRuns,
   mutationCommand: DEFAULT_PIPELINE.mutationCommand,
   propertyTests: DEFAULT_PIPELINE.propertyTests,
+  autoRouteModels: DEFAULT_PIPELINE.autoRouteModels,
   contractAuthHeaders: "",
   contractAuthQuery: "",
   policy: {},
@@ -196,6 +199,7 @@ function load(): Settings {
       mutationCommand:
         typeof parsed.mutationCommand === "string" ? parsed.mutationCommand.slice(0, 500) : "",
       propertyTests: parsed.propertyTests === true,
+      autoRouteModels: parsed.autoRouteModels === true,
       contractAuthHeaders:
         typeof parsed.contractAuthHeaders === "string"
           ? parsed.contractAuthHeaders.slice(0, 4000)

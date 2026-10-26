@@ -6,11 +6,15 @@ import { HttpError } from "./types";
 
 export type Protocol = "workers-ai" | "openai" | "anthropic" | "google";
 
+export type ModelTier = "cheap" | "balanced" | "strong";
+
 export interface ModelChoice {
   id: string;
   name: string;
   /** Rough guidance for the UI, not an enforcement rule. */
   note?: string;
+  /** Routing hint only; catalog order is the fallback. */
+  tier?: ModelTier;
 }
 
 export interface Provider {
@@ -34,10 +38,18 @@ export const PROVIDERS: Provider[] = [
     protocol: "workers-ai",
     needsKey: false,
     models: [
-      { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", name: "Llama 3.3 70B Instruct" },
-      { id: "@cf/qwen/qwen2.5-coder-32b-instruct", name: "Qwen 2.5 Coder 32B" },
-      { id: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b", name: "DeepSeek R1 Distill 32B" },
-      { id: "@cf/meta/llama-3.1-8b-instruct-fp8", name: "Llama 3.1 8B Instruct" },
+      {
+        id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        name: "Llama 3.3 70B Instruct",
+        tier: "strong",
+      },
+      { id: "@cf/qwen/qwen2.5-coder-32b-instruct", name: "Qwen 2.5 Coder 32B", tier: "balanced" },
+      {
+        id: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+        name: "DeepSeek R1 Distill 32B",
+        tier: "balanced",
+      },
+      { id: "@cf/meta/llama-3.1-8b-instruct-fp8", name: "Llama 3.1 8B Instruct", tier: "cheap" },
     ],
     hint: "Uses the deployment's Workers AI binding by default. Add a Cloudflare account ID and API token in Settings to use your own account.",
   },
@@ -48,9 +60,9 @@ export const PROVIDERS: Provider[] = [
     baseUrl: "https://api.openai.com/v1",
     needsKey: true,
     models: [
-      { id: "gpt-6-astra", name: "GPT-6 Astra" },
-      { id: "gpt-6.1-sol", name: "GPT-6.1 Sol" },
-      { id: "gpt-6-luna", name: "GPT-6 Luna" },
+      { id: "gpt-6-astra", name: "GPT-6 Astra", tier: "strong" },
+      { id: "gpt-6.1-sol", name: "GPT-6.1 Sol", tier: "balanced" },
+      { id: "gpt-6-luna", name: "GPT-6 Luna", tier: "cheap" },
     ],
   },
   {
@@ -60,9 +72,9 @@ export const PROVIDERS: Provider[] = [
     baseUrl: "https://api.anthropic.com",
     needsKey: true,
     models: [
-      { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5" },
-      { id: "claude-opus-5-5", name: "Claude Opus 5.5" },
-      { id: "claude-haiku-5-5", name: "Claude Haiku 5.5" },
+      { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", tier: "strong" },
+      { id: "claude-opus-5-5", name: "Claude Opus 5.5", tier: "strong" },
+      { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", tier: "cheap" },
     ],
   },
   {
@@ -72,18 +84,20 @@ export const PROVIDERS: Provider[] = [
     baseUrl: "https://generativelanguage.googleapis.com",
     needsKey: true,
     models: [
-      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash" },
-      { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash" },
-      { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite" },
+      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", tier: "strong" },
+      { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", tier: "balanced" },
+      { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite", tier: "cheap" },
       {
         id: "gemini-2.5-pro",
         name: "Gemini 2.5 Pro",
         note: "Google limits the 2.5 models to accounts that have used them.",
+        tier: "strong",
       },
       {
         id: "gemini-2.5-flash",
         name: "Gemini 2.5 Flash",
         note: "Google limits the 2.5 models to accounts that have used them.",
+        tier: "balanced",
       },
     ],
   },
@@ -94,8 +108,8 @@ export const PROVIDERS: Provider[] = [
     baseUrl: "https://api.groq.com/openai/v1",
     needsKey: true,
     models: [
-      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile" },
-      { id: "qwen-2.5-coder-32b", name: "Qwen 2.5 Coder 32B" },
+      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile", tier: "balanced" },
+      { id: "qwen-2.5-coder-32b", name: "Qwen 2.5 Coder 32B", tier: "balanced" },
     ],
   },
   {
@@ -105,8 +119,8 @@ export const PROVIDERS: Provider[] = [
     baseUrl: "https://api.deepseek.com/v1",
     needsKey: true,
     models: [
-      { id: "deepseek-chat", name: "DeepSeek Chat" },
-      { id: "deepseek-reasoner", name: "DeepSeek Reasoner" },
+      { id: "deepseek-chat", name: "DeepSeek Chat", tier: "cheap" },
+      { id: "deepseek-reasoner", name: "DeepSeek Reasoner", tier: "strong" },
     ],
   },
   {
@@ -116,8 +130,8 @@ export const PROVIDERS: Provider[] = [
     baseUrl: "https://api.mistral.ai/v1",
     needsKey: true,
     models: [
-      { id: "mistral-large-latest", name: "Mistral Large" },
-      { id: "codestral-latest", name: "Codestral" },
+      { id: "mistral-large-latest", name: "Mistral Large", tier: "strong" },
+      { id: "codestral-latest", name: "Codestral", tier: "balanced" },
     ],
   },
   {
@@ -127,9 +141,9 @@ export const PROVIDERS: Provider[] = [
     baseUrl: "https://openrouter.ai/api/v1",
     needsKey: true,
     models: [
-      { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4" },
-      { id: "openai/gpt-4.1", name: "GPT-4.1" },
-      { id: "deepseek/deepseek-chat", name: "DeepSeek Chat" },
+      { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", tier: "strong" },
+      { id: "openai/gpt-4.1", name: "GPT-4.1", tier: "balanced" },
+      { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", tier: "cheap" },
     ],
   },
   {
@@ -165,6 +179,8 @@ export const DEFAULT_PIPELINE = {
   mutationCommand: "",
   /** Opt-in fast-check properties; off by default because cost and flake are real. */
   propertyTests: false,
+  /** Opt-in cheap-first routing; the user's chosen model is otherwise kept. */
+  autoRouteModels: false,
 } as const;
 
 export function providerById(id: string): Provider | undefined {
@@ -374,6 +390,8 @@ export interface PipelineConfigInput {
   mutationCommand?: unknown;
   /** Opt-in fast-check properties. */
   propertyTests?: unknown;
+  /** Opt-in cheap-first model routing. */
+  autoRouteModels?: unknown;
 }
 
 export function pipelineConfig(input: PipelineConfigInput): {
@@ -389,6 +407,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
   flakyRuns: number;
   mutationCommand: string;
   propertyTests: boolean;
+  autoRouteModels: boolean;
 } {
   const retries = Number(input.maxRetries);
   const aiRetries = Number(input.maxAiRetries);
@@ -414,6 +433,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
     flakyRuns: Number.isFinite(flaky) ? Math.min(5, Math.max(0, Math.round(flaky))) : 2,
     mutationCommand,
     propertyTests: input.propertyTests === true,
+    autoRouteModels: input.autoRouteModels === true,
   };
 }
 

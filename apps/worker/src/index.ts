@@ -86,6 +86,7 @@ import { impactForChanges } from "./impact";
 import { ownerLookup } from "./ownership";
 import { runScheduled } from "./scheduled";
 import { parseRepoMemory } from "@edge-spec/core/memory";
+import { routeModel } from "@edge-spec/core/routing";
 import { evaluatePullPolicy, parsePullPolicy, policyBlocked } from "@edge-spec/core/policy";
 import type { RunDecision, RunFile, RunSummary } from "@edge-spec/core/history";
 
@@ -930,11 +931,20 @@ app.post("/api/generate", async (c) => {
 
     let rateLimit: RateLimitInfo | undefined;
     const notices: string[] = [];
-    const write = (previous?: { code: string; output: string }) =>
-      generateTest({
+    let generationModel = aiConfig.model;
+    const write = (previous?: { code: string; output: string }) => {
+      const model = config.autoRouteModels
+        ? (routeModel(aiConfig.provider, {
+            sourceLength: source.length,
+            retry: Boolean(previous),
+          }) ?? aiConfig.model)
+        : aiConfig.model;
+      const fallback = nextModel(aiConfig.provider, model);
+      generationModel = model;
+      return generateTest({
         filePath: path,
         source,
-        config: aiConfig,
+        config: { ...aiConfig, model, ...(fallback ? { fallbackModel: fallback } : {}) },
         runner,
         ...(memory ? { memory } : {}),
         coverageTarget: config.coverageTarget,
@@ -950,6 +960,7 @@ app.post("/api/generate", async (c) => {
           rateLimit = info;
         },
       });
+    };
 
     const formatCode = async (candidate: string): Promise<string> => {
       if (!checks?.formatter || !sandbox) return candidate;
@@ -1009,7 +1020,7 @@ app.post("/api/generate", async (c) => {
         testPath,
         code,
         provider: aiConfig.provider.id,
-        model: aiConfig.model,
+        model: generationModel,
         corrected,
         promptVersion: PROMPT_VERSION,
         source,

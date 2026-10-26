@@ -201,6 +201,7 @@ describe("pipelineConfig", () => {
       flakyRuns: 2,
       mutationCommand: "",
       propertyTests: false,
+      autoRouteModels: false,
     });
     expect(pipelineConfig({ maxRetries: "x" }).maxRetries).toBe(2);
     expect(pipelineConfig({ maxFiles: 0 }).maxFiles).toBe(1);
@@ -214,6 +215,7 @@ describe("pipelineConfig", () => {
     expect(pipelineConfig({ flakyRuns: 99 }).flakyRuns).toBe(5);
     expect(pipelineConfig({ propertyTests: true }).propertyTests).toBe(true);
     expect(pipelineConfig({ propertyTests: "yes" }).propertyTests).toBe(false);
+    expect(pipelineConfig({ autoRouteModels: true }).autoRouteModels).toBe(true);
   });
 });
 

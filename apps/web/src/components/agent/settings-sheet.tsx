@@ -546,6 +546,22 @@ export function SettingsSheet({
                     aria-label="Property-based tests"
                   />
                 </label>
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
+                  <span>
+                    <span className="block text-[11px] font-medium text-zinc-300">
+                      Auto-route models
+                    </span>
+                    <span className="block text-[10px] text-zinc-500">
+                      Cheap models for small first attempts, strong for failures and large files.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={settings.autoRouteModels}
+                    onCheckedChange={(autoRouteModels) => update({ autoRouteModels })}
+                    size="sm"
+                    aria-label="Auto-route models"
+                  />
+                </label>
                 <Field
                   label="Contract auth headers (JSON)"
                   hint="Sandbox env only; never in generated code, logs or the PR."

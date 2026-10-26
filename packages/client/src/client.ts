@@ -69,6 +69,7 @@ export interface RunRequest {
   flakyRuns?: number;
   mutationCommand?: string;
   propertyTests?: boolean;
+  autoRouteModels?: boolean;
   strictTypes?: boolean;
   coverageTarget?: number;
   retryGaps?: string[];
@@ -234,6 +235,9 @@ export class EdgeSpecClient {
           ...(input.flakyRuns !== undefined ? { flakyRuns: input.flakyRuns } : {}),
           ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
           ...(input.propertyTests !== undefined ? { propertyTests: input.propertyTests } : {}),
+          ...(input.autoRouteModels !== undefined
+            ? { autoRouteModels: input.autoRouteModels }
+            : {}),
           ...(input.strictTypes !== undefined ? { strictTypes: input.strictTypes } : {}),
           ...(input.coverageTarget !== undefined ? { coverageTarget: input.coverageTarget } : {}),
           ...(input.retryGaps?.length ? { retryGaps: input.retryGaps } : {}),

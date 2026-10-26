@@ -18,6 +18,7 @@
     "docs:dev": "bun run --filter @edge-spec/docs dev",
     "docs:build": "bun run --filter @edge-spec/docs build",
     "docs:preview": "bun run --filter @edge-spec/docs preview",
+    "eval": "bun evals/run.ts",
     "build": "bun run build:web && bun run build:worker",
     "build:web": "bun run --filter @edge-spec/web build",
     "build:worker": "bun run --filter @edge-spec/worker build",

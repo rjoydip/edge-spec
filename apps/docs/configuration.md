@@ -170,18 +170,19 @@ custom path is simpler.
 
 ## Pipeline knobs
 
-| Knob                 | Default | Bounds  | Notes                                                                 |
-| -------------------- | ------- | ------- | --------------------------------------------------------------------- |
-| `coverageTarget`     | 90      | 0–100   | Coverage threshold; with a runner, files below it are `coverage` gaps |
-| `maxRetries`         | 2       | 0–5     | Extra generations after a failed validation                           |
-| `parallelGeneration` | true    | boolean | Generate the picked tests in parallel instead of one by one           |
-| `maxFiles`           | 10      | 1–50    | How many gap files one pipeline run generates a test for              |
-| `maxTokens`          | 0       | 0–2M    | Provider-reported token cap for one run; `0` means no cap             |
-| `flakyRuns`          | 2       | 0–5     | Extra repeats after a passing suite; `0` disables flaky detection     |
-| `mutationCommand`    | empty   | ≤500    | Stryker-compatible command; empty means mutation is not measured      |
-| `propertyTests`      | false   | boolean | Opt-in fast-check properties with 50 runs and seed 42                 |
-| `concurrency`        | 3       | 1–6     | Files generated and validated at once; a lower sandbox cap wins       |
-| `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments         |
+| Knob                 | Default | Bounds  | Notes                                                                  |
+| -------------------- | ------- | ------- | ---------------------------------------------------------------------- |
+| `coverageTarget`     | 90      | 0–100   | Coverage threshold; with a runner, files below it are `coverage` gaps  |
+| `maxRetries`         | 2       | 0–5     | Extra generations after a failed validation                            |
+| `parallelGeneration` | true    | boolean | Generate the picked tests in parallel instead of one by one            |
+| `maxFiles`           | 10      | 1–50    | How many gap files one pipeline run generates a test for               |
+| `maxTokens`          | 0       | 0–2M    | Provider-reported token cap for one run; `0` means no cap              |
+| `flakyRuns`          | 2       | 0–5     | Extra repeats after a passing suite; `0` disables flaky detection      |
+| `mutationCommand`    | empty   | ≤500    | Stryker-compatible command; empty means mutation is not measured       |
+| `propertyTests`      | false   | boolean | Opt-in fast-check properties with 50 runs and seed 42                  |
+| `autoRouteModels`    | false   | boolean | Cheap models for small first attempts, strong for failures/large files |
+| `concurrency`        | 3       | 1–6     | Files generated and validated at once; a lower sandbox cap wins        |
+| `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments          |
 
 Bad values are clamped, not rejected. `strictTypes` and `parallelGeneration`
 default to true
@@ -221,6 +222,19 @@ A run covers the first `maxFiles` gaps, highest risk first, and every test it
 writes waits in **Review** for a pull request. Files run through a bounded pool:
 `ready` stays in scan order even though events interleave, and each event names
 its `sourcePath`. One file that exhausts its retries fails alone.
+
+## Model routing and eval
+
+`autoRouteModels` is opt-in. Small first attempts go to the cheapest tier,
+retries and sources over 8,000 characters go to the strongest, and the middle
+tier handles the rest. Tiers are catalog hints, not a measured quality score,
+and the user’s single-model choice is kept when routing is off.
+
+`bun run eval` compares the local golden cases in `evals/golden.json` with the
+scanner’s gaps. If `evals/outcomes.json` exists, it also prints verified,
+acceptance and flake rates plus measured average tokens per provider/model. The
+harness never invents cost: token averages appear only for outcomes that
+reported tokens.
 
 ## Test runners
 
