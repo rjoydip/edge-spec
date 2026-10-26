@@ -83,13 +83,13 @@ export function SettingsSheet({
   const settings = useSettings();
   const secrets = useSecrets();
   const appearance = useAppearance();
-  const [openSections, setOpenSections] = useState<string[]>(["provider", "sandbox"]);
+  const [openSection, setOpenSection] = useState<string | undefined>("provider");
   const [health, setHealth] = useState<"idle" | "checking" | "ok" | "error">("idle");
   const [healthText, setHealthText] = useState("");
 
   useEffect(() => {
     if (!open || !section) return;
-    setOpenSections((current) => (current.includes(section) ? current : [...current, section]));
+    setOpenSection(section);
     const timer = window.setTimeout(() => {
       document
         .getElementById(`settings-${section}`)
@@ -143,9 +143,10 @@ export function SettingsSheet({
 
         <SheetBody className="space-y-3">
           <Accordion
-            type="multiple"
-            value={openSections}
-            onValueChange={setOpenSections}
+            type="single"
+            collapsible
+            value={openSection}
+            onValueChange={setOpenSection}
             className="space-y-2"
           >
             <Section

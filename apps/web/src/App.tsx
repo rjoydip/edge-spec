@@ -25,6 +25,7 @@ import {
 import { AgentWorkspace } from "@/components/agent/workspace";
 import { SettingsSheet, type SettingsSection } from "@/components/agent/settings-sheet";
 import { INITIAL_STEPS, type LogEntry, type LogLevel, type Steps } from "@/components/agent/shared";
+import { TooltipProvider } from "@edge-spec/ui";
 import {
   getProject,
   getSettings,
@@ -716,15 +717,17 @@ export function App() {
         onOpenSettings={openSettings}
         onDismissToast={() => setToast(undefined)}
       />
-      <SettingsSheet
-        open={settingsOpen}
-        onOpenChange={(next) => {
-          setSettingsOpen(next);
-          if (!next) setSettingsSection(undefined);
-        }}
-        repo={project.repo}
-        {...(settingsSection ? { section: settingsSection } : {})}
-      />
+      <TooltipProvider delayDuration={180}>
+        <SettingsSheet
+          open={settingsOpen}
+          onOpenChange={(next) => {
+            setSettingsOpen(next);
+            if (!next) setSettingsSection(undefined);
+          }}
+          repo={project.repo}
+          {...(settingsSection ? { section: settingsSection } : {})}
+        />
+      </TooltipProvider>
     </>
   );
 }

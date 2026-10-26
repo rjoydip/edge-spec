@@ -1771,7 +1771,6 @@ const BACKLOG_TONE: Record<
   {
     label: string;
     badge: "accent" | "success" | "danger" | "neutral";
-    bar: string;
     tint: string;
     dot: string;
   }
@@ -1779,35 +1778,30 @@ const BACKLOG_TONE: Record<
   open: {
     label: "Open",
     badge: "accent",
-    bar: "border-l-sky-400/70",
     tint: "bg-sky-500/[0.04]",
     dot: "bg-sky-400",
   },
   accepted: {
     label: "Accepted",
     badge: "success",
-    bar: "border-l-emerald-400/70",
     tint: "bg-emerald-500/[0.05]",
     dot: "bg-emerald-400",
   },
   rejected: {
     label: "Rejected",
     badge: "danger",
-    bar: "border-l-rose-400/70",
     tint: "bg-rose-500/[0.05]",
     dot: "bg-rose-400",
   },
   ignored: {
     label: "Ignored",
     badge: "neutral",
-    bar: "border-l-zinc-500/70",
     tint: "bg-zinc-900/40",
     dot: "bg-zinc-500",
   },
   closed: {
     label: "Closed",
     badge: "neutral",
-    bar: "border-l-violet-400/70",
     tint: "bg-violet-500/[0.04]",
     dot: "bg-violet-400",
   },
@@ -1941,8 +1935,7 @@ export function BacklogDialog({
                   <div
                     key={item.path}
                     className={cn(
-                      "flex flex-wrap items-center gap-2 rounded-xl border-y border-r border-l-2 border-zinc-800/70 px-3 py-2 transition hover:border-zinc-700",
-                      tone.bar,
+                      "flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800/70 px-3 py-2 transition hover:border-zinc-700",
                       tone.tint,
                     )}
                   >

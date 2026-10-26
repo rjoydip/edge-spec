@@ -39,8 +39,8 @@ behind the content and are `pointer-events-none`.
    Bulk and per-file generation are here.
 4. **Review Queue** — one row per generated file with its diff, checks and
    coverage facts. Accept or reject each file; a rejected or unverified file
-   never reaches a pull request. History and backlog open from the header; the
-   audit log opens from the profile menu.
+   never reaches a pull request. Backlog opens from the header; run history,
+   the audit log and Settings open from the profile menu.
 
 The **Deployment** section in Settings holds the configuration that lives in D1
 and R2, not in this browser: workspace name and retention days, repository

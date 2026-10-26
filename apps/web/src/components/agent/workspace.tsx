@@ -24,7 +24,7 @@ import {
   History,
   Info,
   KeyRound,
-  ListChecks,
+  ListTodo,
   Loader2,
   Lock,
   Moon,
@@ -41,6 +41,7 @@ import {
   Sun,
   Terminal,
   TriangleAlert,
+  User,
   Wrench,
   X,
   Zap,
@@ -834,19 +835,7 @@ export function AgentWorkspace({
                       onClick={() => setBacklogOpen(true)}
                       aria-label="Test-debt backlog"
                     >
-                      <ListChecks className="text-indigo-300" />
-                    </Button>
-                  </Hint>
-                )}
-                {project.repo && !project.localPath && (
-                  <Hint label="Run history">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setHistoryOpen(true)}
-                      aria-label="Run history"
-                    >
-                      <History className="text-sky-300" />
+                      <ListTodo className="text-amber-300" />
                     </Button>
                   </Hint>
                 )}
@@ -858,7 +847,9 @@ export function AgentWorkspace({
                       className="rounded-full transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:outline-none"
                     >
                       <Avatar>
-                        <AvatarFallback>ES</AvatarFallback>
+                        <AvatarFallback>
+                          <User className="size-4" />
+                        </AvatarFallback>
                       </Avatar>
                     </button>
                   </DropdownMenuTrigger>
@@ -921,6 +912,10 @@ export function AgentWorkspace({
                     <DropdownMenuLabel className="text-[9px] tracking-wide text-zinc-500 uppercase">
                       Activity
                     </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => setHistoryOpen(true))}>
+                      <History />
+                      Run history
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => openFromMenu(() => setAuditOpen(true))}>
                       <ScrollText />
                       Audit log
