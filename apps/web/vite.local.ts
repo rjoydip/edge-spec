@@ -19,6 +19,7 @@ import {
   riskOf,
 } from "@edge-spec/core/scanner";
 import { apiGaps } from "@edge-spec/core/openapi";
+import { apiHealthMatrix, apiSourceCandidates, inferApiSpec } from "@edge-spec/core/api-surface";
 import type { Gap, ScanResult } from "@edge-spec/core/types";
 
 const MAX_FILES = 20_000;
@@ -152,11 +153,31 @@ export function scanLocalProject(root: string): ScanResult {
     const spec = parseOpenApiSpec(content, artifactPath);
     if (spec) openApiSpecs.push(spec);
   }
+  if (openApiSpecs.length === 0) {
+    // Local example without a published spec: infer routes from source.
+    const files = apiSourceCandidates(blobs)
+      .slice(0, 24)
+      .flatMap((path) => {
+        const content = readIfPresent(root, path);
+        return content === undefined ? [] : [{ path, content }];
+      });
+    const inferred = inferApiSpec({
+      title: overview.packageName ?? root,
+      paths: blobs,
+      files,
+      ...(packageJson ? { packageJson } : {}),
+    });
+    if (inferred) {
+      openApiSpecs.push(inferred.spec);
+      overview.apiFramework = inferred.framework;
+    }
+  }
   if (openApiSpecs.length > 0) {
     overview.openApiSpecs = openApiSpecs;
     overview.openApiSpec = openApiSpecs[0];
     overview.openApi = openApiSpecs[0];
     overview.openapi = openApiSpecs[0];
+    overview.apiHealth = apiHealthMatrix(openApiSpecs);
   }
 
   const files: Record<string, string> = {};

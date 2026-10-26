@@ -379,7 +379,9 @@ export function apiGaps(specs: readonly OpenApiSpec[], tests: Iterable<string> =
         testPath: contractPathFor(spec.path),
         risk: "medium",
         exports: [],
-        reason: `No contract test is named "${name}".`,
+        reason: spec.inferred
+          ? `No contract test is named "${name}" for this inferred operation.`
+          : `No contract test is named "${name}".`,
         kind: "api",
         evidence: {
           specPath: spec.path,

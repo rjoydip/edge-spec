@@ -36,14 +36,13 @@ class_name = "TestGenerationWorkflow"
 # The dashboard keeps using the visitor's per-request PAT. Installation tokens
 # are minted per run, scoped to the repository, and cached only until expiry.
 
-# Optional run history, policies and scheduled drift. Create the database, paste
-# its id, apply the migrations in migrations/, then uncomment this block:
-#   wrangler d1 create edge-spec-runs
-#   wrangler d1 migrations apply edge-spec-runs --remote
-# [[d1_databases]]
-# binding = "RUNS_DB"
-# database_name = "edge-spec-runs"
-# database_id = "<paste-the-id-here>"
+# Run history, backlog, policies, memory, schedules, workspace and audit.
+# Created with `wrangler d1 create edge-spec-runs`; migrations live in
+# migrations/ and are applied with `wrangler d1 migrations apply`.
+[[d1_databases]]
+binding = "RUNS_DB"
+database_name = "edge-spec-runs"
+database_id = "e6d6d95e-cbce-498f-952e-c4d30fc1f7de"
 
 # Drift notifications (optional, Slack-compatible webhook):
 #   wrangler secret put DRIFT_WEBHOOK_URL

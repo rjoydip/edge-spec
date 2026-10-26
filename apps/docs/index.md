@@ -90,6 +90,7 @@ packages/cli/src/    terminal client
 packages/mcp/src/    stdio MCP server
 packages/sandbox/src/ self-hosted sandbox runner
 apps/worker/src/     Hono routes, bindings, durable Workflow
+apps/sandbox-worker/ Cloudflare Sandbox bridge (Containers + Sandbox SDK)
 apps/web/src/        React dashboard
 apps/docs/           this documentation site
 ```

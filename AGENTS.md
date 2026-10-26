@@ -20,6 +20,8 @@ bun run dev            # dashboard on http://127.0.0.1:5173 (proxies /api)
 bun --silent run cli -- --help  # terminal client
 bun run mcp -- --help  # stdio MCP server
 bun run sandbox        # self-hosted test runner on http://127.0.0.1:8788
+bun run dev:sandbox-worker    # Cloudflare Sandbox bridge
+bun run deploy:sandbox-worker # deploy it (needs Docker locally)
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
 bun run docs:build     # static site in apps/docs/.vitepress/dist
 bun test               # discovers every workspace's test/ directory
@@ -40,8 +42,9 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 - `packages/core/src/` — pure logic. No Hono, no React, no browser globals.
   `scanner.ts` owns classification (`classifyTree`: missing/unsupported plus the
   existing tests per source), `coverage.ts` parses LCOV, `openapi.ts` builds
-  deterministic contract tests and parses JUnit, and `pipeline.ts` runs files
-  through a bounded pool whose events name their `sourcePath`.
+  deterministic contract tests and parses JUnit, `api-surface.ts` infers an
+  OpenAPI document from route calls when one is missing, and `pipeline.ts` runs
+  files through a bounded pool whose events name their `sourcePath`.
 - `packages/client/src/` — HTTP client for the Worker API, shared by the CLI and
   MCP server. It may import core types but must not call core pipeline code.
 - `packages/ui/src/` — shared React primitives and `theme.css` brand tokens. The
@@ -56,6 +59,8 @@ Run `bun run check` before claiming a change works. For a UI change, also run
   `complete-app/` deliberately has sibling tests.
 - `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
   durable `workflow.ts`.
+- `apps/sandbox-worker/` — Cloudflare Sandbox bridge (`/health`, `/run`) built on
+  Containers and `@cloudflare/sandbox`; the Dockerfile tag must match the SDK.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `PLAN.md` — product requirements and review feedback.

@@ -11,7 +11,7 @@ Cloudflare Worker serves the API and the dashboard.
 These corrections to the first mockup are part of the definition of done.
 
 | #   | Feedback                                                                                                  | Change in this plan                                                                                                                                                                                                                                                                                                                          |
-| :-- | :-------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| --- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Header items not in proper alignment                                                                      | One header row, `items-center`, every control a fixed 36 px (`h-9`) or icon button. Stats move out of the header into the Pipeline page's KPI strip.                                                                                                                                                                                         |
 | 2   | No visible vertical scrollbar, but the page still scrolls                                                 | `.no-scrollbar` utility (`scrollbar-width: none`, `::-webkit-scrollbar { display: none }`) on the page root and the terminal pane. Scroll behaviour is unchanged.                                                                                                                                                                            |
 | 3   | Application name is **EdgeSpec**                                                                          | `package.json`, `wrangler.toml`, `<title>`, brand mark, PR footer, docs. No "Testflare".                                                                                                                                                                                                                                                     |
@@ -95,6 +95,9 @@ edge-spec/
 │   │   └── src/
 │   │       ├── env.ts, cloudflare.d.ts, index.ts
 │   │       ├── workflow.ts, db.ts, scheduled.ts, impact.ts, ownership.ts
+│   ├── sandbox-worker/       # Cloudflare Sandbox bridge (Container)
+│   │   ├── Dockerfile, wrangler.toml
+│   │   └── src/{index.ts,contract.ts}
 │   └── docs/                 # VitePress site
 └── packages/
     ├── core/
@@ -367,7 +370,8 @@ their runner did not execute.
 ### Status
 
 The seven foundation phases and every roadmap item (0.1 through 4.6) are
-implemented. Tests live in each workspace's `test/` directory (never beside the
+implemented, plus the Cloudflare Sandbox bridge and inferred-OpenAPI health
+matrix. Tests live in each workspace's `test/` directory (never beside the
 sources) and are included in `bun run check`. The dashboard was smoke-tested
 against `wrangler dev`: health, catalog, asset serving, input validation, a real
 repository scan, and the SSE error/result contract. Remaining and incomplete
@@ -429,6 +433,16 @@ bunx wrangler secret put SANDBOX_RUNNER_URL
 bunx wrangler secret put SANDBOX_API_KEY
 bunx wrangler secret put DRIFT_WEBHOOK_URL
 bunx wrangler secret put DRIFT_WEBHOOK_SECRET
+```
+
+For an all-Cloudflare runner, deploy the Sandbox bridge and point the main
+Worker at it:
+
+```bash
+bun run deploy:sandbox-worker
+cd apps/sandbox-worker && bunx wrangler secret put SANDBOX_API_KEY
+# Then set SANDBOX_RUNNER_URL to the bridge URL and the same SANDBOX_API_KEY
+# on the main Worker.
 ```
 
 Optional D1 setup:

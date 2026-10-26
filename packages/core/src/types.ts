@@ -128,6 +128,21 @@ export interface OpenApiSpec {
   servers?: string[];
   /** Raw source of the spec, for the raw view and download. */
   content?: string;
+  /** True when EdgeSpec inferred the document from source, not a published spec. */
+  inferred?: boolean;
+}
+
+/** One endpoint row in the static OpenAPI health matrix. */
+export interface ApiHealthRow {
+  method: string;
+  path: string;
+  specPath: string;
+  inferred?: boolean;
+  status: "covered" | "missing-test";
+  /** Security scheme names only, never a secret. */
+  auth: string[];
+  requestBody: boolean;
+  parameters: number;
 }
 
 /** The kind of failure a contract test reported. */
@@ -187,6 +202,10 @@ export interface RepositoryOverview {
   openApiSpec?: OpenApiSpec;
   openApi?: OpenApiSpec;
   openapi?: OpenApiSpec;
+  /** The HTTP framework detected when the repository is API-based. */
+  apiFramework?: string;
+  /** Static endpoint-by-status matrix; never live HTTP results. */
+  apiHealth?: ApiHealthRow[];
 }
 
 export interface Generation {

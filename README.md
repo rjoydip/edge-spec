@@ -53,6 +53,7 @@ The repository is a Bun workspace monorepo:
 ```text
 apps/web/        React dashboard
 apps/worker/     Hono routes, bindings, durable Workflow
+apps/sandbox-worker/ Cloudflare Sandbox runner (Containers + Sandbox SDK)
 apps/docs/       this documentation site
 packages/core/   pure pipeline logic (scanner, AI, GitHub, validation)
 packages/client/ HTTP client shared by the CLI and MCP server

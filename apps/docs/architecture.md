@@ -52,26 +52,28 @@ the app code does not invalidate the cached vendor files.
 
 ## Modules
 
-| Module                          | Responsibility                                                                 | Rules                                                    |
-| ------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| `packages/core/src/types.ts`    | `Gap`, `Generation`, `Validation`, `RunEvent`, `HttpError`                     | No HTTP or provider knowledge                            |
-| `packages/core/src/catalog.ts`  | Provider/model catalog, `resolveAi`, `parseRepo`, `parseRef`, `pipelineConfig` | Single source of truth for validation and defaults       |
-| `packages/core/src/github.ts`   | REST client: tree, file, branch, commit, PR, PR list                           | `fetch`, no SDK; path segments encoded                   |
-| `packages/core/src/scanner.ts`  | `classifyTree`, ancestor test discovery, OpenAPI parsing, repository overview  | Regex-based, no TypeScript parser                        |
-| `packages/core/src/coverage.ts` | LCOV parsing and `coverageGaps`                                                | Facts from a runner; no report means "not measured"      |
-| `packages/core/src/openapi.ts`  | Deterministic contract tests, `apiGaps`, JUnit parsing                         | One test named `METHOD /path` per operation; no AI       |
-| `packages/core/src/ci.ts`       | Reads the repository's checks, formatter and style rules                       | Pure functions over the tree, the manifest and workflows |
-| `packages/core/src/ai.ts`       | Prompt, code extraction, provider dispatch                                     | Key only goes into upstream request headers              |
-| `packages/core/src/validate.ts` | Static checks + optional sandbox execution                                     | `verified` is true only after a runner ran               |
-| `packages/core/src/sandbox.ts`  | v1/v2 request contract, config parsing, runner health                          | v1 `{files, command}` stays the default body             |
-| `packages/core/src/pipeline.ts` | Async generator for scan → generate → validate → correct → PR                  | Transport-agnostic; bounded pool + channel               |
-| `apps/worker/src/index.ts`      | Hono routes, header parsing, SSE framing                                       | Translates HTTP to core calls                            |
-| `apps/worker/src/workflow.ts`   | Durable webhook automation                                                     | Deployment credentials only                              |
-| `apps/web/src/`                 | Dashboard                                                                      | `App.tsx` owns run state; components are presentational  |
-| `packages/ui/src/`              | React primitives and brand tokens                                              | Dashboard imports components; docs imports `theme.css`   |
-| `packages/client/src/`          | Worker API client, SSE parsing, env defaults                                   | No pipeline logic; CLI and MCP use it                    |
-| `packages/cli/src/`             | `scan`, `generate`, `run`, `catalog` commands                                  | Secrets from env, never flags                            |
-| `packages/mcp/src/`             | Stdio MCP tools over the shared client                                         | PR tool requires `confirm: true`                         |
+| Module                             | Responsibility                                                                 | Rules                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `packages/core/src/types.ts`       | `Gap`, `Generation`, `Validation`, `RunEvent`, `HttpError`                     | No HTTP or provider knowledge                            |
+| `packages/core/src/catalog.ts`     | Provider/model catalog, `resolveAi`, `parseRepo`, `parseRef`, `pipelineConfig` | Single source of truth for validation and defaults       |
+| `packages/core/src/github.ts`      | REST client: tree, file, branch, commit, PR, PR list                           | `fetch`, no SDK; path segments encoded                   |
+| `packages/core/src/scanner.ts`     | `classifyTree`, ancestor test discovery, OpenAPI parsing, repository overview  | Regex-based, no TypeScript parser                        |
+| `packages/core/src/coverage.ts`    | LCOV parsing and `coverageGaps`                                                | Facts from a runner; no report means "not measured"      |
+| `packages/core/src/openapi.ts`     | Deterministic contract tests, `apiGaps`, JUnit parsing                         | One test named `METHOD /path` per operation; no AI       |
+| `packages/core/src/ci.ts`          | Reads the repository's checks, formatter and style rules                       | Pure functions over the tree, the manifest and workflows |
+| `packages/core/src/ai.ts`          | Prompt, code extraction, provider dispatch                                     | Key only goes into upstream request headers              |
+| `packages/core/src/validate.ts`    | Static checks + optional sandbox execution                                     | `verified` is true only after a runner ran               |
+| `packages/core/src/sandbox.ts`     | v1/v2 request contract, config parsing, runner health                          | v1 `{files, command}` stays the default body             |
+| `packages/core/src/api-surface.ts` | Infers OpenAPI from route calls when a spec is missing                         | Explicitly `inferred`; regex, not an AST                 |
+| `packages/core/src/pipeline.ts`    | Async generator for scan → generate → validate → correct → PR                  | Transport-agnostic; bounded pool + channel               |
+| `apps/worker/src/index.ts`         | Hono routes, header parsing, SSE framing                                       | Translates HTTP to core calls                            |
+| `apps/worker/src/workflow.ts`      | Durable webhook automation                                                     | Deployment credentials only                              |
+| `apps/sandbox-worker/src/`         | Cloudflare Sandbox runner (`/health`, `/run`)                                  | Container per run; key required, destroyed afterwards    |
+| `apps/web/src/`                    | Dashboard                                                                      | `App.tsx` owns run state; components are presentational  |
+| `packages/ui/src/`                 | React primitives and brand tokens                                              | Dashboard imports components; docs imports `theme.css`   |
+| `packages/client/src/`             | Worker API client, SSE parsing, env defaults                                   | No pipeline logic; CLI and MCP use it                    |
+| `packages/cli/src/`                | `scan`, `generate`, `run`, `catalog` commands                                  | Secrets from env, never flags                            |
+| `packages/mcp/src/`                | Stdio MCP tools over the shared client                                         | PR tool requires a one-time approval token               |
 
 ## Interactive run (`POST /api/run`)
 

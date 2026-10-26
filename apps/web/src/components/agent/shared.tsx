@@ -2,6 +2,7 @@
 import { Check, CheckCircle2, TriangleAlert, Wrench, X } from "lucide-react";
 import { Badge, Hint, cn } from "@edge-spec/ui";
 import type {
+  ApiHealthRow,
   ApiTestResult,
   CheckResult,
   CoverageDelta,
@@ -120,8 +121,26 @@ export function MethodChip({ method }: { method: string }) {
   );
 }
 
-export function EndpointStatus({ result }: { result?: ApiTestResult }) {
+export function EndpointStatus({
+  result,
+  health,
+}: {
+  result?: ApiTestResult;
+  health?: ApiHealthRow;
+}) {
   if (!result) {
+    if (health?.status === "missing-test") {
+      return (
+        <Badge
+          variant="warning"
+          className="gap-1"
+          title="No contract test is named for this operation"
+        >
+          <TriangleAlert className="size-3" />
+          needs test
+        </Badge>
+      );
+    }
     return (
       <Badge variant="neutral" className="gap-1">
         Not run

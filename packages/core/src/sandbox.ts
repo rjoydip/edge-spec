@@ -18,10 +18,11 @@ export interface SandboxServer {
  * runner. Hosted providers are runner drivers too, so they are listed here.
  */
 export type SandboxProviderId =
-  "auto" | "bwrap" | "docker" | "podman" | "e2b" | "vercel" | "daytona" | "custom";
+  "auto" | "cloudflare" | "bwrap" | "docker" | "podman" | "e2b" | "vercel" | "daytona" | "custom";
 
 export const SANDBOX_PROVIDERS: ReadonlyArray<{ id: SandboxProviderId; label: string }> = [
   { id: "auto", label: "Auto (whatever the runner uses)" },
+  { id: "cloudflare", label: "Cloudflare Sandbox" },
   { id: "docker", label: "Docker Desktop" },
   { id: "podman", label: "Podman" },
   { id: "bwrap", label: "bwrap namespace" },

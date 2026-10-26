@@ -445,6 +445,13 @@ export function AgentWorkspace({
         result.method.toUpperCase() === endpoint.method.toUpperCase() &&
         result.path === endpoint.path,
     );
+  const endpointHealth = (spec: string, endpoint: OpenApiEndpoint) =>
+    overview?.apiHealth?.find(
+      (row) =>
+        row.specPath === spec &&
+        row.method.toUpperCase() === endpoint.method.toUpperCase() &&
+        row.path === endpoint.path,
+    );
 
   const entries: ReviewEntry[] = generated.map((item) => ({
     item,
@@ -1420,6 +1427,15 @@ export function AgentWorkspace({
                           {currentSpec?.path ?? "No spec"}
                         </Badge>
                       )}
+                      {currentSpec?.inferred && (
+                        <Badge
+                          variant="warning"
+                          className="px-1.5 py-0 text-[9px]"
+                          title="Inferred from source because no OpenAPI document was found"
+                        >
+                          inferred
+                        </Badge>
+                      )}
                     </span>
                     <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
                       {apiResults.length ? (
@@ -1520,7 +1536,10 @@ export function AgentWorkspace({
                                   {steps.validate.status === "running" && !result ? (
                                     <Skeleton className="h-4 w-20" />
                                   ) : (
-                                    <EndpointStatus result={result} />
+                                    <EndpointStatus
+                                      result={result}
+                                      health={endpointHealth(currentSpec.path, item)}
+                                    />
                                   )}
                                 </TableCell>
                                 <TableCell className="hidden pr-3 text-right font-mono text-[10px] text-zinc-500 sm:table-cell">

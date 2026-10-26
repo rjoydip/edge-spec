@@ -248,6 +248,30 @@ runs the matching command with the repository's package manager
 runner must be installed in the sandbox; static validation still works without a
 runner but cannot claim an execution.
 
+## Cloudflare Sandbox runner
+
+`apps/sandbox-worker` is a Cloudflare Worker plus Container that speaks the
+same `/health` and `/run` contract. It is the recommended runner for a
+Cloudflare deployment: the container image is built by Wrangler, and the
+dashboard only needs its URL and key.
+
+```bash
+bun run deploy:sandbox-worker
+cd apps/sandbox-worker
+bunx wrangler secret put SANDBOX_API_KEY
+```
+
+Then set the main Worker's secret `SANDBOX_RUNNER_URL` to the bridge URL and
+`SANDBOX_API_KEY` to the same key. `/health` reports `provider: "cloudflare"` and
+`isolation: "container"`. The bridge refuses `/run` when its key is missing, so
+a misconfigured deployment cannot execute code for anonymous callers. It clones
+only `https` repositories, keeps a supplied token in `GIT_TOKEN` rather than the
+command line, and destroys the sandbox after every request.
+
+Drivers E2B, Vercel Sandbox, Daytona, Docker, Podman and bwrap still work when
+you point the dashboard at the self-hosted runner; they are alternatives, not
+requirements. `bun run sandbox` remains the local/self-hosted runner.
+
 ## Contract auth fixtures
 
 Settings holds two optional JSON objects per environment: auth headers and auth
@@ -271,6 +295,25 @@ generated contract tests start a tiny in-test mock server from
 status, headers and body, and the normal status assertion still runs, so a
 deliberate spec status change fails replay. Recorded bodies may contain real
 data: keep them outside the PR, preferably in R2, and apply retention there.
+
+## Run history, backlog and D1 (optional)
+
+Run history, the test-debt backlog, policies, repository memory, schedules,
+workspace settings and audit live in one optional D1 database (`RUNS_DB`). This
+repository's `wrangler.toml` binds a database named `edge-spec-runs`; create
+and migrate it before deploying to another account:
+
+```bash
+bunx wrangler d1 create edge-spec-runs
+bunx wrangler d1 migrations apply edge-spec-runs --remote
+# For local development:
+bunx wrangler d1 migrations apply edge-spec-runs --local
+```
+
+Without the binding the Worker still scans, generates and opens pull requests,
+but `/api/runs`, `/api/backlog`, `/api/workspace` and `/api/audit` answer
+`enabled: false` and the cron does nothing. The tables store summaries, not
+source text, prompts or keys.
 
 ## Repository memory (optional)
 

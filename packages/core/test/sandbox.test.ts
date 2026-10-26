@@ -236,7 +236,7 @@ describe("checkSandboxHealth", () => {
 describe("sandboxProvidersFor", () => {
   it("hides the local drivers on a deployed dashboard", () => {
     const ids = sandboxProvidersFor("deployed").map((entry) => entry.id);
-    expect(ids).toEqual(["auto", "e2b", "vercel", "daytona", "custom"]);
+    expect(ids).toEqual(["auto", "cloudflare", "e2b", "vercel", "daytona", "custom"]);
   });
 
   it("offers every driver locally", () => {

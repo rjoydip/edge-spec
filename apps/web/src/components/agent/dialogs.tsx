@@ -667,7 +667,7 @@ export function SpecDialog({
       title={spec?.path ?? "OpenAPI spec"}
       description={
         spec
-          ? `${spec.endpoints.length} operations${spec.servers?.length ? ` · ${spec.servers[0]}` : ""}`
+          ? `${spec.endpoints.length} operations${spec.servers?.length ? ` · ${spec.servers[0]}` : ""}${spec.inferred ? " · inferred from source; review before use" : ""}`
           : "No OpenAPI document was found in this scan."
       }
       className="max-w-3xl"
@@ -704,11 +704,14 @@ export function SpecDialog({
             <Sparkles className="mt-0.5 size-4 shrink-0 text-indigo-300" />
             <div className="min-w-0">
               <p className="text-[11px] font-semibold text-zinc-200">
-                Built from the spec — no model call
+                {spec.inferred
+                  ? "Inferred from source — review before use"
+                  : "Built from the spec — no model call"}
               </p>
               <p className="mt-0.5 text-[10px] leading-relaxed text-zinc-500">
-                EdgeSpec reads the document and writes the contract test itself. Only test files are
-                added; your application code is never modified.
+                {spec.inferred
+                  ? "No OpenAPI document was found, so EdgeSpec read route calls and marked the result inferred. Confirm each operation before treating it as a contract."
+                  : "EdgeSpec reads the document and writes the contract test itself. Only test files are added; your application code is never modified."}
               </p>
             </div>
           </div>

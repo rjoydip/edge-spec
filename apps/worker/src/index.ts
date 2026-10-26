@@ -36,6 +36,12 @@ import {
   riskOf,
 } from "@edge-spec/core/scanner";
 import { apiGaps, contractTestsFor } from "@edge-spec/core/openapi";
+import {
+  apiHealthMatrix,
+  apiSourceCandidates,
+  detectApiFramework,
+  inferApiSpec,
+} from "@edge-spec/core/api-surface";
 import { coverageGaps } from "@edge-spec/core/coverage";
 import {
   formatWithRunner,
@@ -428,8 +434,10 @@ app.post("/api/scan", async (c) => {
     // The tree tells the languages and the tooling; package.json adds the
     // version facts. A missing package.json is not an error.
     const overview = describeRepository(blobs);
+    let packageJson: string | undefined;
     try {
-      Object.assign(overview, packageFacts(await github.file(repo, "package.json", ref)));
+      packageJson = await github.file(repo, "package.json", ref);
+      Object.assign(overview, packageFacts(packageJson));
     } catch {
       // No package.json at the root.
     }
@@ -447,11 +455,41 @@ app.post("/api/scan", async (c) => {
           // A spec we cannot read is a spec we cannot render.
         }
       }
+      if (openApiSpecs.length === 0) {
+        // API-based repo without a published spec: infer one from route calls.
+        // The dependency check avoids reading a dozen sources on every scan.
+        const frameworkHint = detectApiFramework({
+          ...(packageJson ? { packageJson } : {}),
+          files: [],
+        });
+        const routeFileHint = blobs.some((path) => /(^|\/)(app\/api|pages\/api)\//i.test(path));
+        if (frameworkHint || routeFileHint) {
+          const files: Array<{ path: string; content: string }> = [];
+          for (const path of apiSourceCandidates(blobs).slice(0, 16)) {
+            try {
+              files.push({ path, content: await github.file(repo, path, ref) });
+            } catch {
+              // One unreadable source must not stop the inference.
+            }
+          }
+          const inferred = inferApiSpec({
+            title: overview.packageName ?? repo,
+            paths: blobs,
+            files,
+            ...(packageJson ? { packageJson } : {}),
+          });
+          if (inferred) {
+            openApiSpecs.push(inferred.spec);
+            overview.apiFramework = inferred.framework;
+          }
+        }
+      }
       if (openApiSpecs.length > 0) {
         overview.openApiSpecs = openApiSpecs;
         overview.openApiSpec = openApiSpecs[0];
         overview.openApi = openApiSpecs[0];
         overview.openapi = openApiSpecs[0];
+        overview.apiHealth = apiHealthMatrix(openApiSpecs);
       }
     } catch {
       // Best effort.
@@ -468,12 +506,13 @@ app.post("/api/scan", async (c) => {
     // The commands the repository's CI runs, so the dashboard can show them
     // before anything is generated.
     const ruleFiles: Record<string, string> = {};
+    if (packageJson) ruleFiles["package.json"] = packageJson;
     const workflowPaths = blobs
       .filter((path) => path.startsWith(".github/workflows/") && path.endsWith(".yml"))
       .slice(0, 4);
     for (const path of [
       ...workflowPaths,
-      ...blobs.filter((path) => SUPPORT_FILES.includes(path)),
+      ...blobs.filter((path) => SUPPORT_FILES.includes(path) && path !== "package.json"),
     ]) {
       try {
         ruleFiles[path] = await github.file(repo, path, ref);

@@ -55,6 +55,8 @@ measures something it actually ran, or says "not measured".
 | Watch mode                                                   | Shipped (`edgespec watch`; VS Code extension not built)                                                          |
 | MCP resources / approvals                                    | Shipped (4 resources, one-time PR approval token)                                                                |
 | Team workspaces / audit / retention                          | Shipped (single workspace, redacted audit, daily purge)                                                          |
+| Cloudflare Sandbox runner                                    | Shipped (`apps/sandbox-worker`, Containers + Sandbox SDK)                                                        |
+| API inference / health matrix                                | Shipped (inferred OpenAPI, static endpoint matrix)                                                               |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; optional D1 stores
 run history, decisions, backlog, memory, schedules, policies, workspace settings
@@ -390,6 +392,7 @@ There is no signed-artifact route yet; see `TASKS.md`.
 - `packages/cli` — `scan`, `generate`, `run`, `watch`, `catalog`.
 - `packages/mcp` — stdio server with six tools and four resource templates.
 - `packages/sandbox` — bwrap/Docker/Podman plus hosted SDK drivers.
+- `apps/sandbox-worker` — Cloudflare Sandbox bridge (Containers + Sandbox SDK).
 - `apps/worker`, `apps/web`, `apps/docs` — the deployment, dashboard and docs.
 
 ### Dashboard

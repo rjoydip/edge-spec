@@ -15,6 +15,8 @@
     "cli": "bun packages/cli/src/index.ts",
     "mcp": "bun packages/mcp/src/index.ts",
     "sandbox": "bun run --filter @edge-spec/sandbox start",
+    "dev:sandbox-worker": "bun run --filter @edge-spec/sandbox-worker dev",
+    "deploy:sandbox-worker": "bun run --filter @edge-spec/sandbox-worker deploy",
     "docs:dev": "bun run --filter @edge-spec/docs dev",
     "docs:build": "bun run --filter @edge-spec/docs build",
     "docs:preview": "bun run --filter @edge-spec/docs preview",

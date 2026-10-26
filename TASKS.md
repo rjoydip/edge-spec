@@ -4,6 +4,31 @@ Remaining and incomplete work. `ROADMAP.md` is the shipped record; this file is
 the queue. Each item names the gap and what "done" means. Nothing here is a
 commitment to a date.
 
+## Cloudflare Sandbox
+
+- [ ] **Verify the bridge against a live container.** `apps/sandbox-worker`
+      typechecks and its contract is unit-tested, but it has not been deployed
+      here. Deploy needs Containers permission and a Docker-capable Wrangler
+      host; then run `/health` and one `/run` with a clone, setup, server and
+      coverage to confirm the SDK calls.
+- [ ] **Server readiness on Cloudflare.** Readiness uses the Sandbox process's
+      `waitForPort`; a repo whose app binds `0.0.0.0` on a non-declared port may
+      need an explicit `readyUrl`. Verify against the Hono/Express examples.
+- [ ] **Keep the bridge image current.** The Dockerfile tag must equal
+      `@cloudflare/sandbox` (`0.12.14`). Add a test or CI check if the package
+      version is bumped.
+
+## API inference
+
+- [ ] **Mounted router prefixes.** Route extraction reads direct calls; an
+      Express/Hono `app.route("/api", router)` or `.mount()` prefix is not
+      composed. Add prefix resolution if inferred specs miss real endpoints.
+- [ ] **Live health checks.** `overview.apiHealth` is a static matrix. A live
+      endpoint check would need a booted app and a runner; keep the static
+      matrix as the default and label any live result separately.
+- [ ] **Inference coverage.** Add route patterns only when a real repository
+      misses them; prefer a parser over more regexes if this becomes primary.
+
 ## Dashboard and workspace
 
 - [ ] **Workspace and audit UI.** `GET | PUT /api/workspace` and
@@ -96,6 +121,3 @@ commitment to a date.
 
 - [ ] **Workspace/audit docs in the dashboard guide.** API and configuration
       docs describe both; the dashboard guide does not. Add it with the UI.
-- [ ] **Deployment guide for migrations.** Document applying
-      `migrations/0001`–`0007` and enabling `RUNS_DB` end to end; today this is
-      spread across `wrangler.toml` comments and configuration docs.

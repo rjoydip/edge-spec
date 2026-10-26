@@ -23,6 +23,12 @@ directory; hosted providers upload the workspace into a microVM and download
 the requested files afterwards. No Dockerfile is added. A hosted template or
 image must include `git` and the runtime the repository needs, or `setup` fails
 as an environment error.
+
+For an all-Cloudflare deployment, use the Sandbox Worker instead of this
+runner: `apps/sandbox-worker` runs the same contract on Cloudflare Containers
+with `@cloudflare/sandbox`. Deploy it with `bun run deploy:sandbox-worker`, set
+`SANDBOX_API_KEY`, and point the dashboard at its URL. This Bun runner remains
+the local/self-hosted option.
 `SANDBOX_ALLOW_UNISOLATED=1` is a development escape hatch and must never be
 used on a shared host.
 
