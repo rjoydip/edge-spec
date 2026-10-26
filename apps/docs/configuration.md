@@ -395,23 +395,33 @@ not the TypeScript sources.
 
 ### Secrets
 
-| Secret                  | Required               | Used by                              |
-| ----------------------- | ---------------------- | ------------------------------------ |
-| `GITHUB_TOKEN`          | For webhook automation | Workflow: scan, commit, PR           |
-| `GITHUB_WEBHOOK_SECRET` | Recommended            | `POST /webhook` HMAC verification    |
-| `SANDBOX_RUNNER_URL`    | No                     | Validation, interactive and workflow |
-| `SANDBOX_API_KEY`       | No                     | Bearer token for the sandbox         |
+| Secret                   | Required              | Used by                              |
+| ------------------------ | --------------------- | ------------------------------------ |
+| `GITHUB_APP_ID`          | For App auth          | Mint installation tokens             |
+| `GITHUB_APP_PRIVATE_KEY` | For App auth          | PKCS#8 PEM used to sign the app JWT  |
+| `GITHUB_TOKEN`           | Fallback for webhooks | Workflow: scan, commit, PR           |
+| `GITHUB_WEBHOOK_SECRET`  | Recommended           | `POST /webhook` HMAC verification    |
+| `SANDBOX_RUNNER_URL`     | No                    | Validation, interactive and workflow |
+| `SANDBOX_API_KEY`        | No                    | Bearer token for the sandbox         |
 
 ```bash
-bunx wrangler secret put GITHUB_TOKEN
+bunx wrangler secret put GITHUB_APP_ID
+bunx wrangler secret put GITHUB_APP_PRIVATE_KEY
 bunx wrangler secret put GITHUB_WEBHOOK_SECRET
+bunx wrangler secret put GITHUB_TOKEN
 bunx wrangler secret put SANDBOX_RUNNER_URL
 bunx wrangler secret put SANDBOX_API_KEY
 ```
 
-The interactive dashboard does **not** use `GITHUB_TOKEN`; it uses the token
-from the browser. The deployment token exists for webhook runs and must never be
-sent to a workflow as a parameter (Workflow parameters are persisted).
+With both App secrets set, a webhook run mints a short-lived installation token
+scoped to the repository. Tokens are cached in the isolate only until a minute
+before GitHub expires them; a restart costs one mint request. Without the App
+secrets, the workflow falls back to `GITHUB_TOKEN`.
+
+The interactive dashboard does **not** use either deployment credential; it
+uses the token from the browser. The deployment credentials exist for webhook
+runs and must never be sent to a workflow as parameters (Workflow parameters are
+persisted). The installation id is not a secret and is passed instead.
 
 ### GitHub token permissions
 
@@ -428,7 +438,12 @@ sent to a workflow as a parameter (Workflow parameters are persisted).
 3. Content type: `application/json`.
 4. Secret: the same value as `GITHUB_WEBHOOK_SECRET`.
 5. Events: **push** (the handler does not filter event types).
-6. Ensure `GITHUB_TOKEN` can write to the repository and Workers AI is bound.
+6. Use the GitHub App installation, or ensure `GITHUB_TOKEN` can write to the
+   repository, and keep Workers AI bound.
+
+For App auth, install the app on the repository, subscribe the app to pushes,
+and set the app's webhook secret to `GITHUB_WEBHOOK_SECRET`. The app needs
+**Contents: read and write** and **Pull requests: read and write**.
 
 Runs are durable and can be polled at `GET /api/runs/:id` with the `workflowId`
 returned by the webhook.

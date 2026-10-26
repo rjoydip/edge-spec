@@ -119,8 +119,8 @@ not. The dashboard lets the user generate another gap individually via
 
 ```text
 GitHub ── POST /webhook ──▶ verify HMAC (if GITHUB_WEBHOOK_SECRET is set)
-                            parse repository.full_name + ref
-                            binding.create({ repo, ref })  → 202 { workflowId }
+                            parse repository.full_name + ref + installation.id
+                            binding.create({ repo, ref, installationId })  → 202 { workflowId }
 Workflow
   scan-repository     tree, first gap, source          (durable step)
   generate-test       Workers AI                       (2 retries, exponential)
@@ -132,7 +132,10 @@ Workflow
 Workflow parameters are persisted by Cloudflare. Therefore the workflow:
 
 - never accepts a visitor's provider key,
-- uses the deployment's `AI` binding and `GITHUB_TOKEN`,
+- uses the deployment's `AI` binding,
+- mints a repo-scoped GitHub App installation token when the App secrets are
+  configured, cached only until shortly before expiry; `GITHUB_TOKEN` is the
+  fallback for deployments without an App,
 - rejects non-Workers-AI providers with a clear error.
 
 The dashboard remains the place for bring-your-own-key runs.

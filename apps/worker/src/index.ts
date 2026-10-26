@@ -920,10 +920,15 @@ app.post("/webhook", async (c) => {
     const repo = str(repository.full_name);
     if (!repo) throw new HttpError(400, "Webhook payload has no repository.");
     const ref = str(payload.ref)?.replace(/^refs\/heads\//, "") ?? "main";
+    // An App webhook names its installation; a PAT deployment sends none.
+    const installationId = Number(asRecord(payload.installation).id);
+    const useApp = Number.isInteger(installationId) && installationId > 0;
 
     const binding = c.env.TEST_GENERATION_WORKFLOW;
     if (!binding) throw new HttpError(501, "Workflows are not bound on this deployment.");
-    const instance = await binding.create({ params: { repo, ref } });
+    const instance = await binding.create({
+      params: { repo, ref, ...(useApp ? { installationId } : {}) },
+    });
     return c.json({ workflowId: instance.id }, 202);
   } catch (err) {
     return fail(err);

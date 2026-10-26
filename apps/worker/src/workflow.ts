@@ -8,6 +8,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { generateTest } from "@edge-spec/core/ai";
 import { DEFAULT_AI, pipelineConfig, providerById } from "@edge-spec/core/catalog";
 import { GitHub } from "@edge-spec/core/github";
+import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github-app";
 import { findGaps } from "@edge-spec/core/scanner";
 import { assertTestOnly } from "@edge-spec/core/policy";
 import { validateTest } from "@edge-spec/core/validate";
@@ -17,6 +18,8 @@ import type { Generation, Validation } from "@edge-spec/core/types";
 export interface WorkflowParams {
   repo: string;
   ref: string;
+  /** From the webhook payload. Not a secret, so it may be persisted. */
+  installationId?: number;
   provider?: string;
   model?: string;
   maxRetries?: number;
@@ -24,6 +27,9 @@ export interface WorkflowParams {
   strictTypes?: boolean;
   coverageTarget?: number;
 }
+
+/** Tokens are per isolate; a restart only costs one mint request. */
+const installationTokens = new InstallationTokenCache();
 
 interface Scanned {
   path: string;
@@ -45,7 +51,17 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       throw new Error("Webhook automation runs on Workers AI. Use the dashboard for BYO keys.");
     }
     const model = params.model ?? DEFAULT_AI.model;
-    const github = new GitHub(this.env.GITHUB_TOKEN);
+    const app = gitHubAppFromEnv(this.env);
+    const token =
+      app && params.installationId && params.installationId > 0
+        ? await installationTokens.get(app, params.installationId, repo)
+        : this.env.GITHUB_TOKEN;
+    if (!token) {
+      throw new Error(
+        "The webhook has no GitHub credential. Configure the GitHub App secrets or GITHUB_TOKEN.",
+      );
+    }
+    const github = new GitHub(token);
 
     const scanned = await step.do("scan-repository", async (): Promise<Scanned | null> => {
       const tree = await github.tree(repo, ref);

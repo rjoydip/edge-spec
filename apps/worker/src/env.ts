@@ -40,6 +40,9 @@ export interface Env {
   RUNS_DB?: D1Database;
   /** Automation path only. The dashboard always uses the visitor's own token. */
   GITHUB_TOKEN?: string;
+  /** GitHub App credentials for CI. Short-lived installation tokens are minted. */
+  GITHUB_APP_ID?: string;
+  GITHUB_APP_PRIVATE_KEY?: string;
   GITHUB_WEBHOOK_SECRET?: string;
   SANDBOX_RUNNER_URL?: string;
   SANDBOX_API_KEY?: string;

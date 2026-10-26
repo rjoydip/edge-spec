@@ -580,11 +580,16 @@ Behaviour:
    raw body. Invalid → 401.
 2. Reads `repository.full_name` and `ref` (`refs/heads/x` → `x`; defaults to
    `main`).
-3. Starts `TestGenerationWorkflow` with `{repo, ref}` and returns
-   `202 {"workflowId":"…"}`.
+3. Starts `TestGenerationWorkflow` with `{repo, ref, installationId?}` and
+   returns `202 {"workflowId":"…"}`. `installationId` comes from the App webhook
+   payload and is not a secret.
+4. The workflow mints a repo-scoped installation token when
+   `GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY` are configured, cached until just
+   before expiry; otherwise it uses `GITHUB_TOKEN`.
 
-The workflow uses the deployment's Workers AI binding and `GITHUB_TOKEN`; it
-never receives visitor keys. Missing bindings return 501.
+The workflow uses the deployment's Workers AI binding and never receives
+visitor keys. Missing bindings return 501; no credential returns a failed run
+with a readable error.
 
 ---
 

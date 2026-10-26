@@ -37,7 +37,7 @@ measures something it actually ran, or says "not measured".
 | MCP stdio server (5 tools)                                   | Shipped                                                        |
 | Dashboard                                                    | Redesign draft at `/?draft`; fixtures, not yet wired to events |
 | Persistence                                                  | Optional D1 for run history (`RUNS_DB`); settings stay local   |
-| Auth                                                         | User PATs in headers. No GitHub App                            |
+| Auth                                                         | User PATs for dashboard; optional GitHub App for CI            |
 | Run history                                                  | Shipped (`/api/runs`, History/Compare); backlog/policies later |
 | Backlog, policies                                            | Not built                                                      |
 
@@ -291,17 +291,22 @@ run a bounded number of cases. Keep it opt-in because flakiness/cost is real.
 **4.1 Runner adapters.** Support vitest/jest/playwright conventions as
 first-class, detected per repo, not bolted onto `bun:test`. The PR uses the
 repo's runner and assertions.
+
 **4.2 Repo memory.** Persist accepted conventions, helpers, fixtures, and
 naming per repo (opt-in, no source retention beyond chosen snippets) and feed
 them into future prompts. Version the prompt so results are attributable.
+
 **4.3 Eval harness and routing.** Golden repos with expected gaps and outcomes;
 score providers/models on verified rate, acceptance, cost, and flake rate. Route
 cheap models to simple files and strong models to failures; fall back on quota.
+
 **4.4 VS Code extension and watch mode.** Scan the open workspace, preview
 diffs, apply or reject locally, and run the local sandbox. `edgespec watch`
 regenerates tests for changed files before commit.
+
 **4.5 MCP resources and approvals.** Expose gaps, specs, coverage, and run
 status as MCP resources; require explicit approval before a tool opens a PR.
+
 **4.6 Team workspaces.** Shared policies, backlog, and history; audit log for
 autonomous actions; retention controls; no secrets. This intentionally relaxes
 "the deployment stores no user configuration": policies are workspace data,

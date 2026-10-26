@@ -107,8 +107,10 @@ and returns `{ "exitCode": 0, "stdout": "…", "stderr": "…" }`.
 ### Deployment secrets
 
 ```bash
-bunx wrangler secret put GITHUB_TOKEN            # webhook automation only
+bunx wrangler secret put GITHUB_APP_ID           # GitHub App auth for webhooks
+bunx wrangler secret put GITHUB_APP_PRIVATE_KEY  # PKCS#8 PEM
 bunx wrangler secret put GITHUB_WEBHOOK_SECRET   # verifies x-hub-signature-256
+bunx wrangler secret put GITHUB_TOKEN            # fallback when no App is set
 bunx wrangler secret put SANDBOX_RUNNER_URL
 bunx wrangler secret put SANDBOX_API_KEY
 ```
@@ -127,5 +129,7 @@ bunx wrangler secret put SANDBOX_API_KEY
 
 The dashboard streams each phase over SSE (`POST /api/run`), so keys stay in the
 request. GitHub push webhooks use the durable `TestGenerationWorkflow` with the
-deployment's own Workers AI binding and token; user keys never enter Workflow
-state.
+deployment's own Workers AI binding. When the GitHub App secrets are set, each
+workflow mints a repo-scoped installation token that is cached only until just
+before expiry; otherwise it falls back to `GITHUB_TOKEN`. User keys never enter
+Workflow state.
