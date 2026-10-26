@@ -18,11 +18,6 @@ commitment to a date.
 
 ## Dashboard and workspace
 
-- [ ] **Workspace and audit UI.** `GET | PUT /api/workspace` and
-      `GET /api/audit` exist but the dashboard has no screen for them. Add a
-      workspace section (name, retention days) and an audit table with repo
-      filter. Done when a team can change retention and read audit events
-      without curl.
 - [ ] **Audit pagination.** `GET /api/audit` returns the newest N rows with no
       cursor. Add `before`/cursor paging if rows outgrow one page.
 
@@ -123,8 +118,3 @@ Keep these out unless the product direction explicitly changes:
 - Storing user PATs or AI keys server-side.
 - Autonomous merges; human approval stays for anything that leaves the session.
 - Multi-language test generation before the JS/TS loop is excellent.
-
-## Documentation
-
-- [ ] **Workspace/audit docs in the dashboard guide.** API and configuration
-      docs describe both; the dashboard guide does not. Add it with the UI.
