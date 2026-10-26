@@ -60,8 +60,8 @@ live badge and a pulsing dot on the brand mark.
 ## Settings
 
 The settings sheet sections are **Provider**, **Sandbox**, **Keys**,
-**Pipeline**, **Policy**, **Deployment** and **Appearance**. Provider and
-sandbox settings are also reachable from their header badges.
+**Pipeline**, **Policy**, **Deployment** and **Appearance**. Open it from the
+profile menu; the header keeps the provider and sandbox shortcuts.
 
 - **Provider** — provider, model, base URL for the private provider, and the
   matching key. Changing the provider clears the key field. Workers AI adds a

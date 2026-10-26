@@ -4,12 +4,18 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  Activity,
   CalendarClock,
+  CheckCircle2,
   Database,
+  GitPullRequest,
+  Info,
+  ListChecks,
   Loader2,
   MemoryStick,
   Save,
   ShieldCheck,
+  Terminal,
   Trash2,
 } from "lucide-react";
 import type { RepoMemory } from "@edge-spec/core/memory";
@@ -34,14 +40,6 @@ import {
 
 const D1_NOTICE =
   "Not enabled on this deployment. Add the optional D1 binding in wrangler.toml and apply the migrations.";
-
-const when = (value: number): string =>
-  new Date(value).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
 const linesOf = (raw: string): string[] =>
   raw
@@ -631,6 +629,59 @@ export function DeploymentSettings({ repo }: { repo: string }) {
   );
 }
 
+type AuditTone = {
+  icon: typeof Activity;
+  dot: string;
+  badge: "success" | "danger" | "accent" | "warning" | "neutral";
+};
+
+const AUDIT_TONE: Record<string, AuditTone> = {
+  pr_opened: { icon: GitPullRequest, dot: "bg-emerald-400", badge: "success" },
+  pr_blocked: { icon: ShieldCheck, dot: "bg-rose-400", badge: "danger" },
+  pr_check: { icon: CheckCircle2, dot: "bg-sky-400", badge: "accent" },
+  command: { icon: Terminal, dot: "bg-sky-400", badge: "accent" },
+  policy_updated: { icon: ShieldCheck, dot: "bg-violet-400", badge: "accent" },
+  memory_updated: { icon: MemoryStick, dot: "bg-indigo-400", badge: "accent" },
+  schedule_updated: { icon: CalendarClock, dot: "bg-amber-400", badge: "warning" },
+  schedule_deleted: { icon: CalendarClock, dot: "bg-amber-400", badge: "warning" },
+  backlog_updated: { icon: ListChecks, dot: "bg-emerald-400", badge: "success" },
+  workspace_updated: { icon: Database, dot: "bg-indigo-400", badge: "accent" },
+  drift_scan: { icon: Activity, dot: "bg-amber-400", badge: "warning" },
+  retention_purge: { icon: Trash2, dot: "bg-rose-400", badge: "danger" },
+};
+
+const auditTone = (action: string): AuditTone =>
+  AUDIT_TONE[action] ?? { icon: Info, dot: "bg-zinc-500", badge: "neutral" };
+
+const dayKeyOf = (value: number): string => new Date(value).toDateString();
+
+const dayLabelOf = (key: string): string =>
+  key === new Date().toDateString()
+    ? "Today"
+    : new Date(key).toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+
+const timeOf = (value: number): string =>
+  new Date(value).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
+const detailOf = (detail: Record<string, unknown>): string =>
+  Object.entries(detail)
+    .map(([key, value]) => {
+      const text =
+        typeof value === "string"
+          ? value
+          : Array.isArray(value)
+            ? value.join(", ")
+            : value !== null && typeof value === "object"
+              ? JSON.stringify(value)
+              : String(value);
+      return `${key}: ${text}`;
+    })
+    .join(" · ");
+
 /** Deployment-wide log, opened from the profile menu. */
 export function AuditDialog({
   open,
@@ -668,6 +719,12 @@ export function AuditDialog({
       cancelled = true;
     };
   }, [open, repo, scope]);
+
+  const groups = events.reduce<Record<string, AuditEvent[]>>((result, event) => {
+    const key = dayKeyOf(event.createdAt);
+    (result[key] ??= []).push(event);
+    return result;
+  }, {});
 
   return (
     <Dialog
@@ -708,25 +765,51 @@ export function AuditDialog({
           No audit events yet. Workspace, memory, policy and schedule updates write here.
         </p>
       ) : (
-        <div className="no-scrollbar max-h-[55vh] space-y-1.5 overflow-y-auto">
-          {events.map((event, index) => (
-            <div
-              key={event.id ?? `${event.createdAt}-${index}`}
-              className="rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="neutral">{event.action}</Badge>
-                {event.repo && (
-                  <span className="font-mono text-[10px] text-zinc-400">{event.repo}</span>
-                )}
-                <span className="text-[10px] text-zinc-500">{event.actor}</span>
-                <span className="ml-auto text-[10px] text-zinc-500">{when(event.createdAt)}</span>
+        <div className="no-scrollbar h-[min(26rem,50vh)] overflow-y-auto pr-1">
+          {Object.entries(groups).map(([day, list]) => (
+            <div key={day} className="mb-3 last:mb-0">
+              <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+                {dayLabelOf(day)}
+              </p>
+              <div className="relative ml-1.5 space-y-1.5 border-l border-zinc-800 pl-3">
+                {list.map((event, index) => {
+                  const tone = auditTone(event.action);
+                  const Icon = tone.icon;
+                  const detail = detailOf(event.detail);
+                  return (
+                    <div key={event.id ?? `${event.createdAt}-${index}`} className="relative">
+                      <span
+                        className={cn(
+                          "absolute top-2.5 -left-[19px] size-2 rounded-full ring-2 ring-zinc-900",
+                          tone.dot,
+                        )}
+                      />
+                      <div className="rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-200">
+                            <Icon className="size-3.5 text-zinc-400" />
+                            {event.action.replace(/_/g, " ")}
+                          </span>
+                          <Badge variant={tone.badge}>{event.actor}</Badge>
+                          {event.repo && (
+                            <span className="font-mono text-[10px] text-zinc-400">
+                              {event.repo}
+                            </span>
+                          )}
+                          <span className="ml-auto text-[10px] text-zinc-500">
+                            {timeOf(event.createdAt)}
+                          </span>
+                        </div>
+                        {detail && (
+                          <p className="mt-1 line-clamp-2 text-[10px] text-zinc-500" title={detail}>
+                            {detail}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              {Object.keys(event.detail).length > 0 && (
-                <code className="mt-1 block truncate font-mono text-[10px] text-zinc-500">
-                  {JSON.stringify(event.detail)}
-                </code>
-              )}
             </div>
           ))}
         </div>

@@ -18,6 +18,7 @@ import {
   FileSearch,
   Folder,
   FolderGit2,
+  Gauge,
   GitBranch,
   GitPullRequest,
   History,
@@ -300,6 +301,9 @@ export function AgentWorkspace({
   const [prError, setPrError] = useState<string | undefined>(undefined);
   const [openedUrl, setOpenedUrl] = useState<string | undefined>(undefined);
   const autoHandled = useRef(false);
+
+  /** Open a portalled overlay after the menu closes; opening it inside onSelect can get dismissed. */
+  const openFromMenu = (action: () => void) => window.setTimeout(action, 0);
 
   const parsedInput = parseRepoInput(repoInput);
   const inputLocal = isLocalPathInput(repoInput);
@@ -830,7 +834,7 @@ export function AgentWorkspace({
                       onClick={() => setBacklogOpen(true)}
                       aria-label="Test-debt backlog"
                     >
-                      <ListChecks className="text-emerald-300" />
+                      <ListChecks className="text-indigo-300" />
                     </Button>
                   </Hint>
                 )}
@@ -846,16 +850,6 @@ export function AgentWorkspace({
                     </Button>
                   </Hint>
                 )}
-                <Hint label="Settings">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => onOpenSettings()}
-                    aria-label="Open settings"
-                  >
-                    <Settings className="text-indigo-300" />
-                  </Button>
-                </Hint>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -868,24 +862,66 @@ export function AgentWorkspace({
                       </Avatar>
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuContent align="end" className="w-64">
                     <DropdownMenuLabel>
-                      {project.repo || project.localPath || "no project"}
-                      {project.ref ? ` · ${project.ref}` : ""}
+                      <span className="block truncate text-[11px] font-semibold text-zinc-200">
+                        {project.repo || project.localPath || "No project"}
+                      </span>
+                      <span className="block text-[9px] font-normal text-zinc-500">
+                        {project.ref || "no branch"} · {appearance.mode} mode
+                      </span>
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={toggleMode}>
                       {appearance.mode === "dark" ? <Sun /> : <Moon />}
-                      {appearance.mode === "dark" ? "Light" : "Dark"} mode
+                      Switch to {appearance.mode === "dark" ? "light" : "dark"}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => onOpenSettings("provider")}>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[9px] tracking-wide text-zinc-500 uppercase">
+                      Settings
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => onOpenSettings())}>
+                      <Settings />
+                      All settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("provider"))}
+                    >
                       <KeyRound />
-                      Provider & keys
+                      AI provider & keys
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => onOpenSettings("deployment")}>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("sandbox"))}
+                    >
+                      <Boxes />
+                      Sandbox
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("pipeline"))}
+                    >
+                      <Gauge />
+                      Pipeline
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => onOpenSettings("policy"))}>
+                      <ShieldCheck />
+                      Policy
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("deployment"))}
+                    >
                       <Server />
-                      Deployment config
+                      Deployment
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setAuditOpen(true)}>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("appearance"))}
+                    >
+                      <Sparkles />
+                      Appearance
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[9px] tracking-wide text-zinc-500 uppercase">
+                      Activity
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => setAuditOpen(true))}>
                       <ScrollText />
                       Audit log
                     </DropdownMenuItem>

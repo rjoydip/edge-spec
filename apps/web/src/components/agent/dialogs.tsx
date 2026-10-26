@@ -1498,6 +1498,42 @@ function when(ms: number): string {
 }
 
 /** Stored runs for one repository, with a two-run compare. */
+type RunTone = {
+  badge: "success" | "danger" | "accent" | "neutral";
+  bar: string;
+  tint: string;
+  dot: string;
+};
+
+const RUN_TONE: Record<string, RunTone> = {
+  ready: {
+    badge: "success",
+    bar: "border-l-emerald-400/70",
+    tint: "bg-emerald-500/[0.04]",
+    dot: "bg-emerald-400",
+  },
+  failed: {
+    badge: "danger",
+    bar: "border-l-rose-400/70",
+    tint: "bg-rose-500/[0.05]",
+    dot: "bg-rose-400",
+  },
+  running: {
+    badge: "accent",
+    bar: "border-l-sky-400/70",
+    tint: "bg-sky-500/[0.04]",
+    dot: "bg-sky-400",
+  },
+};
+
+const runTone = (status: string): RunTone =>
+  RUN_TONE[status] ?? {
+    badge: "neutral",
+    bar: "border-l-zinc-500/70",
+    tint: "bg-zinc-900/40",
+    dot: "bg-zinc-500",
+  };
+
 export function HistoryDialog({
   open,
   onClose,
@@ -1604,6 +1640,10 @@ export function HistoryDialog({
     }
   };
 
+  const readyCount = runs.filter((run) => run.status === "ready").length;
+  const failedCount = runs.filter((run) => run.status === "failed").length;
+  const runningCount = runs.filter((run) => run.status === "running").length;
+
   return (
     <Dialog
       open={open}
@@ -1612,21 +1652,16 @@ export function HistoryDialog({
       description={`${repo} · select two runs to compare`}
       className="max-w-4xl"
       footer={
-        <>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mr-auto"
-            onClick={remove}
-            disabled={!enabled || deleting || runs.length === 0}
-          >
-            {deleting ? <Loader2 className="animate-spin" /> : <Trash2 className="size-3.5" />}
-            Delete history
-          </Button>
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Close
-          </Button>
-        </>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mr-auto"
+          onClick={remove}
+          disabled={!enabled || deleting || runs.length === 0}
+        >
+          {deleting ? <Loader2 className="animate-spin" /> : <Trash2 className="size-3.5" />}
+          Delete history
+        </Button>
       }
     >
       {!enabled ? (
@@ -1644,33 +1679,45 @@ export function HistoryDialog({
         </p>
       ) : (
         <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-500/20 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-emerald-500/10 px-3 py-2">
+            <span className="text-[10px] font-semibold tracking-wide text-zinc-400 uppercase">
+              Runs
+            </span>
+            <span className="flex items-center gap-1.5 text-[10px] text-zinc-300">
+              <span className="size-1.5 rounded-full bg-emerald-400" />
+              {readyCount} ready
+            </span>
+            <span className="flex items-center gap-1.5 text-[10px] text-zinc-300">
+              <span className="size-1.5 rounded-full bg-rose-400" />
+              {failedCount} failed
+            </span>
+            {runningCount > 0 && (
+              <span className="flex items-center gap-1.5 text-[10px] text-zinc-300">
+                <span className="size-1.5 rounded-full bg-sky-400" />
+                {runningCount} running
+              </span>
+            )}
+            <span className="ml-auto text-[10px] text-zinc-500">{runs.length} total</span>
+          </div>
           <div className="no-scrollbar max-h-[34vh] space-y-1.5 overflow-auto">
             {runs.map((run) => {
               const index = selected.indexOf(run.id);
+              const tone = runTone(run.status);
               return (
                 <div key={run.id} className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => toggle(run.id)}
                     className={cn(
-                      "min-w-0 flex-1 rounded-xl border px-3 py-2 text-left transition",
+                      "min-w-0 flex-1 rounded-xl border-y border-r border-l-2 px-3 py-2 text-left transition",
+                      tone.bar,
                       index >= 0
                         ? "border-indigo-500/40 bg-indigo-500/10"
-                        : "border-zinc-800/70 bg-zinc-900/40 hover:border-zinc-700",
+                        : cn(tone.tint, "border-zinc-800/70 hover:border-zinc-700"),
                     )}
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          run.status === "ready"
-                            ? "success"
-                            : run.status === "failed"
-                              ? "danger"
-                              : "neutral"
-                        }
-                      >
-                        {run.status}
-                      </Badge>
+                      <Badge variant={tone.badge}>{run.status}</Badge>
                       {index >= 0 && (
                         <Badge variant="accent">{index === 0 ? "before" : "after"}</Badge>
                       )}
@@ -1718,6 +1765,53 @@ export function HistoryDialog({
     </Dialog>
   );
 }
+
+const BACKLOG_TONE: Record<
+  BacklogState,
+  {
+    label: string;
+    badge: "accent" | "success" | "danger" | "neutral";
+    bar: string;
+    tint: string;
+    dot: string;
+  }
+> = {
+  open: {
+    label: "Open",
+    badge: "accent",
+    bar: "border-l-sky-400/70",
+    tint: "bg-sky-500/[0.04]",
+    dot: "bg-sky-400",
+  },
+  accepted: {
+    label: "Accepted",
+    badge: "success",
+    bar: "border-l-emerald-400/70",
+    tint: "bg-emerald-500/[0.05]",
+    dot: "bg-emerald-400",
+  },
+  rejected: {
+    label: "Rejected",
+    badge: "danger",
+    bar: "border-l-rose-400/70",
+    tint: "bg-rose-500/[0.05]",
+    dot: "bg-rose-400",
+  },
+  ignored: {
+    label: "Ignored",
+    badge: "neutral",
+    bar: "border-l-zinc-500/70",
+    tint: "bg-zinc-900/40",
+    dot: "bg-zinc-500",
+  },
+  closed: {
+    label: "Closed",
+    badge: "neutral",
+    bar: "border-l-violet-400/70",
+    tint: "bg-violet-500/[0.04]",
+    dot: "bg-violet-400",
+  },
+};
 
 /** Durable test-debt items for one repository. */
 export function BacklogDialog({
@@ -1773,6 +1867,14 @@ export function BacklogDialog({
   };
 
   const visible = filter === "all" ? items : items.filter((item) => item.state === filter);
+  const counts: Record<BacklogState, number> = {
+    open: 0,
+    accepted: 0,
+    rejected: 0,
+    ignored: 0,
+    closed: 0,
+  };
+  for (const item of items) counts[item.state] += 1;
 
   return (
     <Dialog
@@ -1781,11 +1883,6 @@ export function BacklogDialog({
       title="Test-debt backlog"
       description={`${repo} · scans keep this current`}
       className="max-w-4xl"
-      footer={
-        <Button variant="outline" size="sm" onClick={onClose}>
-          Close
-        </Button>
-      }
     >
       {!enabled ? (
         <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
@@ -1793,23 +1890,40 @@ export function BacklogDialog({
         </p>
       ) : (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Select value={filter} onValueChange={(value) => setFilter(value as typeof filter)}>
-              <SelectTrigger className="h-8 w-36 text-[11px]" aria-label="Filter backlog">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All states</SelectItem>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="accepted">Accepted</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-                <SelectItem value="ignored">Ignored</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="ml-auto text-[10px] text-zinc-500">
-              {visible.length} of {items.length} item(s)
-            </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] transition",
+                filter === "all"
+                  ? "border-indigo-400/60 bg-indigo-500/15 text-indigo-200"
+                  : "border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+              )}
+            >
+              All <span className="font-mono text-zinc-500">{items.length}</span>
+            </button>
+            {(Object.keys(BACKLOG_TONE) as BacklogState[]).map((state) => {
+              const tone = BACKLOG_TONE[state];
+              return (
+                <button
+                  key={state}
+                  type="button"
+                  onClick={() => setFilter(state)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] transition",
+                    filter === state
+                      ? "border-indigo-400/60 bg-indigo-500/15 text-indigo-200"
+                      : "border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+                  )}
+                >
+                  <span className={cn("size-1.5 rounded-full", tone.dot)} />
+                  {tone.label}
+                  <span className="font-mono text-zinc-500">{counts[state]}</span>
+                </button>
+              );
+            })}
+            <span className="ml-auto text-[10px] text-zinc-500">{visible.length} shown</span>
           </div>
           {loading ? (
             <p className="flex items-center justify-center gap-2 py-8 text-[11px] text-zinc-500">
@@ -1821,40 +1935,60 @@ export function BacklogDialog({
             </p>
           ) : (
             <div className="no-scrollbar max-h-[50vh] space-y-1.5 overflow-auto">
-              {visible.map((item) => (
-                <div
-                  key={item.path}
-                  className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-mono text-[11px] text-zinc-200">
-                      {item.path}
-                    </span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-500">
-                      <Badge variant="neutral">{item.kind}</Badge>
-                      {item.risk && <Badge variant="neutral">{item.risk} risk</Badge>}
-                      <span>{item.owner ?? "unowned"}</span>
-                      <span>· last seen {when(item.lastSeen)}</span>
-                    </span>
-                  </span>
-                  <Select
-                    value={item.state}
-                    onValueChange={(value) => void act(item, value as BacklogState)}
-                    disabled={busy === item.path}
+              {visible.map((item) => {
+                const tone = BACKLOG_TONE[item.state];
+                return (
+                  <div
+                    key={item.path}
+                    className={cn(
+                      "flex flex-wrap items-center gap-2 rounded-xl border-y border-r border-l-2 border-zinc-800/70 px-3 py-2 transition hover:border-zinc-700",
+                      tone.bar,
+                      tone.tint,
+                    )}
                   >
-                    <SelectTrigger className="h-8 w-28 text-[11px]" aria-label="Backlog state">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">Open</SelectItem>
-                      <SelectItem value="accepted">Accepted</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="ignored">Ignored</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-mono text-[11px] text-zinc-200">
+                        {item.path}
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-500">
+                        <Badge variant={tone.badge}>{tone.label}</Badge>
+                        <Badge variant="neutral">{item.kind}</Badge>
+                        {item.risk && (
+                          <Badge
+                            variant={
+                              item.risk === "high"
+                                ? "danger"
+                                : item.risk === "medium"
+                                  ? "warning"
+                                  : "neutral"
+                            }
+                          >
+                            {item.risk} risk
+                          </Badge>
+                        )}
+                        <span>{item.owner ?? "unowned"}</span>
+                        <span>· last seen {when(item.lastSeen)}</span>
+                      </span>
+                    </span>
+                    <Select
+                      value={item.state}
+                      onValueChange={(value) => void act(item, value as BacklogState)}
+                      disabled={busy === item.path}
+                    >
+                      <SelectTrigger className="h-8 w-28 text-[11px]" aria-label="Backlog state">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="accepted">Accepted</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                        <SelectItem value="ignored">Ignored</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })}
             </div>
           )}
           {error && <p className="text-[11px] text-rose-300">{error}</p>}
@@ -1865,36 +1999,42 @@ export function BacklogDialog({
 }
 
 function ComparePanel({ comparison }: { comparison: RunComparison }) {
-  const rows: Array<[string, string, string]> = [
+  const rows: Array<[string, string, number, 1 | -1]> = [
     [
       "Missing tests",
       `${comparison.missing.before} → ${comparison.missing.after}`,
-      signed(comparison.missing.delta),
+      comparison.missing.delta,
+      -1,
     ],
     [
       "Files covered",
       `${comparison.files.before} → ${comparison.files.after}`,
-      signed(comparison.files.after - comparison.files.before),
+      comparison.files.after - comparison.files.before,
+      1,
     ],
     [
       "Verified",
       `${comparison.verified.before} → ${comparison.verified.after}`,
-      signed(comparison.verified.after - comparison.verified.before),
+      comparison.verified.after - comparison.verified.before,
+      1,
     ],
     [
       "Accepted",
       `${comparison.accepted.before} → ${comparison.accepted.after}`,
-      signed(comparison.accepted.after - comparison.accepted.before),
+      comparison.accepted.after - comparison.accepted.before,
+      1,
     ],
     [
       "Rejected",
       `${comparison.rejected.before} → ${comparison.rejected.after}`,
-      signed(comparison.rejected.after - comparison.rejected.before),
+      comparison.rejected.after - comparison.rejected.before,
+      -1,
     ],
     [
       "Coverage lines",
       `${signed(comparison.coverageLines.before)} → ${signed(comparison.coverageLines.after)}`,
-      signed(comparison.coverageLines.delta),
+      comparison.coverageLines.delta,
+      1,
     ],
   ];
 
@@ -1904,16 +2044,21 @@ function ComparePanel({ comparison }: { comparison: RunComparison }) {
         Compare · {comparison.newFiles.length} new, {comparison.closedFiles.length} closed
       </p>
       <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-        {rows.map(([label, values, delta]) => (
-          <div
-            key={label}
-            className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/60 px-2.5 py-1.5"
-          >
-            <span className="text-[10px] text-zinc-500">{label}</span>
-            <span className="font-mono text-[10px] text-zinc-300">{values}</span>
-            <Badge variant="neutral">{delta}</Badge>
-          </div>
-        ))}
+        {rows.map(([label, values, delta, direction]) => {
+          const good = delta * direction;
+          return (
+            <div
+              key={label}
+              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/60 px-2.5 py-1.5"
+            >
+              <span className="text-[10px] text-zinc-500">{label}</span>
+              <span className="font-mono text-[10px] text-zinc-300">{values}</span>
+              <Badge variant={good > 0 ? "success" : good < 0 ? "danger" : "neutral"}>
+                {signed(delta)}
+              </Badge>
+            </div>
+          );
+        })}
       </div>
       {comparison.newFiles.length > 0 && (
         <div className="mt-2 space-y-1">
