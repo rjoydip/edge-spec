@@ -746,7 +746,7 @@ export function DeploymentDialog({
         <TabsContent
           value="workspace"
           forceMount
-          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1 data-[state=inactive]:hidden"
           style={{ animation: "none" }}
         >
           <WorkspacePanel open={open} />
@@ -754,7 +754,7 @@ export function DeploymentDialog({
         <TabsContent
           value="audit"
           forceMount
-          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1 data-[state=inactive]:hidden"
           style={{ animation: "none" }}
         >
           <AuditPanel open={open} repo={repo} />
@@ -762,7 +762,7 @@ export function DeploymentDialog({
         <TabsContent
           value="schedules"
           forceMount
-          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1 data-[state=inactive]:hidden"
           style={{ animation: "none" }}
         >
           <SchedulesPanel open={open} repo={repo} />
@@ -770,7 +770,7 @@ export function DeploymentDialog({
         <TabsContent
           value="memory"
           forceMount
-          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1 data-[state=inactive]:hidden"
           style={{ animation: "none" }}
         >
           <MemoryPanel open={open} repo={repo} />
@@ -778,7 +778,7 @@ export function DeploymentDialog({
         <TabsContent
           value="policies"
           forceMount
-          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1 data-[state=inactive]:hidden"
           style={{ animation: "none" }}
         >
           <PolicyPanel open={open} repo={repo} />
