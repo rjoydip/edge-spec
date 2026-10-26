@@ -1,6 +1,6 @@
 /** LCOV parsing. Coverage is a fact from a runner, never a guess. */
 import { testFilesFor } from "./scanner";
-import type { Gap } from "./types";
+import type { CoverageDelta, Gap } from "./types";
 
 export interface CoverageFile {
   path: string;
@@ -87,6 +87,51 @@ export function parseLcov(text: string): CoverageReport | undefined {
     lines: { covered, total },
     ...(branchTotal > 0 ? { branches: { covered: branchCovered, total: branchTotal } } : {}),
     files,
+  };
+}
+
+/** The report record for one repository path, absolute or relative. */
+function fileCoverage(report: CoverageReport | undefined, path: string): CoverageFile | undefined {
+  const target = normalizePath(path).replace(/^\/+/, "");
+  return report?.files.find((file) => {
+    const candidate = normalizePath(file.path).replace(/^\/+/, "");
+    return candidate === target || candidate.endsWith(`/${target}`);
+  });
+}
+
+/**
+ * The per-file change between two executed reports. A delta exists only when
+ * both reports measured the file; missing data is "not measured", never zero.
+ */
+export function coverageDelta(
+  before: CoverageReport | undefined,
+  after: CoverageReport | undefined,
+  path: string,
+): CoverageDelta {
+  const first = fileCoverage(before, path);
+  const second = fileCoverage(after, path);
+  if (!first || !second) return { status: "not-measured" };
+
+  const branches =
+    first.branches && second.branches
+      ? {
+          before: first.branches.covered,
+          after: second.branches.covered,
+          delta: second.branches.covered - first.branches.covered,
+          total: second.branches.total,
+        }
+      : undefined;
+
+  return {
+    status: "measured",
+    path: normalizePath(path).replace(/^\/+/, ""),
+    lines: {
+      before: first.lines.covered,
+      after: second.lines.covered,
+      delta: second.lines.covered - first.lines.covered,
+      total: second.lines.total,
+    },
+    ...(branches ? { branches } : {}),
   };
 }
 

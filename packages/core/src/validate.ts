@@ -2,6 +2,7 @@
  * Validation. A real runner is optional: without one, EdgeSpec says so instead
  * of claiming a test passed.
  */
+import { coverageDelta, type CoverageReport } from "./coverage";
 import type { CheckKind, CheckResult, Validation } from "./types";
 import { runInSandbox, type SandboxConfig, type SandboxRepo } from "./sandbox";
 
@@ -62,6 +63,10 @@ export interface ValidateInput {
   sandbox?: SandboxConfig;
   /** The repository a v2 runner clones before writing the files. */
   repo?: SandboxRepo;
+  /** Ask the runner for LCOV and attach a per-file delta to the result. */
+  measureCoverage?: boolean;
+  /** The before report; a delta needs both reports. */
+  baselineCoverage?: CoverageReport;
   fetchImpl?: typeof fetch;
 }
 
@@ -95,8 +100,12 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
       [input.testPath]: input.test,
     },
     command: input.repo ? `bun test ${shellWord(input.testPath)}` : "bun test",
+    ...(input.measureCoverage ? { coverage: { format: "lcov" as const } } : {}),
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
   });
+  const coverage = input.measureCoverage
+    ? coverageDelta(input.baselineCoverage, run.coverage, input.sourcePath)
+    : undefined;
 
   if (!run.ok && (run.unreachable || run.environmentError)) {
     return {
@@ -104,6 +113,7 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
       verified: false,
       output: run.output,
       durationMs: Date.now() - started,
+      ...(coverage ? { coverage } : {}),
       ...(run.environmentError ? { environmentError: run.environmentError } : {}),
     };
   }
@@ -113,6 +123,7 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
     verified: true,
     output: run.output || (run.ok ? "bun test passed." : "bun test failed without output."),
     durationMs: Date.now() - started,
+    ...(coverage ? { coverage } : {}),
   };
 }
 

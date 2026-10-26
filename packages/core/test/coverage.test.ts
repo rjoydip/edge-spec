@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { coverageGaps, parseLcov } from "../src/coverage";
+import { coverageDelta, coverageGaps, parseLcov } from "../src/coverage";
 
 const LCOV = [
   "SF:src/math.ts",
@@ -30,6 +30,38 @@ describe("parseLcov", () => {
 
   it("normalizes a leading ./ in report paths", () => {
     expect(parseLcov("SF:./src/a.ts\nDA:1,1\nend_of_record")?.files[0]?.path).toBe("src/a.ts");
+  });
+});
+
+describe("coverageDelta", () => {
+  const before = parseLcov(
+    ["SF:src/math.ts", "DA:1,1", "DA:2,0", "BRDA:2,0,0,1", "BRDA:2,0,1,-", "end_of_record"].join(
+      "\n",
+    ),
+  );
+  const after = parseLcov(
+    [
+      "SF:/tmp/repo/src/math.ts",
+      "DA:1,1",
+      "DA:2,1",
+      "BRDA:2,0,0,1",
+      "BRDA:2,0,1,1",
+      "end_of_record",
+    ].join("\n"),
+  );
+
+  it("measures line and branch deltas from two reports, matching absolute paths", () => {
+    expect(coverageDelta(before, after, "src/math.ts")).toEqual({
+      status: "measured",
+      path: "src/math.ts",
+      lines: { before: 1, after: 2, delta: 1, total: 2 },
+      branches: { before: 1, after: 2, delta: 1, total: 2 },
+    });
+  });
+
+  it("is not measured when either report is missing or silent about the file", () => {
+    expect(coverageDelta(undefined, after, "src/math.ts")).toEqual({ status: "not-measured" });
+    expect(coverageDelta(before, after, "src/user.ts")).toEqual({ status: "not-measured" });
   });
 });
 

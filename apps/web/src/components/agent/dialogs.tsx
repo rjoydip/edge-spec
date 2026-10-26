@@ -67,6 +67,8 @@ import { HighlightedCode } from "./highlight";
 import {
   CheckSummary,
   EndpointStatus,
+  coverageBodyLine,
+  coverageDeltaLabel,
   coverageLabel,
   ICON_GRADIENT,
   MethodChip,
@@ -339,6 +341,9 @@ export function SourceDialog({
             {providerById(generation.provider)?.name ?? generation.provider} · {generation.model}
           </Badge>
           <CheckSummary validation={validation} />
+          {validation.coverage && (
+            <Badge variant="neutral">{coverageDeltaLabel(validation.coverage)}</Badge>
+          )}
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -962,6 +967,11 @@ export function PrDialog({
   const blocked = accepted.length === 0 || pending.length > 0 || busy;
   const providerName = providerById(settings.provider)?.name ?? settings.provider;
   const files = accepted.map((entry) => entry.item.generation.testPath);
+  const coverageLines = accepted
+    .map((entry) =>
+      coverageBodyLine(entry.item.generation.sourcePath, entry.item.validation.coverage),
+    )
+    .filter(Boolean);
 
   const generateCopy = () => {
     onChange({
@@ -983,6 +993,10 @@ export function PrDialog({
         staticOnly ? `- ${staticOnly} suite(s) passed static checks only.` : "",
         skipped.length ? `- ${skipped.length} contract operation(s) skipped.` : "",
         "- Application source was not modified.",
+        "",
+        "## Coverage",
+        "",
+        ...(coverageLines.length > 0 ? coverageLines : ["- Not measured: no two LCOV reports."]),
       ]
         .filter(Boolean)
         .join("\n"),

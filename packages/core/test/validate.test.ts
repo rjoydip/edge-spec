@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { parseLcov } from "../src/coverage";
 import { staticCheck, validateTest } from "../src/validate";
 
 const GOOD = `import { describe, it, expect } from "bun:test";
@@ -108,6 +109,50 @@ describe("validateTest", () => {
     expect(result.verified).toBe(true);
     expect(body.repo).toEqual({ url: "https://github.com/acme/api.git", ref: "main" });
     expect(body.command).toBe("bun test 'src/math.test.ts'");
+  });
+
+  it("asks for LCOV and reports a delta only when both reports measured", async () => {
+    let body: Record<string, unknown> = {};
+    const after = ["SF:src/math.ts", "DA:1,1", "DA:2,1", "end_of_record"].join("\n");
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(
+        JSON.stringify({
+          exitCode: 0,
+          stdout: "1 pass",
+          artifacts: { "coverage/lcov.info": after },
+        }),
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example", coverage: true },
+      measureCoverage: true,
+      baselineCoverage: parseLcov("SF:src/math.ts\nDA:1,1\nDA:2,0\nend_of_record"),
+      fetchImpl: fakeFetch,
+    });
+
+    expect(body.coverage).toEqual({ format: "lcov" });
+    expect(result.coverage).toEqual({
+      status: "measured",
+      path: "src/math.ts",
+      lines: { before: 1, after: 2, delta: 1, total: 2 },
+    });
+  });
+
+  it("says not-measured when the runner returns no report", async () => {
+    const fakeFetch = (async () =>
+      new Response(JSON.stringify({ exitCode: 0, stdout: "1 pass" }))) as unknown as typeof fetch;
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example", coverage: true },
+      measureCoverage: true,
+      baselineCoverage: parseLcov("SF:src/math.ts\nDA:1,1\nend_of_record"),
+      fetchImpl: fakeFetch,
+    });
+
+    expect(result.coverage).toEqual({ status: "not-measured" });
   });
 
   it("does not claim verification when the runner is unreachable", async () => {

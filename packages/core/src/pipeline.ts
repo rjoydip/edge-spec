@@ -24,6 +24,7 @@ import {
   type SandboxConfig,
 } from "./validate";
 import { sandboxRepo, runInSandbox } from "./sandbox";
+import type { CoverageReport } from "./coverage";
 import { apiGaps, contractTestsFor, parseJUnit } from "./openapi";
 import {
   HttpError,
@@ -425,6 +426,32 @@ export async function* runPipeline(
     const blobsForChecks = input.retryGaps && input.retryGaps.length > 0 ? [] : blobs;
     const checks = await readRepositoryChecks(github, input.repo, input.ref, blobsForChecks);
 
+    // Coverage is measured only when the visitor asked for it and a runner can
+    // clone the repo. This first report is the baseline for every file's delta.
+    const sandbox = options.sandbox;
+    const testCheck = checks.checks.find((check) => check.kind === "test");
+    const measureCoverage = Boolean(
+      unitMode && loaded.length > 0 && sandbox?.coverage && repoArg && testCheck,
+    );
+    let baselineCoverage: CoverageReport | undefined;
+    if (measureCoverage && sandbox && repoArg && testCheck) {
+      yield log("info", `Measuring baseline coverage: ${testCheck.command}.`);
+      const run = await runInSandbox({
+        sandbox,
+        repo: repoArg,
+        command: testCheck.command,
+        coverage: { format: "lcov" },
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+      });
+      baselineCoverage = run.coverage;
+      yield log(
+        baselineCoverage ? "info" : "warn",
+        baselineCoverage
+          ? "Baseline coverage measured."
+          : `Baseline coverage not measured${run.output ? `: ${failureSummary(run.output, 300)}` : "."}`,
+      );
+    }
+
     const ready = new Set<string>();
     // A sandbox may cap its own runs; honour the tighter of the two.
     const effective = Math.min(
@@ -546,6 +573,8 @@ export async function* runPipeline(
           strictTypes: input.strictTypes,
           ...(options.sandbox ? { sandbox: options.sandbox } : {}),
           ...(repoArg ? { repo: repoArg } : {}),
+          ...(measureCoverage ? { measureCoverage: true } : {}),
+          ...(baselineCoverage ? { baselineCoverage } : {}),
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         });
 
@@ -663,6 +692,8 @@ export async function* runPipeline(
             strictTypes: input.strictTypes,
             ...(options.sandbox ? { sandbox: options.sandbox } : {}),
             ...(repoArg ? { repo: repoArg } : {}),
+            ...(measureCoverage ? { measureCoverage: true } : {}),
+            ...(baselineCoverage ? { baselineCoverage } : {}),
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
           });
           const retryChecks = await runRepositoryChecks({

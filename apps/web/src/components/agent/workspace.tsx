@@ -116,6 +116,8 @@ import { toggleMode, useAppearance } from "@/lib/theme";
 import {
   CheckSummary,
   EndpointStatus,
+  coverageBodyLine,
+  coverageDeltaLabel,
   coverageLabel,
   ICON_GRADIENT,
   IconGradientDefs,
@@ -635,6 +637,9 @@ export function AgentWorkspace({
     const staticOnly = items.filter(
       (item) => item.validation.ok && !item.validation.verified,
     ).length;
+    const coverageLines = items
+      .map((item) => coverageBodyLine(item.generation.sourcePath, item.validation.coverage))
+      .filter(Boolean);
     return [
       "## Summary",
       "",
@@ -650,6 +655,10 @@ export function AgentWorkspace({
       staticOnly ? `- ${staticOnly} suite(s) passed static checks only.` : "",
       apiSkipped ? `- ${apiSkipped} contract operation(s) skipped.` : "",
       "- Application source was not modified.",
+      "",
+      "## Coverage",
+      "",
+      ...(coverageLines.length > 0 ? coverageLines : ["- Not measured: no two LCOV reports."]),
     ]
       .filter(Boolean)
       .join("\n");
@@ -1664,6 +1673,11 @@ export function AgentWorkspace({
                         <span className="hidden sm:block">
                           <CheckSummary validation={item.validation} />
                         </span>
+                        {item.validation.coverage && (
+                          <Badge variant="neutral">
+                            {coverageDeltaLabel(item.validation.coverage)}
+                          </Badge>
+                        )}
                         <Hint label="Preview diff">
                           <Button
                             variant="ghost"

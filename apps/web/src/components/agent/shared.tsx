@@ -4,6 +4,7 @@ import { Badge, Hint, cn } from "@edge-spec/ui";
 import type {
   ApiTestResult,
   CheckResult,
+  CoverageDelta,
   Generation,
   StepId,
   Validation,
@@ -278,6 +279,21 @@ export function verificationLabel(validation: Validation): string {
 export function verificationVariant(validation: Validation): "success" | "warning" | "danger" {
   if (!validation.ok) return "danger";
   return validation.verified ? "success" : "warning";
+}
+
+/** A compact delta for the review row; absence means it was not measured. */
+export function coverageDeltaLabel(delta?: CoverageDelta): string {
+  if (!delta || delta.status !== "measured") return "coverage not measured";
+  const lines = delta.lines.delta;
+  return `coverage ${lines >= 0 ? "+" : ""}${lines} lines`;
+}
+
+/** One pull-request body line for a measured delta; empty when not measured. */
+export function coverageBodyLine(sourcePath: string, delta?: CoverageDelta): string {
+  if (!delta || delta.status !== "measured") return "";
+  const signed = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
+  const branches = delta.branches ? `, branches ${signed(delta.branches.delta)}` : "";
+  return `- \`${sourcePath}\`: ${signed(delta.lines.delta)} covered line(s)${branches} (${delta.lines.after}/${delta.lines.total}).`;
 }
 
 export function skippedChecks(validation: Validation): number {

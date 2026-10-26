@@ -238,6 +238,72 @@ describe("runPipeline", () => {
     ).toBe(true);
   });
 
+  it("measures a per-file coverage delta from two runner reports", async () => {
+    const calls: string[] = [];
+    const events: RunEvent[] = [];
+    const github = fakeGitHub(calls);
+    github.tree = async () => [
+      { path: "package.json", type: "blob" },
+      { path: "src/untested.ts", type: "blob" },
+    ];
+    github.file = async (_repo, path) =>
+      path === "package.json"
+        ? JSON.stringify({ scripts: { test: "bun test" } })
+        : "export const add = (a: number, b: number) => a + b;";
+
+    const before = "SF:src/untested.ts\nDA:1,0\nDA:2,0\nend_of_record";
+    const after = "SF:/tmp/repo/src/untested.ts\nDA:1,1\nDA:2,0\nend_of_record";
+    let runnerRuns = 0;
+    const fakeFetch = (async (url: string | URL | Request) => {
+      if (!String(url).includes("runner.example")) {
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }],
+          }),
+        );
+      }
+      runnerRuns += 1;
+      return new Response(
+        JSON.stringify({
+          exitCode: 0,
+          artifacts: { "coverage/lcov.info": runnerRuns === 1 ? before : after },
+        }),
+      );
+    }) as unknown as typeof fetch;
+
+    const provider = providerById("openai");
+    if (!provider) throw new Error("catalog lost openai");
+
+    for await (const event of runPipeline(
+      { ...input, ref: "main" },
+      {
+        github,
+        aiConfig: { provider, model: "gpt-6-astra", apiKey: "sk-test" },
+        sandbox: { url: "https://runner.example", coverage: true },
+        fetchImpl: fakeFetch,
+      },
+    )) {
+      events.push(event);
+    }
+
+    expect(
+      events.some(
+        (event) => event.type === "log" && event.text.includes("Baseline coverage measured"),
+      ),
+    ).toBe(true);
+    const validation = events.find((event) => event.type === "validation");
+    expect(validation).toMatchObject({
+      type: "validation",
+      validation: {
+        coverage: {
+          status: "measured",
+          path: "src/untested.ts",
+          lines: { before: 0, after: 1, delta: 1, total: 2 },
+        },
+      },
+    });
+  });
+
   it("stops before the PR when validation fails", async () => {
     const calls: string[] = [];
     const events: RunEvent[] = [];

@@ -178,6 +178,16 @@ export interface Generation {
   source?: string;
 }
 
+/** A per-file coverage change, from two executed LCOV reports. */
+export type CoverageDelta =
+  | { status: "not-measured" }
+  | {
+      status: "measured";
+      path: string;
+      lines: { before: number; after: number; delta: number; total: number };
+      branches?: { before: number; after: number; delta: number; total: number };
+    };
+
 export interface Validation {
   ok: boolean;
   /** True only when a real test runner executed the suite. */
@@ -186,6 +196,8 @@ export interface Validation {
   durationMs: number;
   /** The repository checks that ran against the test. */
   checks?: CheckResult[];
+  /** Present only when the run asked the runner for coverage. */
+  coverage?: CoverageDelta;
   /** Set when the sandbox could not prepare or run the suite at all. */
   environmentError?: "setup" | "server" | "unreachable" | "timeout";
 }
