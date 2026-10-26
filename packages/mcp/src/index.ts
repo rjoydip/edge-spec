@@ -9,7 +9,14 @@ Runs a stdio MCP server that exposes the configured EdgeSpec deployment:
   edgespec_scan
   edgespec_generate
   edgespec_run
+  edgespec_prepare_pull_request
   edgespec_open_pull_request
+
+Resources:
+  edgespec://gaps/{owner}/{name}
+  edgespec://specs/{owner}/{name}
+  edgespec://coverage/{owner}/{name}
+  edgespec://runs/{id}
 
 Environment:
   EDGESPEC_URL                 EdgeSpec Worker URL (default: http://127.0.0.1:8787)

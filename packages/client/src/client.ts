@@ -175,6 +175,11 @@ export class EdgeSpecClient {
     return this.request("/api/catalog");
   }
 
+  /** Workflow status for a webhook run. */
+  runStatus(id: string): Promise<unknown> {
+    return this.request(`/api/runs/${encodeURIComponent(id)}`);
+  }
+
   scan(input: { repo: string; ref?: string }): Promise<ScanResult> {
     return this.request("/api/scan", {
       method: "POST",
