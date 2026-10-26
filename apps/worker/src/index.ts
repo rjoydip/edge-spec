@@ -16,6 +16,7 @@ import { GitHub } from "@edge-spec/core/github";
 import { readRepositoryChecks, runPipeline, withChecks } from "@edge-spec/core/pipeline";
 import { detectChecks, SUPPORT_FILES } from "@edge-spec/core/ci";
 import { pullFilesOf, pullMetaOf, slugOf, validBranchName } from "@edge-spec/core/pr";
+import { assertTestOnly } from "@edge-spec/core/policy";
 import {
   classifyTree,
   describeRepository,
@@ -591,6 +592,8 @@ app.post("/api/generate", async (c) => {
       source = await github.file(repo, path, ref);
     }
     const testPath = path.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/i, (ext) => `.test${ext}`);
+    // Inline local source never leaves the machine; a repo file may become a PR.
+    if (repo) assertTestOnly(testPath);
 
     // The repository's own rules, so a corrected test is measured against the
     // same checks as a pipeline run. Without a runner they cannot execute.

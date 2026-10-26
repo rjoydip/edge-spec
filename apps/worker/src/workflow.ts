@@ -9,6 +9,7 @@ import { generateTest } from "@edge-spec/core/ai";
 import { DEFAULT_AI, pipelineConfig, providerById } from "@edge-spec/core/catalog";
 import { GitHub } from "@edge-spec/core/github";
 import { findGaps } from "@edge-spec/core/scanner";
+import { assertTestOnly } from "@edge-spec/core/policy";
 import { validateTest } from "@edge-spec/core/validate";
 import type { Env } from "./env";
 import type { Generation, Validation } from "@edge-spec/core/types";
@@ -160,6 +161,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
         .toLowerCase()}-${Date.now()}`;
 
       await github.createBranch(repo, branch, sha);
+      assertTestOnly(scanned.testPath);
       await github.putFile(
         repo,
         scanned.testPath,

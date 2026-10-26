@@ -10,10 +10,12 @@ import { detectChecks, SUPPORT_FILES } from "./ci";
 import {
   classifyTree,
   describeRepository,
+  expectedTestPath,
   extractExports,
   parseOpenApiSpec,
   riskOf,
 } from "./scanner";
+import { testPathProblem } from "./policy";
 import {
   formatWithRunner,
   runRepositoryChecks,
@@ -287,7 +289,9 @@ export async function* runPipeline(
       yield log("info", `Re-running ${input.retryGaps?.length ?? 0} file(s) that did not pass.`);
       allGaps = (input.retryGaps ?? []).map((path) => ({
         path,
-        testPath: path,
+        // The retry paths are sources, so the test keeps the convention path;
+        // reusing the source path would write a test over the source file.
+        testPath: expectedTestPath(path),
         exports: [],
         reason: "",
         risk: "low" as const,
@@ -338,7 +342,16 @@ export async function* runPipeline(
 
       allGaps = gaps;
       // The run covers as many gaps as the settings allow, highest risk first.
-      const target = gaps.slice(0, input.maxFiles);
+      // A gap whose test path is not a test artifact is refused, never written.
+      const target: Gap[] = [];
+      let refused = 0;
+      for (const gap of gaps.slice(0, input.maxFiles)) {
+        if (testPathProblem(gap.testPath)) refused += 1;
+        else target.push(gap);
+      }
+      if (refused > 0) {
+        yield log("warn", `Skipped ${refused} gap(s): only test paths may be generated.`);
+      }
       // Source reads are independent; a bounded pool keeps a large scan honest.
       loaded = (await poolMap(target, 6, (gap) => load(github, input.repo, gap, input.ref))).filter(
         (file): file is Loaded => Boolean(file),
@@ -377,6 +390,11 @@ export async function* runPipeline(
       for (const path of input.retryGaps ?? []) {
         const gap = allGaps.find((g) => g.path === path);
         if (!gap) continue;
+        const problem = testPathProblem(gap.testPath);
+        if (problem) {
+          yield log("warn", `Skipped retry of ${path}: ${problem}.`);
+          continue;
+        }
         const file = await load(github, input.repo, gap, input.ref);
         if (file) loaded.push(file);
       }

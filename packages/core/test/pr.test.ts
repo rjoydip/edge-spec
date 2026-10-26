@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { pullFilesOf, pullMetaOf, slugOf, validBranchName } from "../src/pr";
+import { PolicyError } from "../src/policy";
 
 describe("pullFilesOf", () => {
   it("reads a batch of test files so one pull request can carry them", () => {
@@ -28,6 +29,15 @@ describe("pullFilesOf", () => {
       }),
     ).toEqual([]);
     expect(pullFilesOf({})).toEqual([]);
+  });
+
+  it("refuses a source path instead of uploading it", () => {
+    expect(() =>
+      pullFilesOf({ files: [{ path: "src/a.ts", code: "test a", sourcePath: "src/a.ts" }] }),
+    ).toThrow(PolicyError);
+    expect(() =>
+      pullFilesOf({ sourcePath: "src/a.ts", testPath: "src/a.ts", code: "test a" }),
+    ).toThrow(PolicyError);
   });
 
   it("uses the test path when no source path is given", () => {

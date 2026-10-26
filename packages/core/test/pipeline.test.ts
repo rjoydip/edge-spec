@@ -181,6 +181,29 @@ describe("runPipeline", () => {
     ]);
   });
 
+  it("retests a source into its test path, never over the source", async () => {
+    const calls: string[] = [];
+    const events: RunEvent[] = [];
+    const provider = providerById("openai");
+    if (!provider) throw new Error("catalog lost openai");
+
+    for await (const event of runPipeline(
+      { ...input, ref: "main", retryGaps: ["src/untested.ts"] },
+      {
+        github: fakeGitHub(calls),
+        aiConfig: { provider, model: "gpt-6-astra", apiKey: "sk-test" },
+        fetchImpl: aiFetch,
+      },
+    )) {
+      events.push(event);
+    }
+
+    const generation = events.find((event) => event.type === "generation");
+    expect(
+      generation && "generation" in generation ? generation.generation.testPath : undefined,
+    ).toBe("src/untested.test.ts");
+  });
+
   it("stops before the PR when validation fails", async () => {
     const calls: string[] = [];
     const events: RunEvent[] = [];

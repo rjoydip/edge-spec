@@ -1,4 +1,5 @@
 /** The pull request payload: which test files a branch should carry. */
+import { assertTestOnly } from "./policy";
 
 /** One test file in the pull request. */
 export interface PullFile {
@@ -27,6 +28,9 @@ export function pullFilesOf(body: Record<string, unknown>): PullFile[] {
     const path = text(item.path);
     const code = text(item.code);
     if (!path || !code) continue;
+    // The hard gate: a pull request may only carry test artifacts, whatever
+    // the client generated or the reviewer edited.
+    assertTestOnly(path);
     const sourcePath = text(item.sourcePath);
     files.push({ path, code, sourcePath: sourcePath || path });
   }
@@ -35,7 +39,10 @@ export function pullFilesOf(body: Record<string, unknown>): PullFile[] {
   const sourcePath = text(body.sourcePath);
   const testPath = text(body.testPath);
   const code = text(body.code);
-  if (sourcePath && testPath && code) return [{ path: testPath, code, sourcePath }];
+  if (sourcePath && testPath && code) {
+    assertTestOnly(testPath);
+    return [{ path: testPath, code, sourcePath }];
+  }
   return [];
 }
 
