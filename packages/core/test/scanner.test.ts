@@ -8,6 +8,7 @@ import {
   folderFirst,
   isSourceFile,
   packageFacts,
+  skippedPathReason,
 } from "../src/scanner";
 
 describe("expectedTestPath", () => {
@@ -27,6 +28,8 @@ describe("isSourceFile", () => {
       "src/auth/jwt.spec.tsx",
       "src/types.d.ts",
       "dist/index.js",
+      "vendor/lib.ts",
+      "migrations/001.ts",
       "node_modules/x/y.js",
       "vite.config.ts",
       "src/README.md",
@@ -36,6 +39,21 @@ describe("isSourceFile", () => {
     ]) {
       expect(isSourceFile(path)).toBe(false);
     }
+  });
+});
+
+describe("skippedPathReason", () => {
+  it("names generated, vendored, declaration and lockfile paths", () => {
+    for (const path of [
+      "dist/a.js",
+      "vendor/lib.ts",
+      "migrations/001.ts",
+      "src/types.d.ts",
+      "bun.lock",
+    ]) {
+      expect(skippedPathReason(path)).toBeDefined();
+    }
+    expect(skippedPathReason("src/a.ts")).toBeUndefined();
   });
 });
 
@@ -58,6 +76,21 @@ describe("findGaps", () => {
   it("honours the limit", () => {
     const paths = Array.from({ length: 10 }, (_, i) => `src/mod${i}/file.ts`);
     expect(findGaps(paths, 3)).toHaveLength(3);
+  });
+});
+
+describe("classifyTree", () => {
+  it("counts policy-skipped sources instead of creating gaps", () => {
+    const result = classifyTree([
+      "src/a.ts",
+      "dist/a.js",
+      "vendor/lib.ts",
+      "migrations/001.ts",
+      "src/types.d.ts",
+    ]);
+
+    expect(result.missing.map((gap) => gap.path)).toEqual(["src/a.ts"]);
+    expect(result.skipped).toBe(4);
   });
 });
 

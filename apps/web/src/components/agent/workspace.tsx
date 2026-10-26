@@ -371,6 +371,7 @@ export function AgentWorkspace({
     coverage: gaps.filter((gap) => gap.kind === "coverage").length,
     api: gaps.filter((gap) => gap.kind === "api").length,
     unsupported: gaps.filter((gap) => gap.kind === "unsupported").length,
+    skipped: 0,
   };
   const orderedGaps = folderFirst(gaps, project.folder);
   const query = (value: string) => value.trim().toLowerCase();
@@ -1142,6 +1143,9 @@ export function AgentWorkspace({
                     </Badge>
                     {counts.unsupported > 0 && (
                       <Badge variant="neutral">{counts.unsupported} unsupported</Badge>
+                    )}
+                    {counts.skipped > 0 && (
+                      <Badge variant="neutral">{counts.skipped} skipped</Badge>
                     )}
                   </>
                 }

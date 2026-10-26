@@ -45,6 +45,8 @@ export interface ScanTotals {
   coverage: number;
   api: number;
   unsupported: number;
+  /** Sources excluded by the path policy, shown rather than silently dropped. */
+  skipped: number;
 }
 
 export interface ScanTruncation {

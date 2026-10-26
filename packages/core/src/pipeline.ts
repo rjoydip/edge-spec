@@ -15,7 +15,7 @@ import {
   parseOpenApiSpec,
   riskOf,
 } from "./scanner";
-import { testPathProblem } from "./policy";
+import { generatedMarkerReason, testPathProblem } from "./policy";
 import {
   formatWithRunner,
   runRepositoryChecks,
@@ -303,6 +303,12 @@ export async function* runPipeline(
       const classification = classifyTree(blobs);
       const gaps = unitMode ? classification.missing : [];
       unsupported = classification.unsupported;
+      if (classification.skipped > 0) {
+        yield log(
+          "info",
+          `${classification.skipped} file(s) skipped by policy (generated, vendored, migrations).`,
+        );
+      }
 
       if (apiMode) {
         const OPENAPI_LIKE = /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i;
@@ -324,6 +330,7 @@ export async function* runPipeline(
         coverage: 0,
         api: apiGapList.length,
         unsupported: unsupported.length,
+        skipped: classification.skipped,
       };
       const overview = describeRepository(blobs);
       if (gaps.length === 0 && apiGapList.length === 0) {
@@ -398,6 +405,21 @@ export async function* runPipeline(
         const file = await load(github, input.repo, gap, input.ref);
         if (file) loaded.push(file);
       }
+    }
+
+    // A file whose header says it is generated must not get a test, even when
+    // its path looks ordinary. The scan cannot see contents; this can.
+    if (loaded.length > 0) {
+      const usable: Loaded[] = [];
+      for (const file of loaded) {
+        const marker = generatedMarkerReason(file.source);
+        if (marker) {
+          yield log("warn", `Skipped ${file.gap.path}: ${marker}.`);
+          continue;
+        }
+        usable.push(file);
+      }
+      loaded = usable;
     }
 
     const blobsForChecks = input.retryGaps && input.retryGaps.length > 0 ? [] : blobs;

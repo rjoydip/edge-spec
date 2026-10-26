@@ -347,6 +347,7 @@ app.post("/api/scan", async (c) => {
       coverage: 0,
       api: contractGaps.length,
       unsupported: classification.unsupported.length,
+      skipped: classification.skipped,
     };
 
     // The commands the repository's CI runs, so the dashboard can show them
@@ -430,6 +431,7 @@ app.post("/api/coverage", async (c) => {
         coverage: 0,
         api: 0,
         unsupported: classification.unsupported.length,
+        skipped: classification.skipped,
       },
       truncated: { missing: false, coverage: false, api: false },
     };

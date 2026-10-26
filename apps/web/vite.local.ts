@@ -201,6 +201,7 @@ export function scanLocalProject(root: string): ScanResult {
       coverage: 0,
       api: apiGaps(openApiSpecs).length,
       unsupported: classification.unsupported.length,
+      skipped: classification.skipped,
     },
     truncated: {
       missing: classification.missing.length > 25,
