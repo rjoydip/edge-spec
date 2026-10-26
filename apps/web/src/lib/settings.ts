@@ -35,6 +35,8 @@ export interface Settings {
   maxTokens: number;
   /** Extra repeats after a passing suite; 0 disables flaky detection. */
   flakyRuns: number;
+  /** Stryker-compatible command; empty means mutation is not measured. */
+  mutationCommand: string;
   /** Pull-request gates. Stored locally; sent with the PR request, never a secret. */
   policy: PullPolicy;
   /** A runner the visitor owns; it executes the suite. */
@@ -73,6 +75,7 @@ export const DEFAULT_SETTINGS: Settings = {
   concurrency: DEFAULT_PIPELINE.concurrency,
   maxTokens: DEFAULT_PIPELINE.maxTokens,
   flakyRuns: DEFAULT_PIPELINE.flakyRuns,
+  mutationCommand: DEFAULT_PIPELINE.mutationCommand,
   policy: {},
   sandboxUrl: "",
   sandboxProvider: "auto",
@@ -181,6 +184,8 @@ function load(): Settings {
         5,
         Math.max(0, Math.round(pickNumber(parsed.flakyRuns, DEFAULT_PIPELINE.flakyRuns))),
       ),
+      mutationCommand:
+        typeof parsed.mutationCommand === "string" ? parsed.mutationCommand.slice(0, 500) : "",
       policy: parsePullPolicy(parsed.policy),
       sandboxUrl: typeof parsed.sandboxUrl === "string" ? parsed.sandboxUrl : "",
       sandboxProvider: sandboxProvidersFor(isLocalDashboard() ? "local" : "deployed").some(

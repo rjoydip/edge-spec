@@ -44,6 +44,7 @@ measures something it actually ran, or says "not measured".
 | Backlog                                                      | Shipped (D1 items, CODEOWNERS owner, dashboard states)         |
 | Import graph / impact                                        | Shipped (bounded test graph, PR checks + `/api/impact`)        |
 | Flaky detection                                              | Shipped (repeats, quarantined, never verified)                 |
+| Mutation score                                               | Shipped (opt-in Stryker report, budget stop labelled)          |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run
 database. That is the largest structural gap.

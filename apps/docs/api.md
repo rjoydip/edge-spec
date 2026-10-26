@@ -349,6 +349,7 @@ Request:
   "maxFiles": 10,
   "maxTokens": 0,
   "flakyRuns": 2,
+  "mutationCommand": "npx stryker run --mutate {file}",
   "concurrency": 3,
   "mode": "unit",
   "strictTypes": true,
@@ -444,6 +445,10 @@ Flow details:
 - `flakyRuns` repeats a passing suite (default 2). A pass/fail split returns
   `validation {ok:false, verified:false, flaky:true, runs}`; it is quarantined,
   never counted as verified.
+- `mutationCommand` runs only after a stable pass and only when set. The result
+  is `validation.mutation` with either `{status:"measured", killed, survived,
+total, score, command, budgetStopped?}` or `{status:"not-measured", reason}`.
+  No report means not measured; a timeout is a labelled budget stop.
 - Quota and 5xx responses fall back once to the next model of the same
   provider; the fallback appears as a `warn` log.
 - A retest sends `retestOperations: [{specPath, method, path}]`. The run is

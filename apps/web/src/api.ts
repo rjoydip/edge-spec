@@ -147,6 +147,7 @@ export async function regenerate(
     maxRetries: settings.maxRetries,
     maxAiRetries: settings.maxAiRetries,
     flakyRuns: settings.flakyRuns,
+    mutationCommand: settings.mutationCommand,
     ...(previous ? { previous } : {}),
     ...(targeting?.uncoveredLines?.length ? { uncoveredLines: targeting.uncoveredLines } : {}),
     ...(targeting?.uncoveredBranches?.length
@@ -227,6 +228,7 @@ export function openPullWithFiles(
         ...(file.verified !== undefined ? { verified: file.verified } : {}),
         ...(file.checks ? { checks: file.checks } : {}),
         ...(file.coverage ? { coverage: file.coverage } : {}),
+        ...(file.mutation ? { mutation: file.mutation } : {}),
       })),
     }),
   });
@@ -313,6 +315,7 @@ export async function runPipelineStream(
         concurrency: settings.concurrency,
         maxTokens: settings.maxTokens,
         flakyRuns: settings.flakyRuns,
+        mutationCommand: settings.mutationCommand,
         strictTypes: settings.strictTypes,
         coverageTarget: settings.coverageTarget,
         mode: "both",

@@ -67,6 +67,7 @@ export interface RunRequest {
   maxFiles?: number;
   maxTokens?: number;
   flakyRuns?: number;
+  mutationCommand?: string;
   strictTypes?: boolean;
   coverageTarget?: number;
   retryGaps?: string[];
@@ -230,6 +231,7 @@ export class EdgeSpecClient {
           ...(input.maxFiles !== undefined ? { maxFiles: input.maxFiles } : {}),
           ...(input.maxTokens !== undefined ? { maxTokens: input.maxTokens } : {}),
           ...(input.flakyRuns !== undefined ? { flakyRuns: input.flakyRuns } : {}),
+          ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
           ...(input.strictTypes !== undefined ? { strictTypes: input.strictTypes } : {}),
           ...(input.coverageTarget !== undefined ? { coverageTarget: input.coverageTarget } : {}),
           ...(input.retryGaps?.length ? { retryGaps: input.retryGaps } : {}),

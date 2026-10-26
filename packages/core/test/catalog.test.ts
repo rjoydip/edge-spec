@@ -199,6 +199,7 @@ describe("pipelineConfig", () => {
       concurrency: 3,
       maxTokens: 0,
       flakyRuns: 2,
+      mutationCommand: "",
     });
     expect(pipelineConfig({ maxRetries: "x" }).maxRetries).toBe(2);
     expect(pipelineConfig({ maxFiles: 0 }).maxFiles).toBe(1);

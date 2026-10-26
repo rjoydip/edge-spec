@@ -178,6 +178,7 @@ custom path is simpler.
 | `maxFiles`           | 10      | 1–50    | How many gap files one pipeline run generates a test for              |
 | `maxTokens`          | 0       | 0–2M    | Provider-reported token cap for one run; `0` means no cap             |
 | `flakyRuns`          | 2       | 0–5     | Extra repeats after a passing suite; `0` disables flaky detection     |
+| `mutationCommand`    | empty   | ≤500    | Stryker-compatible command; empty means mutation is not measured      |
 | `concurrency`        | 3       | 1–6     | Files generated and validated at once; a lower sandbox cap wins       |
 | `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments         |
 
@@ -199,6 +200,14 @@ input, the result is `flaky: true`, `ok: false`, `verified: false`; it is
 quarantined in Review and labelled in the PR body instead of being counted as a
 pass. This can multiply runner time, so `0` turns it off. The same command and
 environment are reused; there is no per-run seed control yet.
+
+Mutation is opt-in through `mutationCommand`. `{file}` and `{test}` are
+shell-quoted and substituted. The command runs only after a stable pass, in the
+same runner and with the same files. It reads a Stryker JSON report from
+`mutation.json` or `reports/mutation/mutation.json`; killed/survived counts and
+the command are kept. A missing tool, missing report or non-JSON output is
+**not measured** — never a score. A runner timeout is labelled `budget stop`.
+The command and the report path are visible in the review dialog and PR body.
 
 A run covers the first `maxFiles` gaps, highest risk first, and every test it
 writes waits in **Review** for a pull request. Files run through a bounded pool:

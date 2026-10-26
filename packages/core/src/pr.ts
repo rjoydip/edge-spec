@@ -1,7 +1,7 @@
 /** The pull request payload: which test files a branch should carry. */
 import { assertTestOnly } from "./policy";
 import type { ProvenanceCheck, SkippedContractOperation } from "./provenance";
-import type { CoverageDelta } from "./types";
+import type { CoverageDelta, MutationResult } from "./types";
 
 /** One test file in the pull request, with the provenance the body needs. */
 export interface PullFile {
@@ -17,6 +17,7 @@ export interface PullFile {
   verified?: boolean;
   checks?: ProvenanceCheck[];
   coverage?: CoverageDelta;
+  mutation?: MutationResult;
 }
 
 function text(value: unknown): string {
@@ -75,11 +76,46 @@ function coverageOf(value: unknown): CoverageDelta | undefined {
   };
 }
 
+/** A mutation result is accepted only in one of its two declared shapes. */
+function mutationOf(value: unknown): MutationResult | undefined {
+  const item = record(value);
+  const tool = text(item.tool) || "stryker";
+  const command = text(item.command).slice(0, 500);
+  if (item.status === "not-measured") {
+    const reason = text(item.reason).slice(0, 300);
+    return {
+      status: "not-measured",
+      tool,
+      ...(command ? { command } : {}),
+      ...(reason ? { reason } : {}),
+    };
+  }
+  if (item.status !== "measured") return undefined;
+  const killed = Number(item.killed);
+  const survived = Number(item.survived);
+  const total = Number(item.total);
+  const score = Number(item.score);
+  const durationMs = Number(item.durationMs);
+  if (![killed, survived, total, score, durationMs].every(Number.isFinite)) return undefined;
+  return {
+    status: "measured",
+    tool,
+    command,
+    killed,
+    survived,
+    total,
+    score,
+    durationMs,
+    ...(item.budgetStopped === true ? { budgetStopped: true } : {}),
+  };
+}
+
 function provenanceOf(item: Record<string, unknown>): Partial<PullFile> {
   const provider = text(item.provider).slice(0, 80);
   const model = text(item.model).slice(0, 120);
   const checks = checksOf(item.checks);
   const coverage = coverageOf(item.coverage);
+  const mutation = mutationOf(item.mutation);
   return {
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
@@ -88,6 +124,7 @@ function provenanceOf(item: Record<string, unknown>): Partial<PullFile> {
     ...(typeof item.verified === "boolean" ? { verified: item.verified } : {}),
     ...(checks.length > 0 ? { checks } : {}),
     ...(coverage ? { coverage } : {}),
+    ...(mutation ? { mutation } : {}),
   };
 }
 

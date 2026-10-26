@@ -852,6 +852,7 @@ app.post("/api/generate", async (c) => {
         test: candidate,
         strictTypes: config.strictTypes,
         flakyRuns: config.flakyRuns,
+        mutationCommand: config.mutationCommand,
         ...(sandbox ? { sandbox } : {}),
         ...(repoArg ? { repo: repoArg } : {}),
       });
@@ -954,6 +955,7 @@ app.post("/api/pull-request", async (c) => {
       ...(file.verified !== undefined ? { verified: file.verified } : {}),
       ...(file.checks ? { checks: file.checks } : {}),
       ...(file.coverage ? { coverage: file.coverage } : {}),
+      ...(file.mutation ? { mutation: file.mutation } : {}),
     }));
     const url = await github.openPull(repo, {
       title:

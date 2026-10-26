@@ -27,6 +27,16 @@ describe("pullRequestBody", () => {
             lines: { before: 1, after: 4, delta: 3, total: 10 },
             branches: { before: 0, after: 1, delta: 1, total: 2 },
           },
+          mutation: {
+            status: "measured",
+            tool: "stryker",
+            command: "npx stryker run",
+            killed: 8,
+            survived: 2,
+            total: 10,
+            score: 80,
+            durationMs: 900,
+          },
         },
         { sourcePath: "src/b.ts", testPath: "src/b.test.ts", verified: false },
       ],
@@ -38,6 +48,7 @@ describe("pullRequestBody", () => {
     expect(body).toContain("1 executed on the runner, 1 static only");
     expect(body).toContain("`bun test` (bun test) · 1200 ms · passed");
     expect(body).toContain("+3 covered lines (4/10), +1 branches (1/2)");
+    expect(body).toContain("mutation 80%");
     expect(body).toContain("self-corrected");
     expect(body).toContain("GET /users`: missing auth fixture");
     expect(body).toContain("Only test artifacts");

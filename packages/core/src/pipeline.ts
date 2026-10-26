@@ -60,6 +60,8 @@ export interface PipelineInput {
   maxTokens?: number;
   /** Extra repeats after a passing suite; 0 disables flaky detection. */
   flakyRuns?: number;
+  /** Stryker-compatible command; empty means mutation is not measured. */
+  mutationCommand?: string;
   /** When set, run only these failed operations and label the run a retest. */
   retestOperations?: RetestOperation[];
 }
@@ -678,6 +680,7 @@ export async function* runPipeline(
           ...(measureCoverage ? { measureCoverage: true } : {}),
           ...(baselineCoverage ? { baselineCoverage } : {}),
           flakyRuns: input.flakyRuns ?? 0,
+          ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         });
 
@@ -813,6 +816,7 @@ export async function* runPipeline(
             ...(measureCoverage ? { measureCoverage: true } : {}),
             ...(baselineCoverage ? { baselineCoverage } : {}),
             flakyRuns: input.flakyRuns ?? 0,
+            ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
           });
           const retryChecks = await runRepositoryChecks({

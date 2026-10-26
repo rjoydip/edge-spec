@@ -205,6 +205,23 @@ export type CoverageDelta =
       branches?: { before: number; after: number; delta: number; total: number };
     };
 
+/** Mutation facts from a tool that actually ran; never estimated. */
+export type MutationResult =
+  | { status: "not-measured"; reason?: string; tool?: string; command?: string }
+  | {
+      status: "measured";
+      tool: string;
+      command: string;
+      killed: number;
+      survived: number;
+      total: number;
+      /** Killed / total, rounded to one decimal. */
+      score: number;
+      /** The tool stopped at the time/mutant budget. */
+      budgetStopped?: boolean;
+      durationMs: number;
+    };
+
 export interface Validation {
   ok: boolean;
   /** True only when a real test runner executed the suite. */
@@ -219,6 +236,8 @@ export interface Validation {
   flaky?: boolean;
   /** How many times the suite ran, including the first. */
   runs?: number;
+  /** Only present when a mutation command was configured and attempted. */
+  mutation?: MutationResult;
   /** Set when the sandbox could not prepare or run the suite at all. */
   environmentError?: "setup" | "server" | "unreachable" | "timeout";
 }

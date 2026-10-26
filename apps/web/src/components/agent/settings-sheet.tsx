@@ -518,6 +518,18 @@ export function SettingsSheet({
                     }
                   />
                 </Field>
+                <Field
+                  label="Mutation command"
+                  hint="Stryker-compatible; {file}/{test} optional. Empty = not measured."
+                >
+                  <Input
+                    value={settings.mutationCommand}
+                    onChange={(event) =>
+                      update({ mutationCommand: event.target.value.slice(0, 500) })
+                    }
+                    placeholder="npx stryker run --mutate {file}"
+                  />
+                </Field>
                 <Field label="Verification" hint="Runner or static only.">
                   <Badge
                     variant={settings.sandboxUrl.trim() ? "success" : "warning"}

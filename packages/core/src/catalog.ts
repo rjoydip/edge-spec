@@ -161,6 +161,8 @@ export const DEFAULT_PIPELINE = {
   maxTokens: 0,
   /** Extra repeats after a passing run; 0 disables flaky detection. */
   flakyRuns: 2,
+  /** Empty means mutation is not measured. `{file}`/`{test}` are substituted. */
+  mutationCommand: "",
 } as const;
 
 export function providerById(id: string): Provider | undefined {
@@ -366,6 +368,8 @@ export interface PipelineConfigInput {
   maxTokens?: unknown;
   /** Extra repeats after a passing run; 0 disables flaky detection. */
   flakyRuns?: unknown;
+  /** Stryker-compatible command; empty means not measured. */
+  mutationCommand?: unknown;
 }
 
 export function pipelineConfig(input: PipelineConfigInput): {
@@ -379,6 +383,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
   concurrency: number;
   maxTokens: number;
   flakyRuns: number;
+  mutationCommand: string;
 } {
   const retries = Number(input.maxRetries);
   const aiRetries = Number(input.maxAiRetries);
@@ -387,6 +392,8 @@ export function pipelineConfig(input: PipelineConfigInput): {
   const concurrency = Number(input.concurrency);
   const tokens = Number(input.maxTokens);
   const flaky = Number(input.flakyRuns);
+  const mutationCommand =
+    typeof input.mutationCommand === "string" ? input.mutationCommand.trim().slice(0, 500) : "";
   return {
     maxRetries: Number.isFinite(retries) ? Math.min(5, Math.max(0, Math.round(retries))) : 2,
     maxAiRetries: Number.isFinite(aiRetries) ? Math.min(5, Math.max(0, Math.round(aiRetries))) : 2,
@@ -400,6 +407,7 @@ export function pipelineConfig(input: PipelineConfigInput): {
       : 3,
     maxTokens: Number.isFinite(tokens) ? Math.min(2_000_000, Math.max(0, Math.round(tokens))) : 0,
     flakyRuns: Number.isFinite(flaky) ? Math.min(5, Math.max(0, Math.round(flaky))) : 2,
+    mutationCommand,
   };
 }
 

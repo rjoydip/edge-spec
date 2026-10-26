@@ -3,7 +3,8 @@
  * of claiming a test passed.
  */
 import { coverageDelta, type CoverageReport } from "./coverage";
-import type { CheckKind, CheckResult, Validation } from "./types";
+import { mutationCommandFor, parseMutationReport } from "./mutation";
+import type { CheckKind, CheckResult, MutationResult, Validation } from "./types";
 import { runInSandbox, type SandboxConfig, type SandboxRepo } from "./sandbox";
 
 export { runInSandbox } from "./sandbox";
@@ -65,6 +66,8 @@ export interface ValidateInput {
   repo?: SandboxRepo;
   /** Extra repeats after a passing run; 0 disables flaky detection. */
   flakyRuns?: number;
+  /** A Stryker-compatible command; empty or absent means mutation is not measured. */
+  mutationCommand?: string;
   /** Ask the runner for LCOV and attach a per-file delta to the result. */
   measureCoverage?: boolean;
   /** The before report; a delta needs both reports. */
@@ -163,6 +166,47 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
     };
   }
 
+  let mutation: MutationResult | undefined;
+  if (input.mutationCommand?.trim() && run.ok && !flaky) {
+    const command = mutationCommandFor(input.mutationCommand, input.sourcePath, input.testPath);
+    const mutationStarted = Date.now();
+    const mutationRun = await runInSandbox({
+      sandbox: input.sandbox,
+      ...(input.repo ? { repo: input.repo } : {}),
+      files: {
+        [input.sourcePath]: input.source,
+        [input.testPath]: input.test,
+      },
+      command,
+      ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+    });
+    const report =
+      mutationRun.artifacts["mutation.json"] ??
+      mutationRun.artifacts["reports/mutation/mutation.json"] ??
+      mutationRun.files["mutation.json"] ??
+      mutationRun.files["reports/mutation/mutation.json"];
+    mutation = report
+      ? parseMutationReport(report, command, Date.now() - mutationStarted, {
+          budgetStopped: mutationRun.timedOut === true,
+        })
+      : {
+          status: "not-measured",
+          tool: "stryker",
+          command,
+          reason: mutationRun.timedOut
+            ? "The mutation run hit the time budget."
+            : "The runner returned no mutation report.",
+        };
+    if (mutationRun.unreachable || mutationRun.environmentError) {
+      mutation = {
+        status: "not-measured",
+        tool: "stryker",
+        command,
+        reason: mutationRun.output || "The runner could not execute the mutation command.",
+      };
+    }
+  }
+
   return {
     ok: run.ok,
     verified: true,
@@ -170,6 +214,7 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
     output: [firstOutput, repeatNote].filter(Boolean).join("\n"),
     durationMs: Date.now() - started,
     ...(coverage ? { coverage } : {}),
+    ...(mutation ? { mutation } : {}),
   };
 }
 

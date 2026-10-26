@@ -6,6 +6,7 @@ import type {
   CheckResult,
   CoverageDelta,
   Generation,
+  MutationResult,
   StepId,
   Validation,
 } from "@edge-spec/core/types";
@@ -300,6 +301,17 @@ export function coverageDeltaLabel(delta?: CoverageDelta): string {
   return `coverage ${lines >= 0 ? "+" : ""}${lines} lines`;
 }
 
+/** A measured mutation score, or an explicit reason it is unmeasured. */
+export function mutationSummary(mutation?: MutationResult): string {
+  if (!mutation) return "not measured";
+  if (mutation.status === "not-measured") {
+    return `not measured${mutation.reason ? ` · ${mutation.reason}` : ""}`;
+  }
+  return `${mutation.score}% · ${mutation.killed} killed / ${mutation.survived} survived${
+    mutation.budgetStopped ? " · budget stop" : ""
+  }`;
+}
+
 /** The facts a pull request body needs, from the tests the reviewer accepted. */
 export function provenanceFiles(items: readonly AgentTest[]): ProvenanceFile[] {
   return items.map(({ generation, validation }) => ({
@@ -312,6 +324,7 @@ export function provenanceFiles(items: readonly AgentTest[]): ProvenanceFile[] {
     verified: validation.verified,
     ...(validation.checks ? { checks: validation.checks } : {}),
     ...(validation.coverage ? { coverage: validation.coverage } : {}),
+    ...(validation.mutation ? { mutation: validation.mutation } : {}),
   }));
 }
 

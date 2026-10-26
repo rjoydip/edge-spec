@@ -1,5 +1,5 @@
 /** The pull request body: what ran, what it measured, and what was never touched. */
-import type { CheckKind, CoverageDelta } from "./types";
+import type { CheckKind, CoverageDelta, MutationResult } from "./types";
 
 export interface ProvenanceCheck {
   name: string;
@@ -23,6 +23,7 @@ export interface ProvenanceFile {
   verified?: boolean;
   checks?: ProvenanceCheck[];
   coverage?: CoverageDelta;
+  mutation?: MutationResult;
 }
 
 export interface SkippedContractOperation {
@@ -61,7 +62,13 @@ function fileLine(file: ProvenanceFile): string {
     file.coverage?.status === "measured"
       ? ` · coverage ${signed(file.coverage.lines.delta)} lines`
       : "";
-  return `- \`${file.sourcePath}\` → \`${file.testPath}\`: ${verification}${checks}${coverage}.`;
+  const mutation =
+    file.mutation?.status === "measured"
+      ? ` · mutation ${file.mutation.score}%`
+      : file.mutation?.status === "not-measured"
+        ? " · mutation not measured"
+        : "";
+  return `- \`${file.sourcePath}\` → \`${file.testPath}\`: ${verification}${checks}${coverage}${mutation}.`;
 }
 
 function coverageLine(file: ProvenanceFile): string {
@@ -83,6 +90,18 @@ export function pullRequestBody(input: PullProvenance): string {
   const corrected = files.filter((file) => file.corrected);
   const flaky = files.filter((file) => file.flaky).length;
   const coverageLines = files.map(coverageLine).filter(Boolean);
+  const mutationLines = files.flatMap((file) => {
+    const mutation = file.mutation;
+    if (!mutation) return [];
+    if (mutation.status === "not-measured") {
+      return [
+        `- \`${file.sourcePath}\`: not measured${mutation.reason ? ` · ${mutation.reason}` : ""}.`,
+      ];
+    }
+    return [
+      `- \`${file.sourcePath}\`: ${mutation.score}% · ${mutation.killed} killed / ${mutation.survived} survived${mutation.budgetStopped ? " · budget stop" : ""} · \`${mutation.command}\`.`,
+    ];
+  });
 
   const checks = new Map<string, ProvenanceCheck>();
   for (const file of files) {
@@ -130,6 +149,12 @@ export function pullRequestBody(input: PullProvenance): string {
     "## Coverage",
     "",
     ...(coverageLines.length > 0 ? coverageLines : ["- Not measured: no two LCOV reports."]),
+    "",
+    "## Mutation",
+    "",
+    ...(mutationLines.length > 0
+      ? mutationLines
+      : ["- Not measured: no mutation command was configured or no tool ran."]),
     "",
     "## Corrections",
     "",

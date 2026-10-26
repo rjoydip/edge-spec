@@ -486,6 +486,7 @@ export function App() {
         verified: item.validation.verified,
         ...(item.validation.checks ? { checks: item.validation.checks } : {}),
         ...(item.validation.coverage ? { coverage: item.validation.coverage } : {}),
+        ...(item.validation.mutation ? { mutation: item.validation.mutation } : {}),
       })),
       { ...meta, ...(runId ? { runId } : {}) },
       apiResults

@@ -559,6 +559,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
         test: generation.code,
         strictTypes: config.strictTypes,
         flakyRuns: config.flakyRuns,
+        mutationCommand: config.mutationCommand,
         ...(this.env.SANDBOX_RUNNER_URL
           ? {
               sandbox: {
@@ -595,6 +596,7 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
             test: generation.code,
             strictTypes: config.strictTypes,
             flakyRuns: config.flakyRuns,
+            mutationCommand: config.mutationCommand,
             ...(this.env.SANDBOX_RUNNER_URL
               ? {
                   sandbox: {

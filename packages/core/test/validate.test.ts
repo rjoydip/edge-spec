@@ -197,6 +197,58 @@ describe("validateTest", () => {
     expect(calls).toBe(3);
   });
 
+  it("measures mutation only when the configured tool returns a report", async () => {
+    let calls = 0;
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      calls += 1;
+      const body = JSON.parse(String(init?.body)) as { command: string };
+      if (body.command.includes("stryker")) {
+        return new Response(
+          JSON.stringify({
+            exitCode: 0,
+            artifacts: {
+              "reports/mutation/mutation.json": JSON.stringify({
+                killed: 3,
+                survived: 1,
+                mutationScore: 75,
+              }),
+            },
+          }),
+        );
+      }
+      return new Response(JSON.stringify({ exitCode: 0, stdout: "1 pass" }));
+    }) as unknown as typeof fetch;
+
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example" },
+      flakyRuns: 0,
+      mutationCommand: "npx stryker run --mutate {file}",
+      fetchImpl: fakeFetch,
+    });
+
+    expect(calls).toBe(2);
+    expect(result.mutation).toMatchObject({
+      status: "measured",
+      killed: 3,
+      survived: 1,
+      score: 75,
+    });
+  });
+
+  it("says mutation is not measured when the tool returns no report", async () => {
+    const fakeFetch = (async () =>
+      new Response(JSON.stringify({ exitCode: 0, stdout: "1 pass" }))) as unknown as typeof fetch;
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example" },
+      flakyRuns: 0,
+      mutationCommand: "npx stryker run",
+      fetchImpl: fakeFetch,
+    });
+    expect(result.mutation).toMatchObject({ status: "not-measured" });
+  });
+
   it("does not claim verification when the runner is unreachable", async () => {
     const fakeFetch = (async () => {
       throw new Error("boom");

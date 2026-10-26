@@ -1732,6 +1732,11 @@ export function AgentWorkspace({
                         {item.validation.flaky && (
                           <Badge variant="warning">flaky · quarantined</Badge>
                         )}
+                        {item.validation.mutation?.status === "measured" && (
+                          <Badge variant="neutral">
+                            mutation {item.validation.mutation.score}%
+                          </Badge>
+                        )}
                         {item.validation.coverage && (
                           <Badge variant="neutral">
                             {coverageDeltaLabel(item.validation.coverage)}

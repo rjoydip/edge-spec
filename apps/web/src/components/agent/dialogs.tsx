@@ -74,6 +74,7 @@ import {
   EndpointStatus,
   coverageDeltaLabel,
   coverageLabel,
+  mutationSummary,
   provenanceFiles,
   skippedOperationsOf,
   ICON_GRADIENT,
@@ -408,6 +409,22 @@ export function SourceDialog({
         </div>
 
         <CheckGrid validation={validation} />
+
+        <div className="rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+              Mutation
+            </span>
+            <span className="ml-auto font-mono text-[10px] text-zinc-300">
+              {mutationSummary(validation.mutation)}
+            </span>
+          </div>
+          {validation.mutation?.status === "measured" && (
+            <p className="mt-1 truncate font-mono text-[9px] text-zinc-500">
+              {validation.mutation.command}
+            </p>
+          )}
+        </div>
 
         <div className="grid gap-2 lg:grid-cols-2">
           <div className="min-w-0 space-y-1.5">
