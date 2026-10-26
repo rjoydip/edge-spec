@@ -5,6 +5,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Activity,
+  Building2,
   CalendarClock,
   CheckCircle2,
   Database,
@@ -20,7 +21,21 @@ import {
 } from "lucide-react";
 import type { RepoMemory } from "@edge-spec/core/memory";
 import type { PullPolicy } from "@edge-spec/core/policy";
-import { Badge, Button, Dialog, Hint, Input, Switch, Textarea, cn } from "@edge-spec/ui";
+import {
+  Badge,
+  Button,
+  Dialog,
+  Hint,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+  Textarea,
+  cn,
+} from "@edge-spec/ui";
 import {
   deleteMemory,
   deletePolicy,
@@ -155,7 +170,7 @@ function WorkspaceBlock() {
 
   return (
     <div className="space-y-2.5">
-      <SubHead icon={Database} title="Workspace" hint="deployment-wide" />
+      <SubHead icon={Building2} title="Workspace" hint="deployment-wide" />
       <div className="grid grid-cols-2 gap-2">
         <Field label="Name" hint="Trimmed to 100 characters.">
           <Input value={name} onChange={(event) => setName(event.target.value)} />
@@ -734,84 +749,91 @@ export function AuditDialog({
       description="Newest first. Token, key, secret, password, authorization and cookie fields are dropped before storage."
       className="max-w-3xl"
     >
-      <div className="mb-3 flex items-center gap-1.5">
-        <Button
-          size="sm"
-          variant={scope === "repo" ? "default" : "outline"}
-          disabled={!repo}
-          onClick={() => setScope("repo")}
-        >
-          This repository
-        </Button>
-        <Button
-          size="sm"
-          variant={scope === "all" ? "default" : "outline"}
-          onClick={() => setScope("all")}
-        >
-          Every repository
-        </Button>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Select value={scope} onValueChange={(value) => setScope(value as "repo" | "all")}>
+          <SelectTrigger className="h-8 w-60 text-[11px]" aria-label="Audit scope">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="repo" disabled={!repo}>
+              This repository{repo ? ` · ${repo}` : ""}
+            </SelectItem>
+            <SelectItem value="all">Every repository</SelectItem>
+          </SelectContent>
+        </Select>
+        {loading && <Loader2 className="size-3.5 animate-spin text-zinc-500" />}
         <span className="ml-auto text-[10px] text-zinc-500">{events.length} events</span>
       </div>
       {!enabled ? (
-        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
+        <div className="flex h-[min(26rem,50vh)] items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 text-center text-[11px] text-zinc-500">
           {D1_NOTICE}
-        </p>
-      ) : loading ? (
-        <p className="flex items-center justify-center gap-2 py-8 text-[11px] text-zinc-500">
-          <Loader2 className="size-3.5 animate-spin" /> Loading…
-        </p>
-      ) : events.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
-          No audit events yet. Workspace, memory, policy and schedule updates write here.
-        </p>
+        </div>
       ) : (
-        <div className="no-scrollbar h-[min(26rem,50vh)] overflow-y-auto pr-1">
-          {Object.entries(groups).map(([day, list]) => (
-            <div key={day} className="mb-3 last:mb-0">
-              <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
-                {dayLabelOf(day)}
-              </p>
-              <div className="relative ml-1.5 space-y-1.5 border-l border-zinc-800 pl-3">
-                {list.map((event, index) => {
-                  const tone = auditTone(event.action);
-                  const Icon = tone.icon;
-                  const detail = detailOf(event.detail);
-                  return (
-                    <div key={event.id ?? `${event.createdAt}-${index}`} className="relative">
-                      <span
-                        className={cn(
-                          "absolute top-2.5 -left-[19px] size-2 rounded-full ring-2 ring-zinc-900",
-                          tone.dot,
-                        )}
-                      />
-                      <div className="rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-200">
-                            <Icon className="size-3.5 text-zinc-400" />
-                            {event.action.replace(/_/g, " ")}
-                          </span>
-                          <Badge variant={tone.badge}>{event.actor}</Badge>
-                          {event.repo && (
-                            <span className="font-mono text-[10px] text-zinc-400">
-                              {event.repo}
-                            </span>
+        <div
+          className={cn(
+            "no-scrollbar h-[min(26rem,50vh)] overflow-y-auto pr-1 transition-opacity",
+            loading && "opacity-60",
+          )}
+        >
+          {loading && events.length === 0 ? (
+            <p className="flex h-full items-center justify-center gap-2 text-[11px] text-zinc-500">
+              <Loader2 className="size-3.5 animate-spin" /> Loading…
+            </p>
+          ) : events.length === 0 ? (
+            <p className="flex h-full items-center justify-center px-3 text-center text-[11px] text-zinc-500">
+              No audit events yet. Workspace, memory, policy and schedule updates write here.
+            </p>
+          ) : (
+            Object.entries(groups).map(([day, list]) => (
+              <div key={day} className="mb-3 last:mb-0">
+                <p className="mb-1.5 text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+                  {dayLabelOf(day)}
+                </p>
+                <div className="relative ml-1.5 space-y-1.5 border-l border-zinc-800 pl-3">
+                  {list.map((event, index) => {
+                    const tone = auditTone(event.action);
+                    const Icon = tone.icon;
+                    const detail = detailOf(event.detail);
+                    return (
+                      <div key={event.id ?? `${event.createdAt}-${index}`} className="relative">
+                        <span
+                          className={cn(
+                            "absolute top-2.5 -left-[19px] size-2 rounded-full ring-2 ring-zinc-900",
+                            tone.dot,
                           )}
-                          <span className="ml-auto text-[10px] text-zinc-500">
-                            {timeOf(event.createdAt)}
-                          </span>
+                        />
+                        <div className="rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-zinc-200">
+                              <Icon className="size-3.5 text-zinc-400" />
+                              {event.action.replace(/_/g, " ")}
+                            </span>
+                            <Badge variant={tone.badge}>{event.actor}</Badge>
+                            {event.repo && (
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                {event.repo}
+                              </span>
+                            )}
+                            <span className="ml-auto text-[10px] text-zinc-500">
+                              {timeOf(event.createdAt)}
+                            </span>
+                          </div>
+                          {detail && (
+                            <p
+                              className="mt-1 line-clamp-2 text-[10px] text-zinc-500"
+                              title={detail}
+                            >
+                              {detail}
+                            </p>
+                          )}
                         </div>
-                        {detail && (
-                          <p className="mt-1 line-clamp-2 text-[10px] text-zinc-500" title={detail}>
-                            {detail}
-                          </p>
-                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
       {error && <p className="mt-3 text-[11px] text-rose-300">{error}</p>}

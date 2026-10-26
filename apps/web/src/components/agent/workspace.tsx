@@ -949,7 +949,6 @@ export function AgentWorkspace({
                 title="Repository"
                 icon={FolderGit2}
                 tone="clone"
-                iconClass="text-zinc-400"
                 hint="pick a repo, a branch and how much control you keep"
                 aside={
                   <Badge
@@ -1023,26 +1022,26 @@ export function AgentWorkspace({
                     </SelectContent>
                   </Select>
                 )}
-                <Button
-                  onClick={busy ? stopOrReset : start}
-                  disabled={!busy && (!repoInput.trim() || invalid)}
-                  className={cn(
-                    "sm:w-36",
-                    busy && "from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500",
-                  )}
-                >
-                  {busy ? (
-                    <>
+                <Hint label={busy ? "Stop this run" : startLabel}>
+                  <Button
+                    onClick={busy ? stopOrReset : start}
+                    disabled={!busy && (!repoInput.trim() || invalid)}
+                    aria-label={busy ? "Stop this run" : startLabel}
+                    className={cn(
+                      busy ? "px-0 sm:w-9" : "sm:w-36",
+                      busy && "from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500",
+                    )}
+                  >
+                    {busy ? (
                       <Square className="size-3.5 fill-current" />
-                      Stop
-                    </>
-                  ) : (
-                    <>
-                      <Play className="size-3.5 fill-current" />
-                      {startLabel}
-                    </>
-                  )}
-                </Button>
+                    ) : (
+                      <>
+                        <Play className="size-3.5 fill-current" />
+                        {startLabel}
+                      </>
+                    )}
+                  </Button>
+                </Hint>
               </div>
 
               {invalid ? (
@@ -1661,7 +1660,6 @@ export function AgentWorkspace({
                 title="Review Queue"
                 icon={FileDiff}
                 tone="review"
-                iconClass="text-stage-analyze"
                 hint="accept or reject each file; preview the diff or the source"
                 aside={
                   <>
@@ -2314,7 +2312,6 @@ function StepHead({
   hint,
   icon: Icon,
   tone,
-  iconClass,
   aside,
 }: {
   n: string;
@@ -2322,7 +2319,6 @@ function StepHead({
   hint: string;
   icon: typeof FolderGit2;
   tone: Tone;
-  iconClass?: string;
   aside?: ReactNode;
 }) {
   const palette = TONES[tone];
@@ -2340,7 +2336,7 @@ function StepHead({
       </span>
       <div className="min-w-0">
         <h2 className="flex items-center gap-1.5 text-xs font-semibold text-zinc-100">
-          <Icon className={cn("size-3.5", iconClass ?? palette.text)} />
+          <Icon className={cn("size-3.5", palette.text)} />
           {title}
         </h2>
         <p className="text-[10px] text-zinc-500">{hint}</p>
