@@ -76,6 +76,16 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 const str = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim() : undefined;
 
+/** A bounded list of positive line numbers from a request body. */
+function numbersOf(value: unknown, max = 500): number[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (item): item is number => typeof item === "number" && Number.isInteger(item) && item > 0,
+    )
+    .slice(0, max);
+}
+
 /** A failed attempt the client sends back to the self-correction loop. */
 function previousOf(body: Record<string, unknown>): { code: string; output: string } | undefined {
   const previous = asRecord(body.previous);
@@ -597,6 +607,14 @@ app.post("/api/generate", async (c) => {
     // Inline local source never leaves the machine; a repo file may become a PR.
     if (repo) assertTestOnly(testPath);
 
+    // A coverage gap carries the measured lines the next test should target.
+    const uncoveredLines = numbersOf(body.uncoveredLines);
+    const uncoveredBranches = numbersOf(body.uncoveredBranches);
+    const coverageHint =
+      uncoveredLines.length > 0 || uncoveredBranches.length > 0
+        ? { path, uncoveredLines, uncoveredBranches }
+        : undefined;
+
     // The repository's own rules, so a corrected test is measured against the
     // same checks as a pipeline run. Without a runner they cannot execute.
     let checks: Awaited<ReturnType<typeof readRepositoryChecks>> | undefined;
@@ -613,6 +631,7 @@ app.post("/api/generate", async (c) => {
         source,
         config: aiConfig,
         coverageTarget: config.coverageTarget,
+        ...(coverageHint ? { coverageHint } : {}),
         ...(previous ? { previous } : {}),
         ...(checks && checks.style.length ? { style: checks.style } : {}),
         ...(checks && checks.checks.length

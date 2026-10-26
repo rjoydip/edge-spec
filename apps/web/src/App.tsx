@@ -495,8 +495,25 @@ export function App() {
     signal?: AbortSignal,
     previous?: { code: string; output: string },
   ): Promise<boolean> => {
+    const evidence = gaps.find((gap) => gap.path === path)?.evidence;
+    const targeting =
+      evidence && (evidence.uncoveredLines?.length || evidence.uncoveredBranches?.length)
+        ? {
+            ...(evidence.uncoveredLines?.length ? { uncoveredLines: evidence.uncoveredLines } : {}),
+            ...(evidence.uncoveredBranches?.length
+              ? { uncoveredBranches: evidence.uncoveredBranches }
+              : {}),
+          }
+        : undefined;
     try {
-      const result = await regenerate(getProject(), getSettings(), path, signal, previous);
+      const result = await regenerate(
+        getProject(),
+        getSettings(),
+        path,
+        signal,
+        previous,
+        targeting,
+      );
       if (result.rateLimit) setQuota(result.rateLimit);
       setProviderError(undefined);
       setLive((current) => ({

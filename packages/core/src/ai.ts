@@ -3,6 +3,7 @@
  * is only ever placed in the upstream request headers.
  */
 import type { Provider } from "./catalog";
+import { lineRanges, type CoverageTarget } from "./coverage";
 import { HttpError, type RateLimitInfo } from "./types";
 
 /** Minimal shape of the Workers AI binding; avoids pulling Worker types into DOM. */
@@ -28,6 +29,8 @@ export interface GenerateInput {
   previous?: { code: string; output: string };
   /** Advisory: the prompt asks the model to aim for this branch coverage. */
   coverageTarget?: number;
+  /** Uncovered lines and branches from the last executed report, when measured. */
+  coverageHint?: CoverageTarget;
   /** The style rules the repository formats with. */
   style?: string[];
   /** The commands CI runs, so the test satisfies them. */
@@ -55,6 +58,14 @@ export function buildPrompt(input: GenerateInput): string {
         .join("\n")}\n`
     : "";
 
+  const hint = input.coverageHint;
+  const hintLines = hint ? lineRanges(hint.uncoveredLines) : "";
+  const hintBranches = hint?.uncoveredBranches.slice(0, 5).join(", ") ?? "";
+  const targeting =
+    hintLines || hintBranches
+      ? `\nA real coverage report for this file found gaps. Target them directly:\n${hintLines ? `- Uncovered lines: ${hintLines}. Add assertions for the behavior on these lines.\n` : ""}${hintBranches ? `- Uncovered branches on lines: ${hintBranches}. Exercise both outcomes.\n` : ""}`
+      : "";
+
   return `Write a complete unit test file for the source below.
 
 File: ${input.filePath}
@@ -69,7 +80,7 @@ Rules:
 - Keep it one file and make it pass against the source exactly as written.
 - Write the code in the style of the repository, so a formatter does not change it.
 - Do not add a coverage comment or prose outside the code block.
-${style}${checks}
+${style}${checks}${targeting}
 Source:
 \`\`\`ts
 ${input.source.slice(0, 24000)}

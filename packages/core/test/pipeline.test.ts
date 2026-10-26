@@ -251,11 +251,16 @@ describe("runPipeline", () => {
         ? JSON.stringify({ scripts: { test: "bun test" } })
         : "export const add = (a: number, b: number) => a + b;";
 
-    const before = "SF:src/untested.ts\nDA:1,0\nDA:2,0\nend_of_record";
+    const before = "SF:src/untested.ts\nDA:1,0\nDA:2,0\nBRDA:1,0,0,-\nend_of_record";
     const after = "SF:/tmp/repo/src/untested.ts\nDA:1,1\nDA:2,0\nend_of_record";
+    let prompt = "";
     let runnerRuns = 0;
-    const fakeFetch = (async (url: string | URL | Request) => {
+    const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
       if (!String(url).includes("runner.example")) {
+        const body = JSON.parse(String(init?.body)) as {
+          messages?: Array<{ content?: string }>;
+        };
+        prompt = body.messages?.[1]?.content ?? "";
         return new Response(
           JSON.stringify({
             choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }],
@@ -291,6 +296,8 @@ describe("runPipeline", () => {
         (event) => event.type === "log" && event.text.includes("Baseline coverage measured"),
       ),
     ).toBe(true);
+    expect(prompt).toContain("Uncovered lines: 1-2");
+    expect(prompt).toContain("Uncovered branches on lines: 1");
     const validation = events.find((event) => event.type === "validation");
     expect(validation).toMatchObject({
       type: "validation",

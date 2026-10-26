@@ -122,6 +122,7 @@ export async function regenerate(
   path: string,
   signal?: AbortSignal,
   previous?: { code: string; output: string },
+  targeting?: { uncoveredLines?: number[]; uncoveredBranches?: number[] },
 ): Promise<{
   generation: Generation;
   validation: Validation;
@@ -138,6 +139,10 @@ export async function regenerate(
     maxRetries: settings.maxRetries,
     maxAiRetries: settings.maxAiRetries,
     ...(previous ? { previous } : {}),
+    ...(targeting?.uncoveredLines?.length ? { uncoveredLines: targeting.uncoveredLines } : {}),
+    ...(targeting?.uncoveredBranches?.length
+      ? { uncoveredBranches: targeting.uncoveredBranches }
+      : {}),
   };
   if (project.localPath) {
     body.source = await localSource(project, path);

@@ -24,7 +24,7 @@ import {
   type SandboxConfig,
 } from "./validate";
 import { sandboxRepo, runInSandbox } from "./sandbox";
-import type { CoverageReport } from "./coverage";
+import { coverageTargetFor, type CoverageReport, type CoverageTarget } from "./coverage";
 import { apiGaps, contractTestsFor, parseJUnit } from "./openapi";
 import {
   HttpError,
@@ -452,6 +452,21 @@ export async function* runPipeline(
       );
     }
 
+    // The baseline tells the prompt which lines and branches the suite missed.
+    const coverageHints = new Map<string, CoverageTarget>();
+    if (baselineCoverage) {
+      for (const file of loaded) {
+        const target = coverageTargetFor(baselineCoverage, file.gap.path);
+        if (target) coverageHints.set(file.gap.path, target);
+      }
+      if (coverageHints.size > 0) {
+        yield log(
+          "info",
+          `Coverage targeting: ${coverageHints.size} file(s) with uncovered lines or branches.`,
+        );
+      }
+    }
+
     const ready = new Set<string>();
     // A sandbox may cap its own runs; honour the tighter of the two.
     const effective = Math.min(
@@ -467,6 +482,7 @@ export async function* runPipeline(
       const runFile = async (file: Loaded, index: number): Promise<boolean> => {
         const { gap, source } = file;
         const position = `${index + 1}/${loaded.length}`;
+        const coverageHint = coverageHints.get(gap.path);
 
         emit({
           type: "step",
@@ -484,6 +500,7 @@ export async function* runPipeline(
           source,
           config: aiConfig,
           coverageTarget: input.coverageTarget,
+          ...(coverageHint ? { coverageHint } : {}),
           onRateLimit: (info: RateLimitInfo) => {
             rateLimit = info;
           },
@@ -642,6 +659,7 @@ export async function* runPipeline(
             config: aiConfig,
             previous: { code, output: validation.output },
             coverageTarget: input.coverageTarget,
+            ...(coverageHint ? { coverageHint } : {}),
             onRateLimit: (info: RateLimitInfo) => {
               retryRateLimit = info;
             },

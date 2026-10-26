@@ -22,6 +22,8 @@ export interface GapEvidence {
   lineRate?: number;
   branchRate?: number;
   uncoveredLines?: number[];
+  /** Lines with an untaken branch, from the same measured report. */
+  uncoveredBranches?: number[];
   /** For kind === "api". */
   specPath?: string;
   operation?: { method: string; path: string; operationId?: string };

@@ -70,6 +70,26 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("lint failed");
     expect(prompt).toContain("bun test failed");
   });
+
+  it("targets measured uncovered lines and branches, bounded", () => {
+    const prompt = buildPrompt(
+      input({
+        provider: "openai",
+        coverageHint: {
+          path: "src/math.ts",
+          uncoveredLines: [42, 43, 44, 58, 71, 80],
+          uncoveredBranches: [12, 30, 44, 55, 66, 77],
+        },
+      }),
+    );
+    expect(prompt).toContain("Uncovered lines: 42-44, 58, 71, 80");
+    expect(prompt).toContain("Uncovered branches on lines: 12, 30, 44, 55, 66");
+    expect(prompt).not.toContain("77");
+  });
+
+  it("adds no targeting note without a measured hint", () => {
+    expect(buildPrompt(input({ provider: "openai" }))).not.toContain("Uncovered lines");
+  });
 });
 
 describe("generateTest", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { coverageDelta, coverageGaps, parseLcov } from "../src/coverage";
+import { coverageDelta, coverageGaps, coverageTargetFor, parseLcov } from "../src/coverage";
 
 const LCOV = [
   "SF:src/math.ts",
@@ -21,6 +21,7 @@ describe("parseLcov", () => {
     expect(report?.branches).toEqual({ covered: 1, total: 2 });
     expect(report?.files).toHaveLength(2);
     expect(report?.files[0]?.uncoveredLines).toEqual([3]);
+    expect(report?.files[0]?.uncoveredBranches).toEqual([2]);
   });
 
   it("returns undefined for no report so callers say 'not measured'", () => {
@@ -62,6 +63,23 @@ describe("coverageDelta", () => {
   it("is not measured when either report is missing or silent about the file", () => {
     expect(coverageDelta(undefined, after, "src/math.ts")).toEqual({ status: "not-measured" });
     expect(coverageDelta(before, after, "src/user.ts")).toEqual({ status: "not-measured" });
+  });
+});
+
+describe("coverageTargetFor", () => {
+  it("returns the measured uncovered lines and branches for one file", () => {
+    const report = parseLcov(LCOV);
+    expect(coverageTargetFor(report, "src/math.ts")).toEqual({
+      path: "src/math.ts",
+      uncoveredLines: [3],
+      uncoveredBranches: [2],
+    });
+  });
+
+  it("returns nothing when the file is fully covered or not in the report", () => {
+    const full = parseLcov("SF:src/full.ts\nDA:1,1\nend_of_record");
+    expect(coverageTargetFor(full, "src/full.ts")).toBeUndefined();
+    expect(coverageTargetFor(undefined, "src/full.ts")).toBeUndefined();
   });
 });
 
