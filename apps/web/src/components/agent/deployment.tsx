@@ -1,12 +1,13 @@
 /** Deployment-level settings that live in D1: workspace, audit, schedules, memory, policy. */
 import { useEffect, useState, type ReactNode } from "react";
-import { CalendarClock, Loader2, MemoryStick, ScrollText, ShieldCheck, Trash2 } from "lucide-react";
+import { CalendarClock, Loader2, Save, Trash2 } from "lucide-react";
 import type { RepoMemory } from "@edge-spec/core/memory";
 import type { PullPolicy } from "@edge-spec/core/policy";
 import {
   Badge,
   Button,
   Dialog,
+  Hint,
   Input,
   Switch,
   Tabs,
@@ -164,7 +165,7 @@ function WorkspacePanel({ open }: { open: boolean }) {
       </p>
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy}>
-          {busy && <Loader2 className="size-3.5 animate-spin" />}
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
           Save workspace
         </Button>
         {saved && <span className="text-[11px] text-emerald-300">Saved.</span>}
@@ -231,7 +232,7 @@ function AuditPanel({ open, repo }: { open: boolean; repo: string }) {
           No audit events yet. Updates to workspace, memory, policy and schedules write here.
         </Notice>
       ) : (
-        <div className="no-scrollbar max-h-[44vh] space-y-1.5 overflow-auto">
+        <div className="space-y-1.5">
           {events.map((event, index) => (
             <div
               key={event.id ?? `${event.createdAt}-${index}`}
@@ -363,7 +364,7 @@ function SchedulesPanel({ open, repo }: { open: boolean; repo: string }) {
               />
             </Field>
             <Button size="sm" onClick={save} disabled={busy}>
-              {busy && <Loader2 className="size-3.5 animate-spin" />}
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
               Save schedule
             </Button>
           </div>
@@ -402,16 +403,18 @@ function SchedulesPanel({ open, repo }: { open: boolean; repo: string }) {
                 <span className="text-[10px] text-zinc-500">
                   {entry.lastRunAt ? `last ${when(entry.lastRunAt)}` : "never run"}
                 </span>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="ml-auto"
-                  aria-label={`Remove schedule for ${entry.repo}`}
-                  onClick={() => remove(entry.repo)}
-                  disabled={busy}
-                >
-                  <Trash2 className="size-3.5 text-rose-300" />
-                </Button>
+                <Hint label="Remove this schedule">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="ml-auto"
+                    aria-label={`Remove schedule for ${entry.repo}`}
+                    onClick={() => remove(entry.repo)}
+                    disabled={busy}
+                  >
+                    <Trash2 className="size-3.5 text-rose-300" />
+                  </Button>
+                </Hint>
               </div>
             ))}
           </div>
@@ -528,12 +531,20 @@ function MemoryPanel({ open, repo }: { open: boolean; repo: string }) {
       </p>
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy}>
-          {busy && <Loader2 className="size-3.5 animate-spin" />}
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
           Save memory
         </Button>
-        <Button size="sm" variant="outline" onClick={clear} disabled={busy}>
-          <Trash2 className="size-3.5" /> Delete
-        </Button>
+        <Hint label="Delete stored memory">
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={clear}
+            disabled={busy}
+            aria-label="Delete stored memory"
+          >
+            <Trash2 className="size-3.5 text-rose-300" />
+          </Button>
+        </Hint>
         {saved && <span className="text-[11px] text-emerald-300">Saved.</span>}
       </div>
       {error && <p className="text-[11px] text-rose-300">{error}</p>}
@@ -685,12 +696,20 @@ function PolicyPanel({ open, repo }: { open: boolean; repo: string }) {
       </p>
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy}>
-          {busy && <Loader2 className="size-3.5 animate-spin" />}
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
           Save policy
         </Button>
-        <Button size="sm" variant="outline" onClick={clear} disabled={busy}>
-          <Trash2 className="size-3.5" /> Delete
-        </Button>
+        <Hint label="Delete stored policy">
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={clear}
+            disabled={busy}
+            aria-label="Delete stored policy"
+          >
+            <Trash2 className="size-3.5 text-rose-300" />
+          </Button>
+        </Hint>
         {saved && <span className="text-[11px] text-emerald-300">Saved.</span>}
       </div>
       {error && <p className="text-[11px] text-rose-300">{error}</p>}
@@ -717,36 +736,51 @@ export function DeploymentDialog({
       className="max-w-3xl"
     >
       <Tabs defaultValue="workspace">
-        <TabsList className="mb-3 flex-wrap">
-          <TabsTrigger value="workspace">
-            <ShieldCheck className="size-3.5" /> Workspace
-          </TabsTrigger>
-          <TabsTrigger value="audit">
-            <ScrollText className="size-3.5" /> Audit
-          </TabsTrigger>
-          <TabsTrigger value="schedules">
-            <CalendarClock className="size-3.5" /> Schedules
-          </TabsTrigger>
-          <TabsTrigger value="memory">
-            <MemoryStick className="size-3.5" /> Memory
-          </TabsTrigger>
-          <TabsTrigger value="policies">
-            <ShieldCheck className="size-3.5" /> Policies
-          </TabsTrigger>
+        <TabsList className="-mx-4 -mt-3 mb-3 flex-wrap border-b border-zinc-800 px-4 pt-3 pb-2">
+          <TabsTrigger value="workspace">Workspace</TabsTrigger>
+          <TabsTrigger value="audit">Audit</TabsTrigger>
+          <TabsTrigger value="schedules">Schedules</TabsTrigger>
+          <TabsTrigger value="memory">Memory</TabsTrigger>
+          <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
-        <TabsContent value="workspace">
+        <TabsContent
+          value="workspace"
+          forceMount
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          style={{ animation: "none" }}
+        >
           <WorkspacePanel open={open} />
         </TabsContent>
-        <TabsContent value="audit">
+        <TabsContent
+          value="audit"
+          forceMount
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          style={{ animation: "none" }}
+        >
           <AuditPanel open={open} repo={repo} />
         </TabsContent>
-        <TabsContent value="schedules">
+        <TabsContent
+          value="schedules"
+          forceMount
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          style={{ animation: "none" }}
+        >
           <SchedulesPanel open={open} repo={repo} />
         </TabsContent>
-        <TabsContent value="memory">
+        <TabsContent
+          value="memory"
+          forceMount
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          style={{ animation: "none" }}
+        >
           <MemoryPanel open={open} repo={repo} />
         </TabsContent>
-        <TabsContent value="policies">
+        <TabsContent
+          value="policies"
+          forceMount
+          className="h-[min(26rem,55vh)] overflow-y-auto pr-1"
+          style={{ animation: "none" }}
+        >
           <PolicyPanel open={open} repo={repo} />
         </TabsContent>
       </Tabs>
