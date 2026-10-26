@@ -563,7 +563,7 @@ function SchedulesBlock({ repo }: { repo: string }) {
             aria-label="Enable the scheduled drift scan"
           />
         </div>
-        <div className="mt-2 flex items-end gap-2">
+        <div className="mt-2">
           <Field label="Every (days)" hint="1–30.">
             <Input
               type="number"
@@ -573,6 +573,8 @@ function SchedulesBlock({ repo }: { repo: string }) {
               onChange={(event) => setIntervalDays(Number(event.target.value))}
             />
           </Field>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
           <Button size="sm" onClick={save} disabled={busy}>
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
             Save
