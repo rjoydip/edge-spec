@@ -4,6 +4,7 @@ import {
   Bot,
   Boxes,
   CheckCircle2,
+  Database,
   Gauge,
   KeyRound,
   Loader2,
@@ -43,6 +44,7 @@ import {
 } from "@edge-spec/ui";
 import { checkSandbox } from "@/api";
 import { isLocalDashboard } from "@/lib/env";
+import { DeploymentSettings } from "./deployment";
 import {
   DEFAULT_SETTINGS,
   clearSecrets,
@@ -54,7 +56,7 @@ import {
 import { ACCENTS, setAccent, toggleMode, useAppearance } from "@/lib/theme";
 
 export type SettingsSection =
-  "provider" | "sandbox" | "keys" | "pipeline" | "policy" | "appearance";
+  "provider" | "sandbox" | "keys" | "pipeline" | "policy" | "deployment" | "appearance";
 
 const SECTION_TONE: Record<string, string> = {
   provider: "text-violet-300",
@@ -62,6 +64,7 @@ const SECTION_TONE: Record<string, string> = {
   keys: "text-amber-300",
   pipeline: "text-indigo-300",
   policy: "text-rose-300",
+  deployment: "text-emerald-300",
   appearance: "text-fuchsia-300",
 };
 
@@ -69,10 +72,13 @@ export function SettingsSheet({
   open,
   onOpenChange,
   section,
+  repo,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   section?: SettingsSection;
+  /** Repository used by the server-side Deployment section. */
+  repo: string;
 }) {
   const settings = useSettings();
   const secrets = useSecrets();
@@ -752,6 +758,15 @@ export function SettingsSheet({
                   shows which gate blocked it.
                 </p>
               </div>
+            </Section>
+
+            <Section
+              id="deployment"
+              icon={Database}
+              title="Deployment"
+              summary={repo || "deployment-wide"}
+            >
+              <DeploymentSettings repo={repo} />
             </Section>
 
             <Section

@@ -39,17 +39,16 @@ behind the content and are `pointer-events-none`.
    Bulk and per-file generation are here.
 4. **Review Queue** — one row per generated file with its diff, checks and
    coverage facts. Accept or reject each file; a rejected or unverified file
-   never reaches a pull request. History, backlog and **Deployment** open from
-   the header.
+   never reaches a pull request. History and backlog open from the header; the
+   audit log opens from the profile menu.
 
-The **Deployment** dialog holds the configuration that lives in D1 and R2, not
-in this browser: **Workspace** (name and retention days), **Audit** (newest
-first, current repository or every repository), **Schedules** (daily drift
-scans), **Memory** (approved naming, conventions, helpers and fixtures) and
-**Policies** (the stored pull request gates used by webhook runs). Each panel
-reads its real route; without the optional bindings it says so instead of
-showing an empty success. Run-history rows also download the stored R2 artifact
-bundle for that run; a 404 means the run stored no bundle.
+The **Deployment** section in Settings holds the configuration that lives in D1
+and R2, not in this browser: workspace name and retention days, repository
+memory, the stored pull request policy used by webhook runs, and the opt-in
+drift scan. Each block reads its real route and saves explicitly; without the
+optional bindings it says so instead of showing an empty success. Run-history
+rows also download the stored R2 artifact bundle for that run; a 404 means the
+run stored no bundle.
 
 ## Motion
 
@@ -61,8 +60,8 @@ live badge and a pulsing dot on the brand mark.
 ## Settings
 
 The settings sheet sections are **Provider**, **Sandbox**, **Keys**,
-**Pipeline**, **Policy** and **Appearance**. Provider and sandbox settings are
-also reachable from their header badges.
+**Pipeline**, **Policy**, **Deployment** and **Appearance**. Provider and
+sandbox settings are also reachable from their header badges.
 
 - **Provider** — provider, model, base URL for the private provider, and the
   matching key. Changing the provider clears the key field. Workers AI adds a
@@ -74,11 +73,15 @@ also reachable from their header badges.
 - **Pipeline** — coverage target, retries, files per run, strict TypeScript and
   parallel generation.
 - **Policy** — opt-in PR gates.
+- **Deployment** — workspace name and retention, repository memory, stored PR
+  policy and the drift scan. These save to D1/R2, not `localStorage`.
 - **Appearance** — dark/light and ten accent swatches.
 
 Non-appearance fields are a draft: Cancel, Escape or the backdrop discards them.
 Saving writes settings to `localStorage`; keys go to the browser's secret store
-and are sent per request as headers. Appearance applies immediately.
+and are sent per request as headers. Appearance applies immediately. The
+**Deployment** section is the exception: it saves explicitly to D1/R2 and is not
+part of the local draft.
 
 ## Theme and accent
 

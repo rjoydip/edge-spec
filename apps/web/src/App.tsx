@@ -722,6 +722,7 @@ export function App() {
           setSettingsOpen(next);
           if (!next) setSettingsSection(undefined);
         }}
+        repo={project.repo}
         {...(settingsSection ? { section: settingsSection } : {})}
       />
     </>
