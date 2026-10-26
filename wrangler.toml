@@ -23,3 +23,12 @@ remote = true
 name = "test-generation-workflow"
 binding = "TEST_GENERATION_WORKFLOW"
 class_name = "TestGenerationWorkflow"
+
+# Optional run history. Create the database, paste its id, apply the migrations
+# in migrations/, then uncomment this block:
+#   wrangler d1 create edge-spec-runs
+#   wrangler d1 migrations apply edge-spec-runs --remote
+# [[d1_databases]]
+# binding = "RUNS_DB"
+# database_name = "edge-spec-runs"
+# database_id = "<paste-the-id-here>"

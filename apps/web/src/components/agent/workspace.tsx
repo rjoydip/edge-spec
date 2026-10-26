@@ -20,6 +20,7 @@ import {
   FolderGit2,
   GitBranch,
   GitPullRequest,
+  History,
   Info,
   KeyRound,
   Loader2,
@@ -109,7 +110,7 @@ import {
   TooltipProvider,
   cn,
 } from "@edge-spec/ui";
-import { fetchBranches, type PullMeta } from "@/api";
+import { fetchBranches, recordRunDecision, type PullMeta } from "@/api";
 import { isLocalPathInput } from "@/lib/local-path";
 import { setProject, type Project, type Settings as SettingsValue } from "@/lib/settings";
 import { toggleMode, useAppearance } from "@/lib/theme";
@@ -135,6 +136,7 @@ import {
   DiffDialog,
   EndpointDialog,
   FactsDialog,
+  HistoryDialog,
   LogDialog,
   PrDialog,
   SourceDialog,
@@ -190,6 +192,8 @@ export interface AgentWorkspaceProps {
   overview?: RepositoryOverview;
   generated: AgentTest[];
   pullUrls: Record<string, string>;
+  /** The history id of the current run, when the deployment stores history. */
+  runId?: string;
   apiResults: ApiTestResult[];
   toast?: { title: string; description?: string; variant: "default" | "success" | "warning" };
   onRun: () => void;
@@ -223,6 +227,7 @@ export function AgentWorkspace({
   overview,
   generated,
   pullUrls,
+  runId,
   apiResults,
   toast,
   onRun,
@@ -268,6 +273,7 @@ export function AgentWorkspace({
   >(undefined);
   const [specOpen, setSpecOpen] = useState(false);
   const [factsOpen, setFactsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [prOpen, setPrOpen] = useState(false);
   const [prDraft, setPrDraft] = useState<PrDraft>({
     title: "",
@@ -364,9 +370,18 @@ export function AgentWorkspace({
       }
       return next;
     });
+    if (runId) {
+      for (const item of generated) {
+        void recordRunDecision(
+          runId,
+          item.generation.sourcePath,
+          item.validation.ok ? "accepted" : "rejected",
+        ).catch(() => undefined);
+      }
+    }
     openPullDialog(verified);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, mode, generated]);
+  }, [running, mode, generated, runId]);
 
   const counts: ScanTotals = totals ?? {
     missing: gaps.filter((gap) => (gap.kind ?? "missing") === "missing").length,
@@ -708,12 +723,17 @@ export function AgentWorkspace({
 
   const setReview = (path: string, state: ReviewState) => {
     setReviews((current) => ({ ...current, [path]: state }));
+    if (runId) void recordRunDecision(runId, path, state).catch(() => undefined);
   };
 
   const restoreRejected = () => {
     setReviews((current) => {
       const next = { ...current };
-      for (const key of Object.keys(next)) if (next[key] === "rejected") next[key] = "pending";
+      for (const key of Object.keys(next)) {
+        if (next[key] !== "rejected") continue;
+        next[key] = "pending";
+        if (runId) void recordRunDecision(runId, key, "pending").catch(() => undefined);
+      }
       return next;
     });
   };
@@ -804,6 +824,18 @@ export function AgentWorkspace({
                     </Badge>
                   </button>
                 </Hint>
+                {project.repo && !project.localPath && (
+                  <Hint label="Run history">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setHistoryOpen(true)}
+                      aria-label="Run history"
+                    >
+                      <History className="text-sky-300" />
+                    </Button>
+                  </Hint>
+                )}
                 <Hint label="Settings">
                   <Button
                     variant="outline"
@@ -2037,6 +2069,11 @@ export function AgentWorkspace({
           specs={specs}
           coverageStatus={coverageStatus}
           coverageReason={coverageReason}
+        />
+        <HistoryDialog
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          repo={project.repo}
         />
         <PrDialog
           open={prOpen}

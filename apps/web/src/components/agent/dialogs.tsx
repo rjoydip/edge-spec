@@ -23,12 +23,14 @@ import {
   ShieldCheck,
   Sparkles,
   Timer,
+  Trash2,
   TriangleAlert,
   Type,
   Wrench,
   X,
 } from "lucide-react";
 import { providerById } from "@edge-spec/core/catalog";
+import { compareRuns, type RunComparison, type RunSummary } from "@edge-spec/core/history";
 import type {
   ApiTestResult,
   OpenApiEndpoint,
@@ -62,6 +64,7 @@ import {
   Textarea,
   cn,
 } from "@edge-spec/ui";
+import { deleteRuns, fetchRunDetail, fetchRuns } from "@/api";
 import type { Project, Settings } from "@/lib/settings";
 import { HighlightedCode } from "./highlight";
 import {
@@ -1451,6 +1454,268 @@ function Section({
         {title}
       </p>
       {children}
+    </div>
+  );
+}
+
+function signed(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function when(ms: number): string {
+  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** Stored runs for one repository, with a two-run compare. */
+export function HistoryDialog({
+  open,
+  onClose,
+  repo,
+}: {
+  open: boolean;
+  onClose: () => void;
+  repo: string;
+}) {
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [selected, setSelected] = useState<string[]>([]);
+  const [comparison, setComparison] = useState<RunComparison>();
+  const [deleting, setDeleting] = useState(false);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    if (!open || !repo) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+    fetchRuns(repo)
+      .then((result) => {
+        if (cancelled) return;
+        setEnabled(result.enabled);
+        setRuns(result.runs);
+        setSelected([]);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, repo, reload]);
+
+  useEffect(() => {
+    if (selected.length !== 2) {
+      setComparison(undefined);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(selected.map((id) => fetchRunDetail(id)))
+      .then(([before, after]) => {
+        if (cancelled || !before || !after || !before.enabled || !after.enabled) return;
+        setComparison(compareRuns(before, after));
+      })
+      .catch(() => {
+        if (!cancelled) setComparison(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const toggle = (id: string) => {
+    setSelected((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id].slice(-2),
+    );
+  };
+
+  const remove = async () => {
+    if (!repo || !window.confirm(`Delete all run history for ${repo}?`)) return;
+    setDeleting(true);
+    try {
+      await deleteRuns(repo);
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Run history"
+      description={`${repo} · select two runs to compare`}
+      className="max-w-4xl"
+      footer={
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mr-auto"
+            onClick={remove}
+            disabled={!enabled || deleting || runs.length === 0}
+          >
+            {deleting ? <Loader2 className="animate-spin" /> : <Trash2 className="size-3.5" />}
+            Delete history
+          </Button>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        </>
+      }
+    >
+      {!enabled ? (
+        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
+          Run history is not enabled on this deployment. Add the optional D1 binding in
+          wrangler.toml and apply migrations/0001_runs.sql.
+        </p>
+      ) : loading ? (
+        <p className="flex items-center justify-center gap-2 py-8 text-[11px] text-zinc-500">
+          <Loader2 className="size-3.5 animate-spin" /> Loading runs…
+        </p>
+      ) : runs.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
+          No stored runs yet. Complete a run to record one.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <div className="no-scrollbar max-h-[34vh] space-y-1.5 overflow-auto">
+            {runs.map((run) => {
+              const index = selected.indexOf(run.id);
+              return (
+                <button
+                  key={run.id}
+                  type="button"
+                  onClick={() => toggle(run.id)}
+                  className={cn(
+                    "w-full rounded-xl border px-3 py-2 text-left transition",
+                    index >= 0
+                      ? "border-indigo-500/40 bg-indigo-500/10"
+                      : "border-zinc-800/70 bg-zinc-900/40 hover:border-zinc-700",
+                  )}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant={
+                        run.status === "ready"
+                          ? "success"
+                          : run.status === "failed"
+                            ? "danger"
+                            : "neutral"
+                      }
+                    >
+                      {run.status}
+                    </Badge>
+                    {index >= 0 && (
+                      <Badge variant="accent">{index === 0 ? "before" : "after"}</Badge>
+                    )}
+                    <span className="text-[11px] text-zinc-300">{when(run.startedAt)}</span>
+                    <span className="ml-auto font-mono text-[10px] text-zinc-500">
+                      {run.provider} · {run.model}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-500">
+                    <span>{run.totals.missing} missing</span>
+                    <span>{run.totals.coverage} coverage</span>
+                    <span>{run.totals.api} api</span>
+                    <span>{run.totals.skipped} skipped by policy</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {comparison ? (
+            <ComparePanel comparison={comparison} />
+          ) : (
+            <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-4 text-center text-[11px] text-zinc-500">
+              Select two runs to compare files, verification, decisions and coverage.
+            </p>
+          )}
+        </div>
+      )}
+      {error && <p className="mt-3 text-[11px] text-rose-300">{error}</p>}
+    </Dialog>
+  );
+}
+
+function ComparePanel({ comparison }: { comparison: RunComparison }) {
+  const rows: Array<[string, string, string]> = [
+    [
+      "Missing tests",
+      `${comparison.missing.before} → ${comparison.missing.after}`,
+      signed(comparison.missing.delta),
+    ],
+    [
+      "Files covered",
+      `${comparison.files.before} → ${comparison.files.after}`,
+      signed(comparison.files.after - comparison.files.before),
+    ],
+    [
+      "Verified",
+      `${comparison.verified.before} → ${comparison.verified.after}`,
+      signed(comparison.verified.after - comparison.verified.before),
+    ],
+    [
+      "Accepted",
+      `${comparison.accepted.before} → ${comparison.accepted.after}`,
+      signed(comparison.accepted.after - comparison.accepted.before),
+    ],
+    [
+      "Rejected",
+      `${comparison.rejected.before} → ${comparison.rejected.after}`,
+      signed(comparison.rejected.after - comparison.rejected.before),
+    ],
+    [
+      "Coverage lines",
+      `${signed(comparison.coverageLines.before)} → ${signed(comparison.coverageLines.after)}`,
+      signed(comparison.coverageLines.delta),
+    ],
+  ];
+
+  return (
+    <div className="rounded-xl border border-zinc-800/70 bg-zinc-950/40 p-3">
+      <p className="text-[10px] font-semibold tracking-wide text-zinc-400 uppercase">
+        Compare · {comparison.newFiles.length} new, {comparison.closedFiles.length} closed
+      </p>
+      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+        {rows.map(([label, values, delta]) => (
+          <div
+            key={label}
+            className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/60 px-2.5 py-1.5"
+          >
+            <span className="text-[10px] text-zinc-500">{label}</span>
+            <span className="font-mono text-[10px] text-zinc-300">{values}</span>
+            <Badge variant="neutral">{delta}</Badge>
+          </div>
+        ))}
+      </div>
+      {comparison.newFiles.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <p className="text-[10px] font-semibold text-emerald-400">New files</p>
+          {comparison.newFiles.slice(0, 10).map((path) => (
+            <p key={path} className="truncate font-mono text-[10px] text-zinc-400">
+              {path}
+            </p>
+          ))}
+        </div>
+      )}
+      {comparison.closedFiles.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <p className="text-[10px] font-semibold text-zinc-400">No longer covered</p>
+          {comparison.closedFiles.slice(0, 10).map((path) => (
+            <p key={path} className="truncate font-mono text-[10px] text-zinc-500">
+              {path}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

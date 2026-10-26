@@ -48,6 +48,16 @@ import {
   type Validation,
 } from "@edge-spec/core/types";
 import type { Env } from "./env";
+import {
+  createRun,
+  deleteRunHistory,
+  finishRun,
+  getRun,
+  listRuns,
+  runsDb,
+  setRunDecisions,
+} from "./db";
+import type { RunDecision, RunFile, RunSummary } from "@edge-spec/core/history";
 
 export { TestGenerationWorkflow } from "./workflow";
 
@@ -550,7 +560,36 @@ app.post("/api/run", async (c) => {
   }
 
   const { github, aiConfig, sandbox, repoToken, input } = prepared;
+  const history = runsDb(c.env);
+  const runId = crypto.randomUUID();
+  const run: RunSummary = {
+    id: runId,
+    repo: input.repo,
+    ref: input.ref,
+    status: "running",
+    provider: aiConfig.provider.id,
+    model: aiConfig.model,
+    startedAt: Date.now(),
+    totals: { missing: 0, coverage: 0, api: 0, unsupported: 0, skipped: 0 },
+  };
+  let stored = false;
+  if (history) {
+    // History is a convenience; a D1 outage must not fail the run.
+    try {
+      await createRun(history, run);
+      stored = true;
+    } catch {
+      stored = false;
+    }
+  }
+
   return streamSSE(c, async (stream) => {
+    await stream.writeSSE({
+      event: "run",
+      data: JSON.stringify({ type: "run", id: runId, persisted: stored }),
+    });
+    const files = new Map<string, RunFile>();
+    let status: RunSummary["status"] = "failed";
     try {
       for await (const event of runPipeline(input, {
         github,
@@ -558,6 +597,28 @@ app.post("/api/run", async (c) => {
         ...(sandbox ? { sandbox } : {}),
         ...(repoToken ? { repoToken } : {}),
       })) {
+        if (event.type === "gaps" && event.totals) run.totals = event.totals;
+        if (event.type === "generation") {
+          files.set(event.generation.sourcePath, {
+            sourcePath: event.generation.sourcePath,
+            testPath: event.generation.testPath,
+            decision: "pending",
+            verified: false,
+            checks: [],
+          });
+        }
+        if (event.type === "validation" && event.sourcePath) {
+          const current = files.get(event.sourcePath);
+          files.set(event.sourcePath, {
+            sourcePath: event.sourcePath,
+            testPath: current?.testPath ?? event.sourcePath,
+            decision: current?.decision ?? "pending",
+            verified: event.validation.verified,
+            checks: (event.validation.checks ?? []).map(({ output: _output, ...check }) => check),
+            ...(event.validation.coverage ? { coverage: event.validation.coverage } : {}),
+          });
+        }
+        if (event.type === "result") status = event.ok ? "ready" : "failed";
         await stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
       }
     } catch (err) {
@@ -566,6 +627,11 @@ app.post("/api/run", async (c) => {
         event: "error",
         data: JSON.stringify({ type: "error", message }),
       });
+    } finally {
+      if (history && stored) {
+        const finished: RunSummary = { ...run, status, finishedAt: Date.now() };
+        await finishRun(history, finished, [...files.values()]).catch(() => undefined);
+      }
     }
     await stream.writeSSE({ event: "done", data: "{}" });
   });
@@ -772,6 +838,17 @@ app.post("/api/pull-request", async (c) => {
         ].join("\\n"),
       ...(meta.draft ? { draft: true } : {}),
     });
+
+    // The pull request is the acceptance decision, when the client knows the run.
+    const history = runsDb(c.env);
+    const runId = str(body.runId);
+    if (history && runId && /^[A-Za-z0-9-]{8,64}$/.test(runId)) {
+      await setRunDecisions(
+        history,
+        runId,
+        files.map((file) => ({ sourcePath: file.sourcePath, decision: "accepted" as const })),
+      ).catch(() => undefined);
+    }
     return c.json({ url, files: files.length });
   } catch (err) {
     return fail(err);
@@ -813,6 +890,78 @@ app.post("/webhook", async (c) => {
     if (!binding) throw new HttpError(501, "Workflows are not bound on this deployment.");
     const instance = await binding.create({ params: { repo, ref } });
     return c.json({ workflowId: instance.id }, 202);
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+/** History ids are UUID-shaped; the guard keeps SQL parameters and URLs honest. */
+const HISTORY_ID = /^[A-Za-z0-9-]{8,64}$/;
+
+app.get("/api/runs", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, runs: [] });
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    const limit = Number(c.req.query("limit") ?? 20);
+    const runs = await listRuns(db, `${repo.owner}/${repo.name}`, limit);
+    return c.json({ enabled: true, runs });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.delete("/api/runs", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Run history is not enabled on this deployment.");
+    const repo = parseRepo(c.req.query("repo"));
+    if (!repo) throw new HttpError(400, "Pass ?repo=owner/name.");
+    const deleted = await deleteRunHistory(db, `${repo.owner}/${repo.name}`);
+    return c.json({ deleted });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.get("/api/runs/:id/files", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false });
+    const id = c.req.param("id");
+    if (!HISTORY_ID.test(id)) throw new HttpError(400, "Invalid run id.");
+    const detail = await getRun(db, id);
+    if (!detail) throw new HttpError(404, "Run not found.");
+    return c.json({ enabled: true, ...detail });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.post("/api/runs/:id/decisions", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Run history is not enabled on this deployment.");
+    const id = c.req.param("id");
+    if (!HISTORY_ID.test(id)) throw new HttpError(400, "Invalid run id.");
+    const body = await readJson(c);
+    const decisions: Array<{ sourcePath: string; decision: RunDecision }> = [];
+    for (const entry of Array.isArray(body.decisions) ? body.decisions : []) {
+      const item = asRecord(entry);
+      const sourcePath = str(item.sourcePath);
+      const decision = str(item.decision);
+      if (
+        !sourcePath ||
+        (decision !== "accepted" && decision !== "rejected" && decision !== "pending")
+      ) {
+        continue;
+      }
+      decisions.push({ sourcePath, decision });
+    }
+    if (decisions.length === 0) throw new HttpError(400, "Pass at least one decision.");
+    await setRunDecisions(db, id, decisions.slice(0, 200));
+    return c.json({ updated: Math.min(decisions.length, 200) });
   } catch (err) {
     return fail(err);
   }

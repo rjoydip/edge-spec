@@ -24,8 +24,10 @@ Outbound from the Worker:
   SANDBOX_RUNNER_URL (optional)   executes `bun test`
 ```
 
-The Worker is stateless. There is no KV, D1 or R2 binding, and no session. A
-request carries everything needed to serve it.
+The Worker holds no session and no user configuration. A request carries
+everything needed to serve it. Run history is an optional D1 binding
+(`RUNS_DB`): when it is absent the history routes answer `enabled: false` and
+nothing is stored. There is no KV or R2 binding yet.
 
 ## Frontend bundle
 

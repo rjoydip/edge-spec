@@ -36,9 +36,10 @@ measures something it actually ran, or says "not measured".
 | CLI (`scan`, `generate`, `run`, `catalog`)                   | Shipped                                                        |
 | MCP stdio server (5 tools)                                   | Shipped                                                        |
 | Dashboard                                                    | Redesign draft at `/?draft`; fixtures, not yet wired to events |
-| Persistence                                                  | None. Settings in `localStorage`; no D1/KV/R2 binding          |
+| Persistence                                                  | Optional D1 for run history (`RUNS_DB`); settings stay local   |
 | Auth                                                         | User PATs in headers. No GitHub App                            |
-| Run history, backlog, policies                               | Not built                                                      |
+| Run history                                                  | Shipped (`/api/runs`, History/Compare); backlog/policies later |
+| Backlog, policies                                            | Not built                                                      |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run
 database. That is the largest structural gap.

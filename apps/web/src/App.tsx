@@ -106,6 +106,8 @@ export function App() {
   /** The last refusal from the provider, e.g. an exhausted allocation. */
   const [providerError, setProviderError] = useState<string>();
   const [pullUrls, setPullUrls] = useState<Record<string, string>>({});
+  /** The run the history table knows, when the deployment has D1. */
+  const [runId, setRunId] = useState<string>();
   const [running, setRunning] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -207,6 +209,9 @@ export function App() {
   const handleEvent = useCallback(
     (event: RunEvent) => {
       switch (event.type) {
+        case "run":
+          setRunId(event.id);
+          break;
         case "log":
           addLog(event.level, event.text, currentStep.current);
           break;
@@ -346,6 +351,7 @@ export function App() {
     setLogs([]);
     setLive({});
     setApiResults([]);
+    setRunId(undefined);
     const controller = new AbortController();
     abortRef.current = controller;
     currentStep.current = "scan";
@@ -449,7 +455,7 @@ export function App() {
         path: item.generation.testPath,
         code: item.generation.code,
       })),
-      meta,
+      { ...meta, ...(runId ? { runId } : {}) },
     );
     setPullUrls((current) => {
       const next = { ...current };
@@ -473,6 +479,7 @@ export function App() {
     setGenerated([]);
     setLive({});
     setPullUrls({});
+    setRunId(undefined);
     setLogs([]);
     setGapLogs([]);
     setSteps(INITIAL_STEPS);
@@ -650,6 +657,7 @@ export function App() {
         {...(overview ? { overview } : {})}
         generated={generated}
         pullUrls={pullUrls}
+        {...(runId ? { runId } : {})}
         apiResults={apiResults}
         {...(toast ? { toast } : {})}
         onRun={run}

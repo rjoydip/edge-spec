@@ -260,6 +260,8 @@ export type StepId = "scan" | "generate" | "validate" | "correct" | "pull-reques
 
 export type RunEvent =
   | { type: "log"; level: "info" | "ai" | "warn" | "success" | "error"; text: string }
+  /** Emitted first by the SSE route so the dashboard can record decisions. */
+  | { type: "run"; id: string; persisted: boolean }
   | {
       type: "step";
       step: StepId;

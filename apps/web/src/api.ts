@@ -8,6 +8,7 @@ import type {
   Validation,
 } from "@edge-spec/core/types";
 import type { PullSummary } from "@edge-spec/core/github";
+import type { RunDecision, RunDetail, RunSummary } from "@edge-spec/core/history";
 import { getProject, requestHeaders, type Project, type Settings } from "./lib/settings";
 
 export interface Catalog {
@@ -189,6 +190,8 @@ export interface PullMeta {
   branch?: string;
   commitMessage?: string;
   draft?: boolean;
+  /** The run the accepted files came from, so history can record the decision. */
+  runId?: string;
 }
 
 /** Opens one pull request that carries every listed test file. */
@@ -211,6 +214,38 @@ export function openPullWithFiles(
         sourcePath: file.sourcePath,
       })),
     }),
+  });
+}
+
+export interface RunsResponse {
+  enabled: boolean;
+  runs: RunSummary[];
+}
+
+/** Run history is optional; `enabled: false` means this deployment has no D1. */
+export function fetchRuns(repo: string): Promise<RunsResponse> {
+  return apiJson<RunsResponse>(`/api/runs?repo=${encodeURIComponent(repo)}`);
+}
+
+export function fetchRunDetail(id: string): Promise<{ enabled: boolean } & RunDetail> {
+  return apiJson<{ enabled: boolean } & RunDetail>(`/api/runs/${encodeURIComponent(id)}/files`);
+}
+
+/** One action deletes every run for the repository. */
+export function deleteRuns(repo: string): Promise<{ deleted: number }> {
+  return apiJson<{ deleted: number }>(`/api/runs?repo=${encodeURIComponent(repo)}`, {
+    method: "DELETE",
+  });
+}
+
+export function recordRunDecision(
+  runId: string,
+  sourcePath: string,
+  decision: RunDecision,
+): Promise<{ updated: number }> {
+  return apiJson<{ updated: number }>(`/api/runs/${encodeURIComponent(runId)}/decisions`, {
+    method: "POST",
+    body: JSON.stringify({ decisions: [{ sourcePath, decision }] }),
   });
 }
 

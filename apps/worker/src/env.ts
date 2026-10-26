@@ -18,11 +18,26 @@ export interface WorkflowBinding {
   get(id: string): Promise<WorkflowInstance>;
 }
 
+/** The subset of D1 this Worker uses, typed without pulling in Workers types. */
+export interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first<T = unknown>(): Promise<T | null>;
+  all<T = unknown>(): Promise<{ results?: T[] }>;
+  run(): Promise<{ meta?: { changes?: number } }>;
+}
+
+export interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+  batch<T = unknown>(statements: D1PreparedStatement[]): Promise<T[]>;
+}
+
 export interface Env {
   /** Static-assets binding. Typed minimally so DOM and Workers libs don't clash. */
   ASSETS: { fetch: (request: Request) => Promise<Response> };
   AI?: AiBinding;
   TEST_GENERATION_WORKFLOW?: WorkflowBinding;
+  /** Optional run history. Absent on a deployment that does not want it. */
+  RUNS_DB?: D1Database;
   /** Automation path only. The dashboard always uses the visitor's own token. */
   GITHUB_TOKEN?: string;
   GITHUB_WEBHOOK_SECRET?: string;
