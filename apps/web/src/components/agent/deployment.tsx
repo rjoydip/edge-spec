@@ -391,11 +391,21 @@ function PolicyBlock({ repo }: { repo: string }) {
       <SubHead icon={ShieldCheck} title="Pull request policy" hint={repo} />
       <div className="flex flex-wrap gap-3">
         <label className="flex items-center gap-2 text-[10px] text-zinc-300">
-          <Switch checked={killSwitch} onCheckedChange={setKillSwitch} size="sm" />
+          <Switch
+            checked={killSwitch}
+            onCheckedChange={setKillSwitch}
+            size="sm"
+            aria-label="Kill switch"
+          />
           Kill switch
         </label>
         <label className="flex items-center gap-2 text-[10px] text-zinc-300">
-          <Switch checked={draftOnly} onCheckedChange={setDraftOnly} size="sm" />
+          <Switch
+            checked={draftOnly}
+            onCheckedChange={setDraftOnly}
+            size="sm"
+            aria-label="Draft only"
+          />
           Draft only
         </label>
       </div>
