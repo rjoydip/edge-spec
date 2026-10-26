@@ -395,6 +395,197 @@ export async function setBacklogState(
     .run();
 }
 
+export interface Workspace {
+  id: string;
+  name: string;
+  /** Days to keep runs, audit events and command rate-limit rows. */
+  retentionDays: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AuditEvent {
+  id?: number;
+  repo?: string;
+  actor: string;
+  action: string;
+  detail: Record<string, unknown>;
+  createdAt: number;
+}
+
+const SECRET_KEY = /token|key|secret|password|authorization|cookie/i;
+
+/** Audit detail is structural only; secret-looking keys are removed. */
+function redact(value: unknown, depth = 0): unknown {
+  if (depth > 4) return undefined;
+  if (typeof value === "string") return value.slice(0, 500);
+  if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => redact(item, depth + 1));
+  if (typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if (SECRET_KEY.test(key)) continue;
+      result[key] = redact(item, depth + 1);
+    }
+    return result;
+  }
+  return undefined;
+}
+
+export async function getWorkspace(db: D1Database, id = "default"): Promise<Workspace> {
+  const row = await db
+    .prepare("SELECT id, name, retention_days, created_at, updated_at FROM workspaces WHERE id = ?")
+    .bind(id)
+    .first<{
+      id: string;
+      name: string;
+      retention_days: number;
+      created_at: number;
+      updated_at: number;
+    }>();
+  if (row) {
+    return {
+      id: row.id,
+      name: row.name,
+      retentionDays: row.retention_days,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+  const now = Date.now();
+  await db
+    .prepare(
+      "INSERT INTO workspaces (id, name, retention_days, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(id, "Default workspace", 30, now, now)
+    .run();
+  return {
+    id,
+    name: "Default workspace",
+    retentionDays: 30,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function putWorkspace(
+  db: D1Database,
+  input: { name?: string; retentionDays?: number },
+  id = "default",
+): Promise<Workspace> {
+  const current = await getWorkspace(db, id);
+  const name = input.name?.trim().slice(0, 100) || current.name;
+  const days = Number(input.retentionDays);
+  const retentionDays = Number.isFinite(days)
+    ? Math.min(365, Math.max(1, Math.round(days)))
+    : current.retentionDays;
+  const updatedAt = Date.now();
+  await db
+    .prepare("UPDATE workspaces SET name = ?, retention_days = ?, updated_at = ? WHERE id = ?")
+    .bind(name, retentionDays, updatedAt, id)
+    .run();
+  return { ...current, name, retentionDays, updatedAt };
+}
+
+export async function recordAudit(
+  db: D1Database,
+  event: {
+    actor: string;
+    action: string;
+    repo?: string;
+    detail?: Record<string, unknown>;
+    workspaceId?: string;
+  },
+): Promise<void> {
+  await db
+    .prepare(
+      "INSERT INTO audit_events (workspace_id, repo, actor, action, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(
+      event.workspaceId ?? "default",
+      event.repo ?? null,
+      event.actor.slice(0, 120),
+      event.action.slice(0, 120),
+      JSON.stringify(redact(event.detail ?? {})),
+      Date.now(),
+    )
+    .run();
+}
+
+export async function listAudit(
+  db: D1Database,
+  input: { repo?: string; limit?: number } = {},
+): Promise<AuditEvent[]> {
+  const limit = Math.min(200, Math.max(1, Math.round(input.limit ?? 100)));
+  const rows = input.repo
+    ? await db
+        .prepare(
+          "SELECT id, repo, actor, action, detail_json, created_at FROM audit_events WHERE repo = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+        )
+        .bind(input.repo, limit)
+        .all<{
+          id: number;
+          repo: string | null;
+          actor: string;
+          action: string;
+          detail_json: string;
+          created_at: number;
+        }>()
+    : await db
+        .prepare(
+          "SELECT id, repo, actor, action, detail_json, created_at FROM audit_events ORDER BY created_at DESC, id DESC LIMIT ?",
+        )
+        .bind(limit)
+        .all<{
+          id: number;
+          repo: string | null;
+          actor: string;
+          action: string;
+          detail_json: string;
+          created_at: number;
+        }>();
+  return (rows.results ?? []).map((row) => ({
+    id: row.id,
+    ...(row.repo ? { repo: row.repo } : {}),
+    actor: row.actor,
+    action: row.action,
+    detail: json<Record<string, unknown>>(row.detail_json, {}),
+    createdAt: row.created_at,
+  }));
+}
+
+/** Deletes runs, their files, audit events and stale command rows past retention. */
+export async function purgeExpired(
+  db: D1Database,
+  retentionDays: number,
+  now = Date.now(),
+): Promise<{ runs: number; audit: number }> {
+  const cutoff = now - Math.max(1, Math.round(retentionDays)) * 86_400_000;
+  const runs =
+    (
+      await db
+        .prepare("SELECT COUNT(*) AS count FROM runs WHERE started_at < ?")
+        .bind(cutoff)
+        .first<{ count: number }>()
+    )?.count ?? 0;
+  const audit =
+    (
+      await db
+        .prepare("SELECT COUNT(*) AS count FROM audit_events WHERE created_at < ?")
+        .bind(cutoff)
+        .first<{ count: number }>()
+    )?.count ?? 0;
+  await db.batch([
+    db
+      .prepare("DELETE FROM run_files WHERE run_id IN (SELECT id FROM runs WHERE started_at < ?)")
+      .bind(cutoff),
+    db.prepare("DELETE FROM runs WHERE started_at < ?").bind(cutoff),
+    db.prepare("DELETE FROM audit_events WHERE created_at < ?").bind(cutoff),
+    db.prepare("DELETE FROM pr_commands WHERE started_at < ?").bind(cutoff),
+  ]);
+  return { runs, audit };
+}
+
 export interface ScheduledRepo {
   repo: string;
   intervalDays: number;

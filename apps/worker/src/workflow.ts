@@ -22,7 +22,7 @@ import {
   policyBlocked,
   type PullPolicy,
 } from "@edge-spec/core/policy";
-import { getMemory, getPolicy, runsDb } from "./db";
+import { getMemory, getPolicy, recordAudit, runsDb } from "./db";
 import { sandboxRepo, runInSandbox } from "@edge-spec/core/sandbox";
 import { validateTest } from "@edge-spec/core/validate";
 import type { Env } from "./env";
@@ -215,6 +215,16 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       return { checkId, commentId };
     });
 
+    const auditDb = runsDb(this.env);
+    if (auditDb) {
+      await recordAudit(auditDb, {
+        repo: input.repo,
+        actor: "github-app",
+        action: "pr_check",
+        detail: { conclusion: check.conclusion, gaps: scan.gaps.length },
+      }).catch(() => undefined);
+    }
+
     return {
       status: "checked",
       conclusion: check.conclusion,
@@ -344,6 +354,16 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       );
       return { checkId, commentId };
     });
+
+    const auditDb = runsDb(this.env);
+    if (auditDb) {
+      await recordAudit(auditDb, {
+        repo: input.repo,
+        actor: input.command.login ?? "github-comment",
+        action: "command",
+        detail: { name: input.command.name },
+      }).catch(() => undefined);
+    }
 
     return {
       status: "command",
@@ -663,7 +683,17 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
         ...(policy.draftOnly ? { draft: true } : {}),
       }),
     );
-    if (blocked) return { status: "blocked", reason: blocked };
+    if (blocked) {
+      if (db) {
+        await recordAudit(db, {
+          repo,
+          actor: "github-app",
+          action: "pr_blocked",
+          detail: { reason: blocked },
+        }).catch(() => undefined);
+      }
+      return { status: "blocked", reason: blocked };
+    }
 
     const pullRequestUrl = await step.do("create-pull-request", async (): Promise<string> => {
       const base = await github.defaultBranch(repo);
@@ -698,6 +728,14 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
         if (policy.reviewers?.length) {
           await github.requestReviewers(repo, number, policy.reviewers).catch(() => undefined);
         }
+      }
+      if (db) {
+        await recordAudit(db, {
+          repo,
+          actor: "github-app",
+          action: "pr_opened",
+          detail: { url, files: 1 },
+        }).catch(() => undefined);
       }
       return url;
     });

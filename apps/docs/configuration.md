@@ -348,6 +348,33 @@ There is no email adapter yet. Without `RUNS_DB` the cron does nothing, and
 without `DRIFT_WEBHOOK_URL` drift is still recorded but not announced. The scan
 never opens a pull request; PR creation remains the explicit next step.
 
+## Workspace, audit and retention (optional)
+
+A deployment has one workspace record (`GET | PUT /api/workspace`), created
+lazily as `default` on first use. This is deliberately not multi-user auth:
+shared policies, backlog and history live in the same D1 database, and every
+client still supplies its own GitHub and AI credentials per request. The
+workspace stores only a display name and a retention window; it never stores a
+key.
+
+Actions that change shared state or act autonomously write an audit event:
+pull requests opened or blocked, PR checks and commands, policy/memory/schedule/
+backlog updates, workspace updates, drift scans and retention purges. Read them
+with `GET /api/audit?repo=owner/name`. Detail is redacted recursively for
+token/key/secret/password/authorization/cookie keys before storage, so audit
+rows are safe to share with the team.
+
+The daily cron applies retention before scanning:
+
+- runs and their `run_files` rows older than `retentionDays` are deleted;
+- audit events older than `retentionDays` are deleted;
+- `pr_commands` rate-limit rows older than `retentionDays` are deleted.
+
+Retention is clamped to 1–365 days (default 30). A purge writes one
+`retention_purge` event with the deleted counts. There is no per-repository
+retention override and no export or archive step; R2 artifacts are not deleted
+by this job.
+
 ## Sandbox runner (optional)
 
 A runner executes the generated suite, so the result is a real pass or fail

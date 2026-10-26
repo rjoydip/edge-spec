@@ -34,7 +34,7 @@ measures something it actually ran, or says "not measured".
 | PR creation with selected files                              | Shipped (`/api/pull-request`)                                  |
 | Durable workflow + webhook                                   | Shipped (`/webhook` → `TestGenerationWorkflow`)                |
 | CLI (`scan`, `generate`, `run`, `catalog`)                   | Shipped                                                        |
-| MCP stdio server (5 tools)                                   | Shipped                                                        |
+| MCP stdio server (6 tools, 4 resources)                      | Shipped                                                        |
 | Dashboard                                                    | Redesign draft at `/?draft`; fixtures, not yet wired to events |
 | Persistence                                                  | Optional D1 for run history (`RUNS_DB`); settings stay local   |
 | Auth                                                         | User PATs for dashboard; optional GitHub App for CI            |
@@ -53,6 +53,7 @@ measures something it actually ran, or says "not measured".
 | Eval harness / model routing                                 | Shipped (golden cases, outcome scores, opt-in cheap-first)     |
 | Watch mode                                                   | Shipped (`edgespec watch`; VS Code extension not built)        |
 | MCP resources / approvals                                    | Shipped (4 resources, one-time PR approval token)              |
+| Team workspaces / audit / retention                          | Shipped (single workspace, redacted audit, daily purge)        |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run
 database. That is the largest structural gap.

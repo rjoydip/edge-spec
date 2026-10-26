@@ -725,6 +725,62 @@ returns `status: "blocked"` with the gate reason when it fails.
 
 ---
 
+## `GET | PUT /api/workspace`
+
+One workspace per deployment; there is no multi-user account model. `GET`
+returns `{enabled, workspace}`; without `RUNS_DB` it answers `enabled: false`.
+The record is created lazily on first read.
+
+```json
+{
+  "enabled": true,
+  "workspace": {
+    "id": "default",
+    "name": "Default workspace",
+    "retentionDays": 30,
+    "createdAt": 1760000000000,
+    "updatedAt": 1760000000000
+  }
+}
+```
+
+`PUT` accepts `{name?, retentionDays?}`. The name is trimmed to 100 characters;
+retention is clamped to 1–365 days. Updating the workspace writes an audit event.
+
+---
+
+## `GET /api/audit?repo=owner/name&limit=100`
+
+Recent audit events, newest first. `repo` is optional and filters by
+`owner/name`; `limit` defaults to 100 and is clamped to 200. Without `RUNS_DB`
+the route answers `{enabled: false, events: []}`.
+
+```json
+{
+  "enabled": true,
+  "events": [
+    {
+      "id": 12,
+      "repo": "acme/api",
+      "actor": "github-app",
+      "action": "pr_opened",
+      "detail": { "url": "https://github.com/acme/api/pull/42", "files": 1 },
+      "createdAt": 1760000000000
+    }
+  ]
+}
+```
+
+Actions include `pr_opened`, `pr_blocked`, `pr_check`, `command`,
+`policy_updated`, `memory_updated`, `schedule_updated`, `schedule_deleted`,
+`backlog_updated`, `workspace_updated`, `drift_scan` and `retention_purge`.
+Detail is structural only: keys matching token/key/secret/password/
+authorization/cookie are dropped recursively, so a key or token is never
+stored. Actors are `dashboard`, `github-app`, `cron`, or a GitHub login for PR
+commands.
+
+---
+
 ## `GET /api/pulls?repo=owner/name`
 
 Lists the 20 most recent pull requests in all states.

@@ -70,12 +70,16 @@ import {
   getMemory,
   getPolicy,
   getRun,
+  getWorkspace,
+  listAudit,
   listBacklog,
   listRuns,
   listScheduledRepos,
   putMemory,
   putPolicy,
   putScheduledRepo,
+  putWorkspace,
+  recordAudit,
   runsDb,
   setBacklogState,
   setRunDecisions,
@@ -1057,7 +1061,18 @@ app.post("/api/pull-request", async (c) => {
     const blocked = policyBlocked(
       evaluatePullPolicy(policy, { files, ...(meta.draft ? { draft: true } : {}) }),
     );
-    if (blocked) throw new HttpError(403, blocked);
+    const auditDb = runsDb(c.env);
+    if (blocked) {
+      if (auditDb) {
+        await recordAudit(auditDb, {
+          repo,
+          actor: "dashboard",
+          action: "pr_blocked",
+          detail: { reason: blocked },
+        }).catch(() => undefined);
+      }
+      throw new HttpError(403, blocked);
+    }
 
     const github = githubFor(c);
     const base = await github.defaultBranch(repo);
@@ -1122,6 +1137,15 @@ app.post("/api/pull-request", async (c) => {
       if (policy.reviewers?.length) {
         await github.requestReviewers(repo, pullNumber, policy.reviewers).catch(() => undefined);
       }
+    }
+
+    if (auditDb) {
+      await recordAudit(auditDb, {
+        repo,
+        actor: "dashboard",
+        action: "pr_opened",
+        detail: { url, files: files.length },
+      }).catch(() => undefined);
     }
 
     // The pull request is the acceptance decision, when the client knows the run.
@@ -1286,6 +1310,12 @@ app.patch("/api/backlog", async (c) => {
     }
     const owner = str(body.owner)?.slice(0, 120);
     await setBacklogState(db, `${repo.owner}/${repo.name}`, path, state as BacklogState, owner);
+    await recordAudit(db, {
+      repo: `${repo.owner}/${repo.name}`,
+      actor: "dashboard",
+      action: "backlog_updated",
+      detail: { path, state },
+    }).catch(() => undefined);
     return c.json({ updated: true });
   } catch (err) {
     return fail(err);
@@ -1318,6 +1348,12 @@ app.put("/api/schedules", async (c) => {
       enabled: body.enabled !== false,
       ...(Number.isInteger(installationId) && installationId > 0 ? { installationId } : {}),
     });
+    await recordAudit(db, {
+      repo: `${parsed.owner}/${parsed.name}`,
+      actor: "dashboard",
+      action: "schedule_updated",
+      detail: { intervalDays, enabled: body.enabled !== false },
+    }).catch(() => undefined);
     return c.json({ enabled: true, schedules: await listScheduledRepos(db) });
   } catch (err) {
     return fail(err);
@@ -1331,7 +1367,60 @@ app.delete("/api/schedules", async (c) => {
     const parsed = parseRepo(c.req.query("repo"));
     if (!parsed) throw new HttpError(400, "Pass ?repo=owner/name.");
     await deleteScheduledRepo(db, `${parsed.owner}/${parsed.name}`);
+    await recordAudit(db, {
+      repo: `${parsed.owner}/${parsed.name}`,
+      actor: "dashboard",
+      action: "schedule_deleted",
+    }).catch(() => undefined);
     return c.json({ deleted: true });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.get("/api/workspace", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false });
+    return c.json({ enabled: true, workspace: await getWorkspace(db) });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.put("/api/workspace", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Workspace settings need the RUNS_DB binding.");
+    const body = await readJson(c);
+    const workspace = await putWorkspace(db, {
+      ...(typeof body.name === "string" ? { name: body.name } : {}),
+      ...(body.retentionDays !== undefined ? { retentionDays: Number(body.retentionDays) } : {}),
+    });
+    await recordAudit(db, {
+      actor: "dashboard",
+      action: "workspace_updated",
+      detail: { retentionDays: workspace.retentionDays, name: workspace.name },
+    }).catch(() => undefined);
+    return c.json({ enabled: true, workspace });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.get("/api/audit", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, events: [] });
+    const parsed = parseRepo(c.req.query("repo"));
+    const limit = Number(c.req.query("limit") ?? 100);
+    return c.json({
+      enabled: true,
+      events: await listAudit(db, {
+        ...(parsed ? { repo: `${parsed.owner}/${parsed.name}` } : {}),
+        limit,
+      }),
+    });
   } catch (err) {
     return fail(err);
   }
@@ -1364,6 +1453,12 @@ app.put("/api/memory", async (c) => {
       `${repo.owner}/${repo.name}`,
       parseRepoMemory(body.memory ?? body),
     );
+    await recordAudit(db, {
+      repo: `${repo.owner}/${repo.name}`,
+      actor: "dashboard",
+      action: "memory_updated",
+      detail: { fields: Object.keys(memory) },
+    }).catch(() => undefined);
     return c.json({ enabled: true, memory });
   } catch (err) {
     return fail(err);
@@ -1408,6 +1503,12 @@ app.put("/api/policies", async (c) => {
       `${repo.owner}/${repo.name}`,
       parsePullPolicy(body.policy ?? body),
     );
+    await recordAudit(db, {
+      repo: `${repo.owner}/${repo.name}`,
+      actor: "dashboard",
+      action: "policy_updated",
+      detail: { gates: Object.keys(policy) },
+    }).catch(() => undefined);
     return c.json({ enabled: true, policy });
   } catch (err) {
     return fail(err);

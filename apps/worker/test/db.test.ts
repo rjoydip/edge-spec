@@ -4,9 +4,14 @@ import {
   deleteRunHistory,
   getMemory,
   getPolicy,
+  getWorkspace,
+  listAudit,
   listRuns,
+  purgeExpired,
   putMemory,
   putPolicy,
+  putWorkspace,
+  recordAudit,
 } from "../src/db";
 import type { D1Database, D1PreparedStatement } from "../src/env";
 
@@ -190,5 +195,101 @@ describe("run history queries", () => {
     const deletes = calls.filter((call) => call.sql.startsWith("DELETE"));
     expect(deletes).toHaveLength(2);
     expect(deletes.every((call) => call.values[0] === "acme/api")).toBe(true);
+  });
+});
+
+/** An in-memory stand-in for the workspace and audit tables. */
+function workspaceDb() {
+  const calls: Array<{ sql: string; values: unknown[] }> = [];
+  const events: Array<Record<string, unknown>> = [];
+  let row: Record<string, unknown> | undefined;
+  const prepare = (sql: string): D1PreparedStatement => {
+    let values: unknown[] = [];
+    const statement: D1PreparedStatement = {
+      bind(...next: unknown[]) {
+        values = next;
+        return statement;
+      },
+      async first<T>(): Promise<T | null> {
+        calls.push({ sql, values });
+        if (sql.includes("FROM workspaces")) return (row ?? null) as T | null;
+        if (sql.includes("COUNT(*)")) return { count: 2 } as T;
+        return null;
+      },
+      async all<T>(): Promise<{ results?: T[] }> {
+        calls.push({ sql, values });
+        return { results: events as T[] };
+      },
+      async run() {
+        calls.push({ sql, values });
+        if (sql.startsWith("INSERT INTO workspaces")) {
+          row = {
+            id: values[0],
+            name: values[1],
+            retention_days: values[2],
+            created_at: values[3],
+            updated_at: values[4],
+          };
+        } else if (sql.startsWith("UPDATE workspaces")) {
+          row = { ...row, name: values[0], retention_days: values[1], updated_at: values[2] };
+        } else if (sql.startsWith("INSERT INTO audit_events")) {
+          events.unshift({
+            id: events.length + 1,
+            repo: values[1],
+            actor: values[2],
+            action: values[3],
+            detail_json: values[4],
+            created_at: values[5],
+          });
+        }
+        return {};
+      },
+    };
+    return statement;
+  };
+  const db = {
+    prepare,
+    async batch(statements: D1PreparedStatement[]) {
+      for (const statement of statements) await statement.run();
+      return [];
+    },
+  } as D1Database;
+  return { db, calls };
+}
+
+describe("workspace settings and audit", () => {
+  it("creates the default workspace lazily and clamps updates", async () => {
+    const { db } = workspaceDb();
+    expect(await getWorkspace(db)).toMatchObject({
+      id: "default",
+      name: "Default workspace",
+      retentionDays: 30,
+    });
+
+    const updated = await putWorkspace(db, { name: "  Platform  ", retentionDays: 0 });
+    expect(updated.name).toBe("Platform");
+    expect(updated.retentionDays).toBe(1);
+    expect(await getWorkspace(db)).toMatchObject({ name: "Platform", retentionDays: 1 });
+  });
+
+  it("removes secret-looking keys from audit detail", async () => {
+    const { db } = workspaceDb();
+    await recordAudit(db, {
+      repo: "acme/api",
+      actor: "dashboard",
+      action: "test",
+      detail: { aiKey: "secret", nested: { authorization: "Bearer x", files: 2 } },
+    });
+
+    const [event] = await listAudit(db, { repo: "acme/api" });
+    expect(event?.detail).toEqual({ nested: { files: 2 } });
+  });
+
+  it("counts and deletes rows past retention", async () => {
+    const { db, calls } = workspaceDb();
+    expect(await purgeExpired(db, 7, 100 * 86_400_000)).toEqual({ runs: 2, audit: 2 });
+    const deletes = calls.filter((call) => call.sql.startsWith("DELETE"));
+    expect(deletes).toHaveLength(4);
+    expect(deletes[0]?.values[0]).toBe(93 * 86_400_000);
   });
 });

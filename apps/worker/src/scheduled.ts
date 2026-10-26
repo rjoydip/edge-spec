@@ -5,9 +5,12 @@ import { GitHub } from "@edge-spec/core/github";
 import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github-app";
 import {
   getDriftSnapshot,
+  getWorkspace,
   listScheduledRepos,
   markScheduledRun,
+  purgeExpired,
   putDriftSnapshot,
+  recordAudit,
   runsDb,
   syncBacklog,
   type ScheduledRepo,
@@ -122,6 +125,20 @@ async function scanRepo(
     );
     await putDriftSnapshot(db, schedule.repo, current, now);
     await markScheduledRun(db, schedule.repo, now);
+    await recordAudit(db, {
+      repo: schedule.repo,
+      actor: "cron",
+      action: "drift_scan",
+      detail: {
+        changed: drift.changed,
+        notified: drift.changed && Boolean(env.DRIFT_WEBHOOK_URL?.trim()),
+        newFiles: drift.newFiles.length,
+        closedFiles: drift.closedFiles.length,
+        apiAdded: drift.apiAdded.length,
+        apiRemoved: drift.apiRemoved.length,
+        gaps: current.missing.length,
+      },
+    }).catch(() => undefined);
   } catch (error) {
     // One repository must not stop the rest of the schedule.
     console.error(
@@ -141,6 +158,18 @@ export async function runScheduled(
   const db = runsDb(env);
   if (!db) return;
   const now = controller.scheduledTime || Date.now();
+  const workspace = await getWorkspace(db).catch(() => undefined);
+  if (workspace) {
+    // Retention runs daily, before the scans that would otherwise see stale rows.
+    const purged = await purgeExpired(db, workspace.retentionDays, now).catch(() => undefined);
+    if (purged) {
+      await recordAudit(db, {
+        actor: "cron",
+        action: "retention_purge",
+        detail: { retentionDays: workspace.retentionDays, ...purged },
+      }).catch(() => undefined);
+    }
+  }
   const due = (await listScheduledRepos(db)).filter(
     (schedule) =>
       schedule.enabled &&
