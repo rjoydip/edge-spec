@@ -4,6 +4,10 @@ main = "dist/worker/index.js"
 compatibility_date = "2025-07-18"
 compatibility_flags = ["nodejs_compat"]
 
+# Daily cron; each repository's D1 schedule decides whether it is due.
+[triggers]
+crons = ["0 8 * * *"]
+
 # Dashboard SPA, built by `bun run build:web`.
 # Assets-first routing: requests that match a file are served statically;
 # everything else (/api/*, /webhook) falls through to the Worker.
@@ -32,11 +36,19 @@ class_name = "TestGenerationWorkflow"
 # The dashboard keeps using the visitor's per-request PAT. Installation tokens
 # are minted per run, scoped to the repository, and cached only until expiry.
 
-# Optional run history. Create the database, paste its id, apply the migrations
-# in migrations/, then uncomment this block:
+# Optional run history, policies and scheduled drift. Create the database, paste
+# its id, apply the migrations in migrations/, then uncomment this block:
 #   wrangler d1 create edge-spec-runs
 #   wrangler d1 migrations apply edge-spec-runs --remote
 # [[d1_databases]]
 # binding = "RUNS_DB"
 # database_name = "edge-spec-runs"
 # database_id = "<paste-the-id-here>"
+
+# Drift notifications (optional, Slack-compatible webhook):
+#   wrangler secret put DRIFT_WEBHOOK_URL
+#   wrangler secret put DRIFT_WEBHOOK_SECRET
+# Optional R2 artifacts for drift summaries:
+# [[r2_buckets]]
+# binding = "ARTIFACTS"
+# bucket_name = "edge-spec-artifacts"

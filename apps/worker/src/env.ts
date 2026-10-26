@@ -31,9 +31,23 @@ export interface D1Database {
   batch<T = unknown>(statements: D1PreparedStatement[]): Promise<T[]>;
 }
 
+/** The subset of R2 used for drift artifacts. */
+export interface R2Bucket {
+  put(
+    key: string,
+    value: string,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<unknown>;
+}
+
 export interface Env {
   /** Static-assets binding. Typed minimally so DOM and Workers libs don't clash. */
   ASSETS: { fetch: (request: Request) => Promise<Response> };
+  /** Optional artifact bucket for drift summaries. */
+  ARTIFACTS?: R2Bucket;
+  /** Optional Slack-compatible webhook for drift notifications. */
+  DRIFT_WEBHOOK_URL?: string;
+  DRIFT_WEBHOOK_SECRET?: string;
   AI?: AiBinding;
   TEST_GENERATION_WORKFLOW?: WorkflowBinding;
   /** Optional run history. Absent on a deployment that does not want it. */

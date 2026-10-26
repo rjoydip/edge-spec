@@ -159,6 +159,20 @@ Workflow parameters are persisted by Cloudflare. Therefore the workflow:
 
 The dashboard remains the place for bring-your-own-key runs.
 
+## Scheduled drift (`scheduled` handler)
+
+```text
+cron (daily) ──▶ due schedules from D1
+                 tree + OpenAPI operations
+                 compare with drift_snapshots
+                 changed? → webhook summary + optional R2 artifact
+                 update snapshot + last_run_at
+```
+
+The first scan stores a baseline. Only a repository whose untested paths or
+contract operations changed produces one notification. The handler never
+generates tests or opens a pull request.
+
 ## GitHub client
 
 `GitHub` wraps the operations used by the pipeline:

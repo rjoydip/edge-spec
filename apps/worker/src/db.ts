@@ -7,6 +7,7 @@ import type {
   RunSummary,
   StoredCheck,
 } from "@edge-spec/core/history";
+import type { DriftSnapshot } from "@edge-spec/core/drift";
 import { parsePullPolicy, type PullPolicy } from "@edge-spec/core/policy";
 import type { CoverageDelta, ScanTotals } from "@edge-spec/core/types";
 import type { D1Database, Env } from "./env";
@@ -226,6 +227,113 @@ export async function claimPrCommand(
     .bind(repo, pull, login, command, now)
     .run();
   return true;
+}
+
+export interface ScheduledRepo {
+  repo: string;
+  intervalDays: number;
+  enabled: boolean;
+  installationId?: number;
+  lastRunAt?: number;
+}
+
+interface ScheduleRow {
+  repo: string;
+  interval_days: number;
+  enabled: number;
+  installation_id: number | null;
+  last_run_at: number | null;
+}
+
+function scheduleOf(row: ScheduleRow): ScheduledRepo {
+  return {
+    repo: row.repo,
+    intervalDays: row.interval_days,
+    enabled: row.enabled === 1,
+    ...(row.installation_id !== null ? { installationId: row.installation_id } : {}),
+    ...(row.last_run_at !== null ? { lastRunAt: row.last_run_at } : {}),
+  };
+}
+
+export async function listScheduledRepos(db: D1Database): Promise<ScheduledRepo[]> {
+  const result = await db
+    .prepare(
+      "SELECT repo, interval_days, enabled, installation_id, last_run_at FROM scheduled_repos ORDER BY repo",
+    )
+    .all<ScheduleRow>();
+  return (result.results ?? []).map(scheduleOf);
+}
+
+export async function putScheduledRepo(
+  db: D1Database,
+  input: { repo: string; intervalDays: number; enabled: boolean; installationId?: number },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO scheduled_repos (repo, interval_days, enabled, installation_id, last_run_at)
+       VALUES (?, ?, ?, ?, NULL)
+       ON CONFLICT(repo) DO UPDATE SET
+         interval_days = excluded.interval_days,
+         enabled = excluded.enabled,
+         installation_id = excluded.installation_id`,
+    )
+    .bind(input.repo, input.intervalDays, input.enabled ? 1 : 0, input.installationId ?? null)
+    .run();
+}
+
+export async function deleteScheduledRepo(db: D1Database, repo: string): Promise<void> {
+  await db.prepare("DELETE FROM scheduled_repos WHERE repo = ?").bind(repo).run();
+}
+
+export async function getDriftSnapshot(
+  db: D1Database,
+  repo: string,
+): Promise<DriftSnapshot | undefined> {
+  const row = await db
+    .prepare("SELECT missing_json, operations_json FROM drift_snapshots WHERE repo = ?")
+    .bind(repo)
+    .first<{ missing_json: string; operations_json: string }>();
+  if (!row) return undefined;
+  const missing = json<unknown>(row.missing_json, []);
+  const operations = json<unknown>(row.operations_json, []);
+  return {
+    missing: Array.isArray(missing)
+      ? missing.filter((item): item is string => typeof item === "string")
+      : [],
+    operations: Array.isArray(operations)
+      ? operations.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
+export async function putDriftSnapshot(
+  db: D1Database,
+  repo: string,
+  snapshot: DriftSnapshot,
+  scannedAt = Date.now(),
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO drift_snapshots (repo, missing_json, operations_json, scanned_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(repo) DO UPDATE SET
+         missing_json = excluded.missing_json,
+         operations_json = excluded.operations_json,
+         scanned_at = excluded.scanned_at`,
+    )
+    .bind(repo, JSON.stringify(snapshot.missing), JSON.stringify(snapshot.operations), scannedAt)
+    .run();
+}
+
+export async function markScheduledRun(
+  db: D1Database,
+  repo: string,
+  at = Date.now(),
+): Promise<void> {
+  await db
+    .prepare("UPDATE scheduled_repos SET last_run_at = ? WHERE repo = ?")
+    .bind(at, repo)
+    .run();
 }
 
 /** Records the reviewer's decisions for files in one run. */

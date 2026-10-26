@@ -556,6 +556,28 @@ Behaviour:
 
 ---
 
+## `GET | PUT | DELETE /api/schedules?repo=owner/name`
+
+Opt-in scheduled drift scans (D1). The cron runs daily; each repository decides
+whether it is due from `intervalDays` (1–30, default 7).
+
+```json
+{ "repo": "acme/api", "intervalDays": 7, "enabled": true, "installationId": 42 }
+```
+
+`GET` returns `{enabled, schedules}`; `PUT` upserts the schedule (`installationId`
+optional, used to mint an App token); `DELETE` removes it. Without `RUNS_DB` the
+list is empty and writes return 501.
+
+A due scan keeps a snapshot of untested paths and OpenAPI `METHOD /path` names.
+The first run is a baseline. Later runs compare against it; when anything
+changed, one summary is POSTed to `DRIFT_WEBHOOK_URL` (Slack-compatible `text`)
+with an optional `x-edgespec-secret` header, and written to R2 when the
+`ARTIFACTS` binding exists. A quiet repository sends nothing and opens nothing.
+The scan never opens a pull request: the summary is the action.
+
+---
+
 ## `GET | PUT | DELETE /api/policies?repo=owner/name`
 
 Opt-in server-side policy for CI (the same D1 database as run history). The

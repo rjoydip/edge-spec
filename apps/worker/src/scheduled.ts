@@ -1,0 +1,132 @@
+/** Cron drift scans: compare a fresh snapshot with the stored one, then notify. */
+import { classifyTree, parseOpenApiSpec } from "@edge-spec/core/scanner";
+import { detectDrift, driftSummary, snapshotOf } from "@edge-spec/core/drift";
+import { GitHub } from "@edge-spec/core/github";
+import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github-app";
+import {
+  getDriftSnapshot,
+  listScheduledRepos,
+  markScheduledRun,
+  putDriftSnapshot,
+  runsDb,
+  type ScheduledRepo,
+} from "./db";
+import type { D1Database, Env } from "./env";
+
+export interface ScheduledController {
+  scheduledTime: number;
+  cron: string;
+}
+
+export interface ScheduledContext {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
+const tokens = new InstallationTokenCache();
+const OPENAPI_LIKE = /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i;
+
+async function operationsOf(
+  github: GitHub,
+  repo: string,
+  ref: string,
+  blobs: readonly string[],
+): Promise<string[]> {
+  const operations: string[] = [];
+  for (const path of blobs.filter((item) => OPENAPI_LIKE.test(item)).slice(0, 4)) {
+    try {
+      const spec = parseOpenApiSpec(await github.file(repo, path, ref), path);
+      if (!spec) continue;
+      for (const endpoint of spec.endpoints) {
+        operations.push(`${endpoint.method.toUpperCase()} ${endpoint.path}`);
+      }
+    } catch {
+      // A spec we cannot read is a spec we cannot compare.
+    }
+  }
+  return operations;
+}
+
+async function notify(env: Env, repo: string, summary: string): Promise<void> {
+  const url = env.DRIFT_WEBHOOK_URL?.trim();
+  if (!url) return;
+  const secret = env.DRIFT_WEBHOOK_SECRET?.trim();
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(secret ? { "x-edgespec-secret": secret } : {}),
+    },
+    body: JSON.stringify({ text: summary, repo }),
+  });
+  if (!response.ok) {
+    throw new Error(`Drift webhook returned ${response.status}.`);
+  }
+}
+
+async function scanRepo(
+  env: Env,
+  db: D1Database,
+  schedule: ScheduledRepo,
+  now: number,
+): Promise<void> {
+  try {
+    const app = gitHubAppFromEnv(env);
+    const token =
+      app && schedule.installationId
+        ? await tokens.get(app, schedule.installationId, schedule.repo)
+        : env.GITHUB_TOKEN;
+    if (!token) throw new Error("No GitHub credential for the scheduled scan.");
+    const github = new GitHub(token);
+    const base = await github.defaultBranch(schedule.repo);
+    const tree = await github.tree(schedule.repo, base);
+    const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
+    const current = snapshotOf({
+      missing: classifyTree(blobs).missing.map((gap) => gap.path),
+      operations: await operationsOf(github, schedule.repo, base, blobs),
+    });
+    const previous = await getDriftSnapshot(db, schedule.repo);
+    const drift = detectDrift(previous, current);
+
+    if (drift.changed) {
+      const summary = driftSummary(schedule.repo, drift);
+      if (env.ARTIFACTS) {
+        await env.ARTIFACTS.put(
+          `drift/${schedule.repo}/${now}.json`,
+          JSON.stringify({ repo: schedule.repo, scannedAt: now, drift, summary }),
+          { httpMetadata: { contentType: "application/json" } },
+        ).catch(() => undefined);
+      }
+      // Store only after the announcement succeeds; a failed webhook retries.
+      await notify(env, schedule.repo, summary);
+    }
+    await putDriftSnapshot(db, schedule.repo, current, now);
+    await markScheduledRun(db, schedule.repo, now);
+  } catch (error) {
+    // One repository must not stop the rest of the schedule.
+    console.error(
+      `scheduled drift failed for ${schedule.repo}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
+/** Runs due repositories; the cron fires daily and each repo has its interval. */
+export async function runScheduled(
+  controller: ScheduledController,
+  env: Env,
+  ctx: ScheduledContext,
+): Promise<void> {
+  const db = runsDb(env);
+  if (!db) return;
+  const now = controller.scheduledTime || Date.now();
+  const due = (await listScheduledRepos(db)).filter(
+    (schedule) =>
+      schedule.enabled &&
+      (schedule.lastRunAt === undefined ||
+        now - schedule.lastRunAt >= schedule.intervalDays * 86_400_000),
+  );
+  for (const schedule of due.slice(0, 10)) {
+    ctx.waitUntil(scanRepo(env, db, schedule, now));
+  }
+}

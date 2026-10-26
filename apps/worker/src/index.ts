@@ -63,14 +63,18 @@ import {
   createRun,
   deletePolicy,
   deleteRunHistory,
+  deleteScheduledRepo,
   finishRun,
   getPolicy,
   getRun,
   listRuns,
+  listScheduledRepos,
   putPolicy,
+  putScheduledRepo,
   runsDb,
   setRunDecisions,
 } from "./db";
+import { runScheduled } from "./scheduled";
 import { evaluatePullPolicy, parsePullPolicy, policyBlocked } from "@edge-spec/core/policy";
 import type { RunDecision, RunFile, RunSummary } from "@edge-spec/core/history";
 
@@ -1046,6 +1050,51 @@ app.post("/webhook", async (c) => {
   }
 });
 
+app.get("/api/schedules", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, schedules: [] });
+    return c.json({ enabled: true, schedules: await listScheduledRepos(db) });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.put("/api/schedules", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Scheduled scans need the RUNS_DB binding.");
+    const body = await readJson(c);
+    const parsed = parseRepo(str(body.repo));
+    if (!parsed) throw new HttpError(400, "Enter a repository as owner/name.");
+    const days = Number(body.intervalDays);
+    const installationId = Number(body.installationId);
+    const intervalDays = Number.isFinite(days) ? Math.min(30, Math.max(1, Math.round(days))) : 7;
+    await putScheduledRepo(db, {
+      repo: `${parsed.owner}/${parsed.name}`,
+      intervalDays,
+      enabled: body.enabled !== false,
+      ...(Number.isInteger(installationId) && installationId > 0 ? { installationId } : {}),
+    });
+    return c.json({ enabled: true, schedules: await listScheduledRepos(db) });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.delete("/api/schedules", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Scheduled scans need the RUNS_DB binding.");
+    const parsed = parseRepo(c.req.query("repo"));
+    if (!parsed) throw new HttpError(400, "Pass ?repo=owner/name.");
+    await deleteScheduledRepo(db, `${parsed.owner}/${parsed.name}`);
+    return c.json({ deleted: true });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
 app.get("/api/policies", async (c) => {
   try {
     const db = runsDb(c.env);
@@ -1194,4 +1243,7 @@ app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 // Anything else is a static asset (assets-first routing in wrangler.toml).
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  scheduled: runScheduled,
+};

@@ -40,6 +40,7 @@ measures something it actually ran, or says "not measured".
 | Auth                                                         | User PATs for dashboard; optional GitHub App for CI            |
 | Run history                                                  | Shipped (`/api/runs`, History/Compare)                         |
 | Policies                                                     | Shipped (dashboard + optional D1, enforced in both PR paths)   |
+| Scheduled drift                                              | Shipped (daily cron, webhook summary, optional R2 artifacts)   |
 | Backlog                                                      | Not built                                                      |
 
 The `/api/runs/:id` route reads Cloudflare Workflow status; there is no run

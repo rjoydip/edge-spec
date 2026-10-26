@@ -219,6 +219,27 @@ gate name and reason. The dashboard shows that error in the pull request
 dialog. The webhook workflow enforces the server policy and returns
 `status: "blocked"` without opening a pull request.
 
+## Scheduled drift scans (optional)
+
+`wrangler.toml` registers a daily cron (`0 8 * * *`). Per-repository schedules
+live in D1 (`PUT /api/schedules?repo=owner/name`), with a 1–30 day interval and
+an optional App installation id. A scan compares untested paths and OpenAPI
+operation names with the stored snapshot:
+
+- first run: baseline only;
+- no change: no notification, no pull request;
+- change: one summary to `DRIFT_WEBHOOK_URL` (Slack incoming webhooks accept
+  `text`) and optionally `drift/<repo>/<timestamp>.json` in R2.
+
+```bash
+bunx wrangler secret put DRIFT_WEBHOOK_URL
+bunx wrangler secret put DRIFT_WEBHOOK_SECRET   # sent as x-edgespec-secret
+```
+
+There is no email adapter yet. Without `RUNS_DB` the cron does nothing, and
+without `DRIFT_WEBHOOK_URL` drift is still recorded but not announced. The scan
+never opens a pull request; PR creation remains the explicit next step.
+
 ## Sandbox runner (optional)
 
 A runner executes the generated suite, so the result is a real pass or fail
