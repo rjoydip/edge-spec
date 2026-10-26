@@ -437,13 +437,17 @@ persisted). The installation id is not a secret and is passed instead.
 2. Payload URL: `https://<worker>/webhook`.
 3. Content type: `application/json`.
 4. Secret: the same value as `GITHUB_WEBHOOK_SECRET`.
-5. Events: **push** (the handler does not filter event types).
+5. Events: **push** and **pull request** (`opened`, `synchronize`, `reopened`).
 6. Use the GitHub App installation, or ensure `GITHUB_TOKEN` can write to the
    repository, and keep Workers AI bound.
 
-For App auth, install the app on the repository, subscribe the app to pushes,
-and set the app's webhook secret to `GITHUB_WEBHOOK_SECRET`. The app needs
-**Contents: read and write** and **Pull requests: read and write**.
+For App auth, install the app on the repository, subscribe the app to pushes
+and pull requests, and set the app's webhook secret to
+`GITHUB_WEBHOOK_SECRET`. The app needs **Contents: read and write**,
+**Pull requests: read and write**, and **Checks: read and write**.
+
+A pull request run is a read-only advisory check: changed-file gaps, affected
+tests if a runner exists, one check and one comment. Re-runs update both.
 
 Runs are durable and can be polled at `GET /api/runs/:id` with the `workflowId`
 returned by the webhook.

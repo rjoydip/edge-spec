@@ -2,6 +2,7 @@
  * GitHub REST, no SDK. Every call is one request the Worker can afford, and the
  * token belongs to the visitor — it is used for this call and never stored.
  */
+import { PR_CHECK_MARKER, PR_CHECK_NAME, type PrCheckResult } from "./pr-check";
 import { HttpError } from "./types";
 
 const API = "https://api.github.com";
@@ -184,6 +185,65 @@ export class GitHub {
     });
     if (!data.html_url) throw new HttpError(502, "GitHub created the PR without returning a URL.");
     return data.html_url;
+  }
+
+  /** The first page of changed files: enough for an advisory changed-file scan. */
+  async pullFiles(repo: string, number: number): Promise<string[]> {
+    const data = await this.request<unknown>(`/repos/${repo}/pulls/${number}/files?per_page=100`);
+    if (!Array.isArray(data)) return [];
+    return data.flatMap((item) => {
+      const file = asRecord(item);
+      return typeof file.filename === "string" ? [file.filename] : [];
+    });
+  }
+
+  /** Creates the check, or updates the one with our name on this commit. */
+  async upsertCheck(repo: string, ref: string, check: PrCheckResult): Promise<number> {
+    const data = await this.request<{ check_runs?: unknown }>(
+      `/repos/${repo}/commits/${encodeURIComponent(ref)}/check-runs?check_name=${encodeURIComponent(PR_CHECK_NAME)}&per_page=1`,
+    );
+    const existing = Array.isArray(data.check_runs) ? asRecord(data.check_runs[0]) : {};
+    const id = typeof existing.id === "number" ? existing.id : undefined;
+    const body = {
+      name: PR_CHECK_NAME,
+      status: "completed",
+      conclusion: check.conclusion,
+      output: check.output,
+    };
+    if (id !== undefined) {
+      await this.request(`/repos/${repo}/check-runs/${id}`, { method: "PATCH", body });
+      return id;
+    }
+    const created = await this.request<{ id?: number }>(`/repos/${repo}/check-runs`, {
+      method: "POST",
+      body: { ...body, head_sha: ref },
+    });
+    return typeof created.id === "number" ? created.id : 0;
+  }
+
+  /** One marked comment per pull request; a re-run patches that comment. */
+  async upsertPullComment(repo: string, number: number, body: string): Promise<number> {
+    const data = await this.request<unknown>(
+      `/repos/${repo}/issues/${number}/comments?per_page=100`,
+    );
+    const existing = Array.isArray(data)
+      ? data
+          .map(asRecord)
+          .find((item) => typeof item.body === "string" && item.body.includes(PR_CHECK_MARKER))
+      : undefined;
+    const id = typeof existing?.id === "number" ? existing.id : undefined;
+    if (id !== undefined) {
+      await this.request(`/repos/${repo}/issues/comments/${id}`, {
+        method: "PATCH",
+        body: { body },
+      });
+      return id;
+    }
+    const created = await this.request<{ id?: number }>(
+      `/repos/${repo}/issues/${number}/comments`,
+      { method: "POST", body: { body } },
+    );
+    return typeof created.id === "number" ? created.id : 0;
   }
 
   async pulls(repo: string): Promise<PullSummary[]> {

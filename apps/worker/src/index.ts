@@ -926,8 +926,34 @@ app.post("/webhook", async (c) => {
 
     const binding = c.env.TEST_GENERATION_WORKFLOW;
     if (!binding) throw new HttpError(501, "Workflows are not bound on this deployment.");
+    const installation = useApp ? { installationId } : {};
+
+    if (c.req.header("x-github-event") === "pull_request") {
+      const action = str(payload.action);
+      if (!["opened", "synchronize", "reopened"].includes(action ?? "")) {
+        return c.json({ ignored: action ?? "unknown action" }, 202);
+      }
+      const pullRequest = asRecord(payload.pull_request);
+      const number = Number(pullRequest.number);
+      const headSha = str(asRecord(pullRequest.head).sha);
+      if (!Number.isInteger(number) || number <= 0 || !headSha) {
+        throw new HttpError(400, "Pull request payload has no number or head commit.");
+      }
+      const instance = await binding.create({
+        params: {
+          repo,
+          ref: headSha,
+          headSha,
+          pullRequest: number,
+          event: "pull_request",
+          ...installation,
+        },
+      });
+      return c.json({ workflowId: instance.id }, 202);
+    }
+
     const instance = await binding.create({
-      params: { repo, ref, ...(useApp ? { installationId } : {}) },
+      params: { repo, ref, event: "push", ...installation },
     });
     return c.json({ workflowId: instance.id }, 202);
   } catch (err) {

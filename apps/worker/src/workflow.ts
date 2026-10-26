@@ -9,8 +9,10 @@ import { generateTest } from "@edge-spec/core/ai";
 import { DEFAULT_AI, pipelineConfig, providerById } from "@edge-spec/core/catalog";
 import { GitHub } from "@edge-spec/core/github";
 import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github-app";
-import { findGaps } from "@edge-spec/core/scanner";
+import { buildPrCheck } from "@edge-spec/core/pr-check";
+import { classifyTree, findGaps } from "@edge-spec/core/scanner";
 import { assertTestOnly } from "@edge-spec/core/policy";
+import { sandboxRepo, runInSandbox } from "@edge-spec/core/sandbox";
 import { validateTest } from "@edge-spec/core/validate";
 import type { Env } from "./env";
 import type { Generation, Validation } from "@edge-spec/core/types";
@@ -20,6 +22,11 @@ export interface WorkflowParams {
   ref: string;
   /** From the webhook payload. Not a secret, so it may be persisted. */
   installationId?: number;
+  /** `push` generates and may open a PR; `pull_request` only publishes a check. */
+  event?: "push" | "pull_request";
+  pullRequest?: number;
+  /** The PR head commit the check annotates. */
+  headSha?: string;
   provider?: string;
   model?: string;
   maxRetries?: number;
@@ -31,6 +38,9 @@ export interface WorkflowParams {
 /** Tokens are per isolate; a restart only costs one mint request. */
 const installationTokens = new InstallationTokenCache();
 
+/** A single-quoted shell word, so a repository path cannot inject a command. */
+const shellWord = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+
 interface Scanned {
   path: string;
   testPath: string;
@@ -40,17 +50,92 @@ interface Scanned {
 }
 
 export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowParams> {
+  /**
+   * Advisory PR check. Changed files only (the import graph is not built yet):
+   * report changed sources without tests, run their existing tests when a
+   * runner exists, then upsert one check and one comment.
+   */
+  private async checkPullRequest(input: {
+    github: GitHub;
+    repo: string;
+    ref: string;
+    number: number;
+    step: WorkflowStep;
+  }) {
+    const changed = await input.step.do("changed-files", () =>
+      input.github.pullFiles(input.repo, input.number),
+    );
+
+    const scan = await input.step.do("scan-changed", async () => {
+      const tree = await input.github.tree(input.repo, input.ref);
+      const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
+      const classification = classifyTree(blobs);
+      const changedSet = new Set(changed);
+      const gaps = classification.missing.filter((gap) => changedSet.has(gap.path));
+      const affected = new Set<string>();
+      for (const path of changed) {
+        if (/\.(test|spec)\.[cm]?[jt]sx?$/i.test(path)) affected.add(path);
+        for (const test of classification.testsBySource.get(path) ?? []) affected.add(test);
+      }
+      return { gaps, affectedTests: [...affected], scanned: blobs.length };
+    });
+
+    const runnerUrl = this.env.SANDBOX_RUNNER_URL?.trim();
+    const testRun =
+      runnerUrl && scan.affectedTests.length > 0
+        ? await input.step.do("run-affected-tests", async () => {
+            const started = Date.now();
+            const sandbox = {
+              url: runnerUrl,
+              v2: true,
+              ...(this.env.SANDBOX_API_KEY ? { apiKey: this.env.SANDBOX_API_KEY } : {}),
+            };
+            const repoArg = sandboxRepo({ repo: input.repo, ref: input.ref, sandbox });
+            const run = await runInSandbox({
+              sandbox,
+              ...(repoArg ? { repo: repoArg } : {}),
+              command: `bun test ${scan.affectedTests.map(shellWord).join(" ")}`,
+            });
+            return {
+              ok: run.ok,
+              output: run.output,
+              durationMs: Date.now() - started,
+              executed: !run.unreachable && !run.environmentError,
+            };
+          })
+        : undefined;
+
+    const check = buildPrCheck({
+      changedFiles: changed,
+      gaps: scan.gaps,
+      affectedTests: scan.affectedTests,
+      runner: Boolean(runnerUrl) && (!testRun || testRun.executed),
+      ...(testRun ? { testRun } : {}),
+    });
+
+    await input.step.do("publish-check", async () => {
+      const checkId = await input.github.upsertCheck(input.repo, input.ref, check);
+      const commentId = await input.github.upsertPullComment(
+        input.repo,
+        input.number,
+        check.comment,
+      );
+      return { checkId, commentId };
+    });
+
+    return {
+      status: "checked",
+      conclusion: check.conclusion,
+      gaps: scan.gaps.length,
+      changed: changed.length,
+      executed: Boolean(testRun?.executed),
+    };
+  }
+
   async run(event: WorkflowEvent<WorkflowParams>, step: WorkflowStep) {
     const params = event.payload;
     const repo = params.repo;
     const ref = params.ref;
-    const config = pipelineConfig(params);
-    const provider = providerById(params.provider ?? DEFAULT_AI.provider);
-    if (!provider) throw new Error(`Unknown provider: ${params.provider}`);
-    if (provider.id !== "workers-ai") {
-      throw new Error("Webhook automation runs on Workers AI. Use the dashboard for BYO keys.");
-    }
-    const model = params.model ?? DEFAULT_AI.model;
     const app = gitHubAppFromEnv(this.env);
     const token =
       app && params.installationId && params.installationId > 0
@@ -62,6 +147,25 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       );
     }
     const github = new GitHub(token);
+
+    // A pull request is a read-only check: no generation, no branch, no PR.
+    if (params.event === "pull_request" && params.pullRequest) {
+      return this.checkPullRequest({
+        github,
+        repo,
+        ref: params.headSha?.trim() || ref,
+        number: params.pullRequest,
+        step,
+      });
+    }
+
+    const config = pipelineConfig(params);
+    const provider = providerById(params.provider ?? DEFAULT_AI.provider);
+    if (!provider) throw new Error(`Unknown provider: ${params.provider}`);
+    if (provider.id !== "workers-ai") {
+      throw new Error("Webhook automation runs on Workers AI. Use the dashboard for BYO keys.");
+    }
+    const model = params.model ?? DEFAULT_AI.model;
 
     const scanned = await step.do("scan-repository", async (): Promise<Scanned | null> => {
       const tree = await github.tree(repo, ref);

@@ -570,22 +570,30 @@ without one.
 
 ## `POST /webhook`
 
-GitHub webhook receiver for automation. Configure it for **push** events (the
-handler does not branch on event type, so subscribe only to the events you want
-runs for).
+GitHub webhook receiver for automation. Subscribe to **push** and
+**pull_request** events.
 
 Behaviour:
 
 1. If `GITHUB_WEBHOOK_SECRET` is set, verifies `x-hub-signature-256` against the
    raw body. Invalid → 401.
-2. Reads `repository.full_name` and `ref` (`refs/heads/x` → `x`; defaults to
-   `main`).
-3. Starts `TestGenerationWorkflow` with `{repo, ref, installationId?}` and
-   returns `202 {"workflowId":"…"}`. `installationId` comes from the App webhook
-   payload and is not a secret.
-4. The workflow mints a repo-scoped installation token when
+2. Reads `repository.full_name` and `installation.id`.
+3. `push` starts `TestGenerationWorkflow` with `{repo, ref, event:"push",
+installationId?}` and returns `202 {"workflowId":"…"}`.
+4. `pull_request` (only `opened`, `synchronize`, `reopened`) starts the same
+   workflow in check mode with `{repo, ref:<head sha>, pullRequest, headSha,
+event:"pull_request"}`. Other actions return `202 {"ignored":"…"}` without
+   starting work.
+5. The workflow mints a repo-scoped installation token when
    `GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY` are configured, cached until just
    before expiry; otherwise it uses `GITHUB_TOKEN`.
+
+Check mode is advisory: it scans the changed files, reports changed sources
+without tests, runs their existing tests when a runner is configured, and
+upserts one check run plus one marked comment. Re-runs update those instead of
+adding more. It never commits, generates a test, or opens a PR. Changed-file
+scope only: import-graph dependents are not analyzed yet. Without a runner the
+check is `neutral` and its annotations say static only.
 
 The workflow uses the deployment's Workers AI binding and never receives
 visitor keys. Missing bindings return 501; no credential returns a failed run

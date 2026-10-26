@@ -120,13 +120,22 @@ not. The dashboard lets the user generate another gap individually via
 ```text
 GitHub ── POST /webhook ──▶ verify HMAC (if GITHUB_WEBHOOK_SECRET is set)
                             parse repository.full_name + ref + installation.id
-                            binding.create({ repo, ref, installationId })  → 202 { workflowId }
-Workflow
+                            push:          binding.create({ repo, ref, event:"push" })
+                            pull_request:  binding.create({ repo, ref:headSha,
+                                            pullRequest, event:"pull_request" })
+                                                          → 202 { workflowId }
+Workflow · push
   scan-repository     tree, first gap, source          (durable step)
   generate-test       Workers AI                       (2 retries, exponential)
   validate-test       static + optional sandbox
   correct-test-N      bounded by maxRetries
   create-pull-request branch + file + PR
+
+Workflow · pull_request (advisory)
+  changed-files       first page of PR files
+  scan-changed        changed sources without tests
+  run-affected-tests  existing tests, only with a runner
+  publish-check       upsert one check run + one marked comment
 ```
 
 Workflow parameters are persisted by Cloudflare. Therefore the workflow:

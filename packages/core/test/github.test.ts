@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { decodeBase64, encodeBase64, GitHub } from "../src/github";
+import { PR_CHECK_MARKER, PR_CHECK_NAME, type PrCheckResult } from "../src/pr-check";
+
+const CHECK: PrCheckResult = {
+  conclusion: "neutral",
+  output: { title: "Static check only", summary: "summary", annotations: [] },
+  comment: `${PR_CHECK_MARKER}\nsummary`,
+};
 
 describe("base64 helpers", () => {
   it("round-trips UTF-8 source", () => {
@@ -52,6 +59,80 @@ describe("GitHub", () => {
     const error = new GitHub("ghp_secret", fakeFetch).tree("acme/api", "main");
     await expect(error).rejects.toThrow(/repository or path not found/);
     await expect(error).rejects.not.toThrow(/ghp_secret/);
+  });
+
+  it("lists the changed files of a pull request", async () => {
+    const fakeFetch = (async () =>
+      new Response(JSON.stringify([{ filename: "src/a.ts" }, {}, { filename: "src/b.ts" }]), {
+        status: 200,
+      })) as unknown as typeof fetch;
+
+    expect(await new GitHub(undefined, fakeFetch).pullFiles("acme/api", 7)).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+    ]);
+  });
+
+  it("creates one check per commit and patches it on a re-run", async () => {
+    const calls: Array<{ method: string; url: string; body?: unknown }> = [];
+    let existing: Array<{ id: number }> = [];
+    const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({
+        method,
+        url: String(url),
+        ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+      });
+      if (method === "GET") {
+        return new Response(JSON.stringify({ check_runs: existing }), { status: 200 });
+      }
+      if (method === "POST") {
+        existing = [{ id: 7 }];
+        return new Response(JSON.stringify({ id: 7 }), { status: 201 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const github = new GitHub("token", fakeFetch);
+    expect(await github.upsertCheck("acme/api", "abc", CHECK)).toBe(7);
+    expect(await github.upsertCheck("acme/api", "abc", CHECK)).toBe(7);
+
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+    expect(calls[0]?.url).toContain(`check_name=${encodeURIComponent(PR_CHECK_NAME)}`);
+    expect(calls.find((call) => call.method === "PATCH")?.url).toContain("/check-runs/7");
+    expect(calls.find((call) => call.method === "POST")?.body).toMatchObject({
+      head_sha: "abc",
+      name: PR_CHECK_NAME,
+      conclusion: "neutral",
+    });
+  });
+
+  it("creates one marked comment and patches it on a re-run", async () => {
+    const calls: Array<{ method: string; url: string; body?: unknown }> = [];
+    let comments: Array<{ id: number; body: string }> = [];
+    const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({
+        method,
+        url: String(url),
+        ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
+      });
+      if (method === "GET") {
+        return new Response(JSON.stringify(comments), { status: 200 });
+      }
+      if (method === "POST") {
+        comments = [{ id: 9, body: CHECK.comment }];
+        return new Response(JSON.stringify({ id: 9 }), { status: 201 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const github = new GitHub("token", fakeFetch);
+    expect(await github.upsertPullComment("acme/api", 7, CHECK.comment)).toBe(9);
+    expect(await github.upsertPullComment("acme/api", 7, CHECK.comment)).toBe(9);
+
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
+    expect(calls.find((call) => call.method === "PATCH")?.url).toContain("/issues/comments/9");
   });
 
   it("turns a network failure into a 502", async () => {
