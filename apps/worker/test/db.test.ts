@@ -218,6 +218,9 @@ function workspaceDb() {
       },
       async all<T>(): Promise<{ results?: T[] }> {
         calls.push({ sql, values });
+        if (sql.includes("SELECT id FROM runs")) {
+          return { results: [{ id: "run-1" }, { id: "run-2" }] as T[] };
+        }
         return { results: events as T[] };
       },
       async run() {
@@ -287,7 +290,11 @@ describe("workspace settings and audit", () => {
 
   it("counts and deletes rows past retention", async () => {
     const { db, calls } = workspaceDb();
-    expect(await purgeExpired(db, 7, 100 * 86_400_000)).toEqual({ runs: 2, audit: 2 });
+    expect(await purgeExpired(db, 7, 100 * 86_400_000)).toEqual({
+      runs: 2,
+      audit: 2,
+      ids: ["run-1", "run-2"],
+    });
     const deletes = calls.filter((call) => call.sql.startsWith("DELETE"));
     expect(deletes).toHaveLength(4);
     expect(deletes[0]?.values[0]).toBe(93 * 86_400_000);

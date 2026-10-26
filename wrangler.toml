@@ -47,7 +47,9 @@ database_id = "e6d6d95e-cbce-498f-952e-c4d30fc1f7de"
 # Drift notifications (optional, Slack-compatible webhook):
 #   wrangler secret put DRIFT_WEBHOOK_URL
 #   wrangler secret put DRIFT_WEBHOOK_SECRET
-# Optional R2 artifacts for drift summaries:
-# [[r2_buckets]]
-# binding = "ARTIFACTS"
-# bucket_name = "edge-spec-artifacts"
+# Run artifacts (validation output, coverage) and drift summaries. D1 keeps the
+# summaries; this bucket keeps the raw bundles. Created with:
+#   wrangler r2 bucket create edge-spec-artifacts
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "edge-spec-artifacts"

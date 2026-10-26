@@ -17,6 +17,7 @@ Stack: TypeScript, Hono, React 19, Tailwind v4, Vite, Wrangler, Bun.
 bun install
 bun run dev:worker     # API on http://127.0.0.1:8787
 bun run dev            # dashboard on http://127.0.0.1:5173 (proxies /api)
+bun run dev:all        # both, plus the sandbox bridge when the host has Docker
 bun --silent run cli -- --help  # terminal client
 bun run mcp -- --help  # stdio MCP server
 bun run sandbox        # self-hosted test runner on http://127.0.0.1:8788

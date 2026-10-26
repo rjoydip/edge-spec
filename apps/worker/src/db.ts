@@ -559,15 +559,16 @@ export async function purgeExpired(
   db: D1Database,
   retentionDays: number,
   now = Date.now(),
-): Promise<{ runs: number; audit: number }> {
+): Promise<{ runs: number; audit: number; ids: string[] }> {
   const cutoff = now - Math.max(1, Math.round(retentionDays)) * 86_400_000;
-  const runs =
+  const expired =
     (
       await db
-        .prepare("SELECT COUNT(*) AS count FROM runs WHERE started_at < ?")
+        .prepare("SELECT id FROM runs WHERE started_at < ?")
         .bind(cutoff)
-        .first<{ count: number }>()
-    )?.count ?? 0;
+        .all<{ id: string }>()
+    ).results ?? [];
+  const runs = expired.length;
   const audit =
     (
       await db
@@ -583,7 +584,7 @@ export async function purgeExpired(
     db.prepare("DELETE FROM audit_events WHERE created_at < ?").bind(cutoff),
     db.prepare("DELETE FROM pr_commands WHERE started_at < ?").bind(cutoff),
   ]);
-  return { runs, audit };
+  return { runs, audit, ids: expired.map((row) => row.id) };
 }
 
 export interface ScheduledRepo {

@@ -16,6 +16,7 @@ import {
   type ScheduledRepo,
 } from "./db";
 import type { D1Database, Env } from "./env";
+import { deleteRunArtifacts } from "./artifacts";
 import { ownerLookup } from "./ownership";
 
 export interface ScheduledController {
@@ -163,10 +164,16 @@ export async function runScheduled(
     // Retention runs daily, before the scans that would otherwise see stale rows.
     const purged = await purgeExpired(db, workspace.retentionDays, now).catch(() => undefined);
     if (purged) {
+      const artifacts = await deleteRunArtifacts(env, purged.ids).catch(() => 0);
       await recordAudit(db, {
         actor: "cron",
         action: "retention_purge",
-        detail: { retentionDays: workspace.retentionDays, ...purged },
+        detail: {
+          retentionDays: workspace.retentionDays,
+          runs: purged.runs,
+          audit: purged.audit,
+          artifacts,
+        },
       }).catch(() => undefined);
     }
   }

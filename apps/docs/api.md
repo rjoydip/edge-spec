@@ -875,6 +875,31 @@ The exact fields are those of the Cloudflare Workflows `Instance.status()` API.
 
 ---
 
+## `GET /api/runs/:id/artifacts`
+
+Returns the stored bundle for an interactive `/api/run`: per-file validation
+checks, coverage facts and totals. The bundle lives in R2 (`ARTIFACTS`), so it
+outlives the SSE stream; generated test source is not stored.
+
+```json
+{
+  "enabled": true,
+  "artifact": {
+    "runId": "…",
+    "repo": "acme/api",
+    "ref": "main",
+    "status": "ready",
+    "finishedAt": 1793000000000,
+    "files": [{ "sourcePath": "src/a.ts", "verified": true, "checks": [] }]
+  }
+}
+```
+
+`404` means the run stored no bundle; `{ "enabled": false }` means the
+deployment has no `ARTIFACTS` binding.
+
+---
+
 ## Limits and timeouts
 
 | Item                    | Value              |

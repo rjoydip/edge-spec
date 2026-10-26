@@ -65,6 +65,7 @@ import {
   type Validation,
 } from "@edge-spec/core/types";
 import type { Env } from "./env";
+import { getRunArtifact, putRunArtifact } from "./artifacts";
 import {
   claimPrCommand,
   createRun,
@@ -891,6 +892,23 @@ app.post("/api/run", async (c) => {
         const finished: RunSummary = { ...run, status, finishedAt: Date.now() };
         await finishRun(history, finished, [...files.values()]).catch(() => undefined);
       }
+      // The bundle is the only place raw check output survives; a failed
+      // upload must never fail a run that already streamed its result.
+      await putRunArtifact(c.env, {
+        runId,
+        repo: input.repo,
+        ref: input.ref,
+        status,
+        totals: run.totals,
+        finishedAt: Date.now(),
+        files: [...files.values()].map((file) => ({
+          sourcePath: file.sourcePath,
+          testPath: file.testPath,
+          verified: file.verified,
+          checks: file.checks,
+          ...(file.coverage ? { coverage: file.coverage } : {}),
+        })),
+      }).catch(() => false);
       if (history && scannedGaps) {
         await syncBacklog(
           history,
@@ -1606,6 +1624,19 @@ app.get("/api/runs/:id/files", async (c) => {
     const detail = await getRun(db, id);
     if (!detail) throw new HttpError(404, "Run not found.");
     return c.json({ enabled: true, ...detail });
+  } catch (err) {
+    return fail(err);
+  }
+});
+
+app.get("/api/runs/:id/artifacts", async (c) => {
+  try {
+    if (!c.env.ARTIFACTS) return c.json({ enabled: false });
+    const id = c.req.param("id");
+    if (!HISTORY_ID.test(id)) throw new HttpError(400, "Invalid run id.");
+    const artifact = await getRunArtifact(c.env, id);
+    if (!artifact) throw new HttpError(404, "No artifacts were stored for this run.");
+    return c.json({ enabled: true, artifact });
   } catch (err) {
     return fail(err);
   }

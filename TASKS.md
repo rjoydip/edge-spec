@@ -39,9 +39,6 @@ commitment to a date.
       without curl.
 - [ ] **Audit pagination.** `GET /api/audit` returns the newest N rows with no
       cursor. Add `before`/cursor paging if rows outgrow one page.
-- [ ] **Run artifacts route.** The earlier plan listed
-      `GET /api/runs/:id/artifacts` (signed R2 links); it is not implemented.
-      Add it only if artifacts are actually uploaded for runs, not just drift.
 
 ## Workspaces and tenancy
 
@@ -58,13 +55,14 @@ commitment to a date.
 
 ## Retention and storage
 
-- [ ] **R2 retention.** The daily purge deletes D1 runs, `run_files`, audit
-      events, and `pr_commands`, but R2 drift artifacts are never deleted. Add
-      an object-age sweep (and decide whether fixtures live in R2).
-- [ ] **Upload run logs and test artifacts.** Only drift summaries reach R2;
-      run logs, JUnit and LCOV stay in the response. Upload them per run if
-      long-lived debugging is needed, then wire the signed-artifact route and
-      retention above.
+- [ ] **R2 retention for drift summaries.** The daily purge deletes D1 runs,
+      `run_files`, audit events, `pr_commands` and the matching `runs/<id>.json`
+      bundles. `drift/<repo>/<time>.json` has no row to age out; add an
+      object-age sweep when drift history grows.
+- [ ] **Upload raw runner reports.** The R2 run bundle holds validation check
+      output and coverage facts. Raw JUnit and LCOV (when a runner produces
+      them) stay in the response; upload them per run if long-lived debugging is
+      needed.
 - [ ] **Export/archive before purge.** There is no export step. Add a JSON/CSV
       export if audit history must outlive the retention window.
 - [ ] **Fixture storage decision.** Recorded fixtures currently travel as test

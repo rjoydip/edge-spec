@@ -272,6 +272,14 @@ Drivers E2B, Vercel Sandbox, Daytona, Docker, Podman and bwrap still work when
 you point the dashboard at the self-hosted runner; they are alternatives, not
 requirements. `bun run sandbox` remains the local/self-hosted runner.
 
+`bun run dev:all` starts the API (`:8787`) and the dashboard (`:5173`), and adds
+the Sandbox bridge (`:8788`) when the host can build containers. Containers need
+Docker plus a Linux host: `wrangler dev` for `apps/sandbox-worker` fails on
+Windows with "Local development with containers is currently not supported on
+Windows". There, use a deployed bridge as the dashboard's Sandbox URL, or run
+`bun run dev:sandbox-worker` inside WSL2. Without a runner the run still
+completes, but validation stays a static check.
+
 ## Contract auth fixtures
 
 Settings holds two optional JSON objects per environment: auth headers and auth
@@ -321,6 +329,22 @@ migrations do not create tables there. A `D1_ERROR: no such table: runs` (or
 `bun run db:migrate:local`. It is harmless to repeat — applied migrations are
 skipped. `bun run dev:worker` runs it automatically; `bun run db:migrate`
 applies the same migrations to production.
+
+## Run artifacts (R2)
+
+The `ARTIFACTS` binding stores what D1 deliberately does not: the raw validation
+output and coverage facts of an interactive run, as one JSON bundle per run
+(`runs/<id>.json`), plus drift summaries (`drift/<repo>/<time>.json`). D1 keeps
+the summaries; R2 keeps the detail. Generated test source, prompts and keys are
+never written to either.
+
+```bash
+bunx wrangler r2 bucket create edge-spec-artifacts
+```
+
+`bun run db:migrate` does not create the bucket. Without it, runs still work and
+`GET /api/runs/:id/artifacts` answers `enabled: false`. The daily retention job
+deletes expired run bundles along with their D1 rows and audit events.
 
 ## Repository memory (optional)
 

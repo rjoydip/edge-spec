@@ -31,13 +31,15 @@ export interface D1Database {
   batch<T = unknown>(statements: D1PreparedStatement[]): Promise<T[]>;
 }
 
-/** The subset of R2 used for drift artifacts. */
+/** The subset of R2 used for drift and run artifacts. */
 export interface R2Bucket {
   put(
     key: string,
     value: string,
     options?: { httpMetadata?: { contentType?: string } },
   ): Promise<unknown>;
+  get(key: string): Promise<{ text(): Promise<string> } | null>;
+  delete(key: string): Promise<void>;
 }
 
 export interface Env {
