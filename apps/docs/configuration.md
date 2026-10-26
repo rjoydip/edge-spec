@@ -252,8 +252,9 @@ runner but cannot claim an execution.
 
 `apps/sandbox-worker` is a Cloudflare Worker plus Container that speaks the
 same `/health` and `/run` contract. It is the recommended runner for a
-Cloudflare deployment: the container image is built by Wrangler, and the
-dashboard only needs its URL and key.
+Cloudflare deployment: the container runs the published Sandbox image pinned to
+the SDK version, and the dashboard only needs its URL and key. Cloudflare
+Containers require the **Workers Paid** plan.
 
 ```bash
 bun run deploy:sandbox-worker

@@ -61,7 +61,7 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 - `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
   durable `workflow.ts`.
 - `apps/sandbox-worker/` — Cloudflare Sandbox bridge (`/health`, `/run`) built on
-  Containers and `@cloudflare/sandbox`; the Dockerfile tag must match the SDK.
+  Containers and `@cloudflare/sandbox`; its image tag must match the SDK.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `evals/` — golden-scan harness (`harness.ts`, `run.ts`, `golden.json`) and its

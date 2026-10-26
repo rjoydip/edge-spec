@@ -11,11 +11,11 @@ configuration or keys: those still travel per request.
 | Bun        | `1.4.4`; installs Wrangler and runs the build                        |
 | Node.js    | `>=22.12` (used by some tooling; Bun runs the tests)                 |
 | Wrangler   | installed by `bun install`; authenticated with `bunx wrangler login` |
-| Docker     | only to build/deploy the Sandbox bridge image; needs a Linux host    |
+| Docker     | only for local `wrangler dev` of the Sandbox bridge (Linux/WSL2)     |
 | GitHub App | optional, for webhook automation without a long-lived `GITHUB_TOKEN` |
 
-Windows can deploy the main Worker natively. The Sandbox bridge image cannot be
-built by `wrangler dev` on native Windows; use WSL2 or a Linux CI runner.
+Windows can deploy the main Worker and the Sandbox bridge. Only running the
+bridge locally with `wrangler dev` needs Docker on a Linux host (or WSL2).
 
 ```bash
 bun install
@@ -94,18 +94,32 @@ The generated suite is only executed when a runner is configured. Two options:
 - **Self-hosted** — `bun run sandbox` on a Linux host with `bwrap`, Docker or
   Podman; point `SANDBOX_RUNNER_URL` at it.
 - **Cloudflare Sandbox bridge** — `apps/sandbox-worker`, built on Containers and
-  `@cloudflare/sandbox`:
+  `@cloudflare/sandbox`. It needs the **Workers Paid** plan. The container uses
+  the published Sandbox image pinned to the SDK version, so deploying needs no
+  Docker:
 
 ```bash
 bun run deploy:sandbox-worker
+bunx wrangler secret put SANDBOX_API_KEY --config apps/sandbox-worker/wrangler.toml
+bunx wrangler secret put SANDBOX_API_KEY
+bunx wrangler secret put SANDBOX_RUNNER_URL   # https://edge-spec-sandbox.<subdomain>.workers.dev
 ```
 
-Then set its `SANDBOX_API_KEY` as a secret on that Worker and point the main
-Worker's `SANDBOX_RUNNER_URL` at the bridge origin. The bridge exposes `/health`
-and `/run`; the key is required, otherwise anyone could execute code.
+Use the same key for both Workers. The bridge exposes `/health` and `/run`; the
+key is required, otherwise anyone could execute code. A bridge without the
+secret answers `/health` with `SANDBOX_API_KEY is not configured on the bridge.`
+and refuses `/run` with 503.
 
-Without a runner, validation is **static check only** and `validation.verified`
-is false. Never describe that as passed.
+Check both sides:
+
+```bash
+curl https://edge-spec-sandbox.<subdomain>.workers.dev/health
+curl -X POST https://<worker>/api/sandbox/health -d '{}'
+```
+
+The first deploy provisions containers for a few minutes; retry until `/run`
+works. Without a runner, validation is **static check only** and
+`validation.verified` is false. Never describe that as passed.
 
 ## 6. GitHub webhooks
 

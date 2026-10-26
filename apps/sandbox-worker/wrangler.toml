@@ -3,10 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2026-10-25"
 compatibility_flags = ["nodejs_compat"]
 
-# The Cloudflare Sandbox image ships Bun, Node, git and common utilities.
+# The published image ships Bun, Node, git and common utilities. A registry
+# reference deploys without Docker; keep the tag equal to the npm SDK version.
 [[containers]]
 class_name = "Sandbox"
-image = "./Dockerfile"
+image = "docker.io/cloudflare/sandbox:0.12.14"
 
 [[durable_objects.bindings]]
 name = "Sandbox"

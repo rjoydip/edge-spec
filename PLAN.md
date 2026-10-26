@@ -96,7 +96,7 @@ edge-spec/
 │   │       ├── env.ts, cloudflare.d.ts, index.ts
 │   │       ├── workflow.ts, db.ts, scheduled.ts, impact.ts, ownership.ts
 │   ├── sandbox-worker/       # Cloudflare Sandbox bridge (Container)
-│   │   ├── Dockerfile, wrangler.toml
+│   │   ├── wrangler.toml
 │   │   └── src/{index.ts,contract.ts}
 │   └── docs/                 # VitePress site
 └── packages/

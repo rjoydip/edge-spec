@@ -36,10 +36,11 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 winget install OpenJS.NodeJS.LTS
 ```
 
-WSL2 with Docker Desktop is required for the Cloudflare Sandbox bridge —
-`wrangler dev` cannot run Containers on native Windows. Everything else (API,
-dashboard, CLI, MCP, tests) runs natively. See
-[`apps/docs/deployment.md`](apps/docs/deployment.md).
+WSL2 with Docker Desktop is needed only to run the Sandbox bridge locally —
+`wrangler dev` cannot run Containers on native Windows. Deploying the bridge
+needs no Docker (it uses the published image), but Containers require the
+Workers Paid plan. Everything else (API, dashboard, CLI, MCP, tests) runs
+natively. See [`apps/docs/deployment.md`](apps/docs/deployment.md).
 
 **macOS**
 
