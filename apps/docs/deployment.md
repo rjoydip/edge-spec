@@ -221,7 +221,8 @@ is false. Never describe that as passed.
 ## 7. GitHub App and webhooks
 
 The webhook endpoint is `https://<worker>/webhook`; it accepts `push`,
-`pull_request`, and `issue_comment` payloads. A GitHub App is recommended for
+`pull_request`, and `issue_comment` payloads and acknowledges other App
+deliveries (`ping`, `installation`) with 202. A GitHub App is recommended for
 multiple repositories because the payload carries `installation.id`, which the
 Worker uses to mint a repository-scoped installation token.
 

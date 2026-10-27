@@ -295,7 +295,11 @@ describe("webhooks", () => {
 
   it("validates the payload, then the workflow binding", async () => {
     expect((await post("{")).status).toBe(400);
-    expect((await post("{}")).status).toBe(400);
+
+    // App-level events (ping, installation) have no repository: acknowledged.
+    const ping = await post("{}");
+    expect(ping.status).toBe(202);
+    expect(((await ping.json()) as { ignored: string }).ignored).toBe("no repository");
 
     const valid = JSON.stringify({
       repository: { full_name: "acme/api" },

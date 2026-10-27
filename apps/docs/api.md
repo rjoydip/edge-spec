@@ -871,14 +871,16 @@ without one.
 
 ## `POST /webhook`
 
-GitHub webhook receiver for automation. Subscribe to **push** and
-**pull_request** events.
+GitHub webhook receiver for automation. Subscribe to **push**,
+**pull_request** and **issue_comment** events.
 
 Behaviour:
 
 1. If `GH_WEBHOOK_SECRET` is set, verifies `x-hub-signature-256` against the
    raw body. Invalid → 401.
-2. Reads `repository.full_name` and `installation.id`.
+2. Reads `repository.full_name` and `installation.id`. App-level deliveries
+   without a repository (`ping`, `installation`, `installation_repositories`)
+   return `202 {"ignored":"no repository"}` so GitHub records them as delivered.
 3. `push` starts `TestGenerationWorkflow` with `{repo, ref, event:"push",
 installationId?}` and returns `202 {"workflowId":"…"}`.
 4. `pull_request` (only `opened`, `synchronize`, `reopened`) starts the same

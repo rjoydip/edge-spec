@@ -1349,7 +1349,9 @@ app.post("/webhook", async (c) => {
 
     const repository = asRecord(payload.repository);
     const repo = str(repository.full_name);
-    if (!repo) throw new HttpError(400, "Webhook payload has no repository.");
+    // App-level events (`ping`, `installation`, …) carry no repository. They
+    // are valid deliveries, so acknowledge them instead of failing the run.
+    if (!repo) return c.json({ ignored: "no repository" }, 202);
     const ref = str(payload.ref)?.replace(/^refs\/heads\//, "") ?? "main";
     // An App webhook names its installation; a PAT deployment sends none.
     const installationId = Number(asRecord(payload.installation).id);
