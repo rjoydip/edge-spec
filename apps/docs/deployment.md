@@ -12,7 +12,7 @@ configuration or keys: those still travel per request.
 | Node.js    | `>=22.12` (used by some tooling; Bun runs the tests)                 |
 | Wrangler   | installed by `bun install`; authenticated with `bunx wrangler login` |
 | Docker     | optional, for containerised `bun run sandbox` runs (Linux/WSL2)      |
-| GitHub App | optional, for webhook automation without a long-lived `GITHUB_TOKEN` |
+| GitHub App | optional, for webhook automation without a long-lived `GH_TOKEN`     |
 
 Windows can deploy the Worker natively. Containerised sandbox runs
 (`bun run sandbox`) need Docker on a Linux host (or WSL2).
@@ -62,17 +62,15 @@ Secrets are deployment-owned. Visitor credentials are request headers and are
 never written to Worker state.
 
 ```bash
-bunx wrangler secret put GITHUB_APP_ID            # GitHub App automation
-bunx wrangler secret put GITHUB_APP_PRIVATE_KEY   # PKCS#8 PEM
-bunx wrangler secret put GITHUB_WEBHOOK_SECRET    # verifies x-hub-signature-256
-bunx wrangler secret put GITHUB_TOKEN             # fallback when no App is set
-bunx wrangler secret put SANDBOX_RUNNER_URL       # optional runner origin
-bunx wrangler secret put SANDBOX_API_KEY          # optional runner key
-bunx wrangler secret put DRIFT_WEBHOOK_URL        # optional Slack-compatible
+bunx wrangler secret put GH_APP_ID            # GitHub App automation
+bunx wrangler secret put GH_APP_PRIVATE_KEY   # PKCS#8 PEM
+bunx wrangler secret put GH_WEBHOOK_SECRET    # verifies x-hub-signature-256
+bunx wrangler secret put GH_TOKEN             # fallback when no App is set
+bunx wrangler secret put DRIFT_WEBHOOK_URL        # optional fallback; prefer Settings
 bunx wrangler secret put DRIFT_WEBHOOK_SECRET     # sent as x-edgespec-secret
 ```
 
-`GITHUB_TOKEN` is only a fallback for workflow runs. The dashboard always uses
+`GH_TOKEN` is only a fallback for workflow runs. The dashboard always uses
 the visitor's token.
 
 ## 4. Deploy the Worker
@@ -98,8 +96,11 @@ bun run sandbox                     # 127.0.0.1:8788, auto-detect
 SANDBOX_API_KEY=... bun run sandbox # required when binding beyond loopback
 ```
 
-Point the main Worker at it with `SANDBOX_RUNNER_URL` and the same
-`SANDBOX_API_KEY`. The runner exposes `/health` and `/run`; without a key it
+Each user configures the runner in **Settings → Sandbox**. The URL travels in
+`x-sandbox-url`, the key in `x-sandbox-key`, and the non-secret knobs in
+`x-sandbox-config`; no Worker secret is required. Webhook runs have no user
+headers, so they stay static-only unless an operator sets an optional
+deployment fallback. The runner exposes `/health` and `/run`; without a key it
 binds loopback only. Check the connection:
 
 ```bash
@@ -110,20 +111,35 @@ curl -X POST https://<worker>/api/sandbox/health -d '{}'
 Without a runner, validation is **static check only** and `validation.verified`
 is false. Never describe that as passed.
 
-## 6. GitHub webhooks
+## 6. GitHub App and webhooks
 
-Point the GitHub App or repository webhook at
-`https://<worker>/webhook`, subscribe to **push**, **pull_request** and
-**issue_comment**, and set `GITHUB_WEBHOOK_SECRET`. The workflow uses the
-deployment's Workers AI binding and a short-lived App installation token; no
-visitor key enters Workflow state.
+The webhook endpoint is `https://<worker>/webhook`; it accepts `push`,
+`pull_request`, and `issue_comment` payloads. A GitHub App is recommended for
+multiple repositories because the payload carries `installation.id`, which the
+Worker uses to mint a repository-scoped installation token.
+
+Full setup—permissions, events, private-key generation, PKCS#8 conversion, and
+verification—is on the dedicated [GitHub App and webhooks](/github-app) page.
+
+Short version:
+
+| Secret               | Value                                                  |
+| -------------------- | ------------------------------------------------------ |
+| `GH_APP_ID`          | Numeric App ID                                         |
+| `GH_APP_PRIVATE_KEY` | PKCS#8 PEM contents                                    |
+| `GH_WEBHOOK_SECRET`  | App/repository webhook secret (`openssl rand -hex 32`) |
+| `GH_TOKEN`           | Optional PAT fallback                                  |
+
+Do not pass these to `TestGenerationWorkflow`; Workflow params are persisted.
 
 ## CI
 
 - `.github/workflows/ci.yml` runs `bun run check`, both builds and the docs build
   on every push and pull request. No Cloudflare credentials required.
-- `.github/workflows/deploy.yml` deploys `main` using the repository secrets
-  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+- `.github/workflows/deploy.yml` builds and deploys `main` with Alchemy using
+  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and the optional GitHub App
+  credentials. The first production run needs `--adopt` to import the existing
+  Worker, D1, R2, and Workflow.
 
 ## Verify a deployment
 

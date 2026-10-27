@@ -98,8 +98,9 @@ Everything the dashboard needs to render provider choices and defaults.
 }
 ```
 
-`sandbox` is `true` when `SANDBOX_RUNNER_URL` is configured. The dashboard uses
-it to avoid promising an executed test.
+`sandbox` is `true` when the request supplies `x-sandbox-url` (or the operator
+sets a deployment fallback). The dashboard uses it to avoid promising an
+executed test.
 
 ---
 
@@ -112,10 +113,9 @@ browser never has to reach an arbitrary origin and the key is not exposed to it.
 { "url": "https://sandbox.example.com", "config": { "timeoutMs": 180000 } }
 ```
 
-`url` may be omitted when `x-sandbox-url` or `SANDBOX_RUNNER_URL` supplies one.
-The key comes from `x-sandbox-key` or `SANDBOX_API_KEY`. On a deployed Worker,
-loopback and private targets are refused; a local Worker may use
-`http://localhost`.
+`url` may be omitted when `x-sandbox-url` supplies one. The key comes from
+`x-sandbox-key`. On a deployed Worker, loopback and private targets are refused;
+a local Worker may use `http://localhost`.
 
 ```json
 {
@@ -325,9 +325,8 @@ Request:
 { "repo": "acme/api", "ref": "main", "coverageTarget": 90 }
 ```
 
-Needs `x-sandbox-url` (or `SANDBOX_RUNNER_URL`); without a runner the route
-returns `400`. Non-secret knobs travel in `x-sandbox-config`, exactly as a run
-does. The test command comes from `package.json`/CI detection; EdgeSpec never
+Needs `x-sandbox-url`; without a runner the route returns `400`. Non-secret
+knobs travel in `x-sandbox-config`, exactly as a run does. The test command comes from `package.json`/CI detection; EdgeSpec never
 invents one.
 
 Response:
@@ -696,19 +695,40 @@ Opt-in scheduled drift scans (D1). The cron runs daily; each repository decides
 whether it is due from `intervalDays` (1–30, default 7).
 
 ```json
-{ "repo": "acme/api", "intervalDays": 7, "enabled": true, "installationId": 42 }
+{
+  "repo": "acme/api",
+  "intervalDays": 7,
+  "enabled": true,
+  "installationId": 42,
+  "driftWebhookUrl": "https://hooks.slack.com/services/...",
+  "driftWebhookSecretSet": true
+}
 ```
 
-`GET` returns `{enabled, schedules}`; `PUT` upserts the schedule (`installationId`
-optional, used to mint an App token); `DELETE` removes it. Without `RUNS_DB` the
-list is empty and writes return 501.
+`GET` returns `{enabled, schedules}`; `PUT` upserts the schedule
+(`installationId` optional, used to mint an App token); `DELETE` removes it.
+Without `RUNS_DB` the list is empty and writes return 501.
+
+`PUT` accepts `driftWebhookUrl?` and `driftWebhookSecret?` for a
+repository-specific override. The secret is write-only: responses report
+`driftWebhookSecretSet` instead of the value. Sending an empty
+`driftWebhookUrl` clears both the override and its secret.
 
 A due scan keeps a snapshot of untested paths and OpenAPI `METHOD /path` names.
 The first run is a baseline. Later runs compare against it; when anything
-changed, one summary is POSTed to `DRIFT_WEBHOOK_URL` (Slack-compatible `text`)
-with an optional `x-edgespec-secret` header, and written to R2 when the
-`ARTIFACTS` binding exists. A quiet repository sends nothing and opens nothing.
-The scan never opens a pull request: the summary is the action.
+changed, one summary is POSTed to the effective webhook (Slack-compatible
+`text`) with an optional `x-edgespec-secret` header, and written to R2 when the
+`ARTIFACTS` binding exists.
+
+Resolution order:
+
+1. repository schedule override;
+2. workspace drift webhook;
+3. deployment `DRIFT_WEBHOOK_URL` fallback.
+
+A quiet repository sends nothing and opens nothing. The scan never opens a pull
+request: the summary is the action. The audit event records `notified` and
+`webhookSource` (`repository`, `workspace`, `environment`, or `none`).
 
 ---
 
@@ -748,14 +768,28 @@ The record is created lazily on first read.
     "id": "default",
     "name": "Default workspace",
     "retentionDays": 30,
+    "driftWebhookUrl": "https://hooks.slack.com/services/...",
+    "driftWebhookSecretSet": true,
     "createdAt": 1760000000000,
     "updatedAt": 1760000000000
   }
 }
 ```
 
-`PUT` accepts `{name?, retentionDays?}`. The name is trimmed to 100 characters;
-retention is clamped to 1–365 days. Updating the workspace writes an audit event.
+`PUT` accepts `{name?, retentionDays?, driftWebhookUrl?, driftWebhookSecret?}`.
+The name is trimmed to 100 characters; retention is clamped to 1–365 days.
+
+The drift webhook secret is write-only: it is accepted on `PUT`, never returned,
+and reported only as `driftWebhookSecretSet`. Sending an empty
+`driftWebhookUrl` clears the URL and secret. Sending an empty
+`driftWebhookSecret` clears only the secret. Changing the URL without sending a
+new secret clears the old secret rather than forwarding it to the new endpoint.
+Omitted fields keep their current values. Updating the workspace writes an
+audit event.
+
+Per-repository schedules can override the workspace webhook through
+`PUT /api/schedules`. Resolution order is repository → workspace → deployment
+`DRIFT_WEBHOOK_URL`.
 
 ---
 
@@ -823,7 +857,7 @@ GitHub webhook receiver for automation. Subscribe to **push** and
 
 Behaviour:
 
-1. If `GITHUB_WEBHOOK_SECRET` is set, verifies `x-hub-signature-256` against the
+1. If `GH_WEBHOOK_SECRET` is set, verifies `x-hub-signature-256` against the
    raw body. Invalid → 401.
 2. Reads `repository.full_name` and `installation.id`.
 3. `push` starts `TestGenerationWorkflow` with `{repo, ref, event:"push",
@@ -833,8 +867,8 @@ installationId?}` and returns `202 {"workflowId":"…"}`.
 event:"pull_request"}`. Other actions return `202 {"ignored":"…"}` without
    starting work.
 5. The workflow mints a repo-scoped installation token when
-   `GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY` are configured, cached until just
-   before expiry; otherwise it uses `GITHUB_TOKEN`.
+   `GH_APP_ID`/`GH_APP_PRIVATE_KEY` are configured, cached until just
+   before expiry; otherwise it uses `GH_TOKEN`.
 
 Check mode is advisory: it scans the changed files, reports changed sources
 without tests, runs their existing tests when a runner is configured, and

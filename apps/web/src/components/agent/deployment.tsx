@@ -124,6 +124,9 @@ function WorkspaceBlock() {
   const [enabled, setEnabled] = useState(true);
   const [name, setName] = useState("");
   const [retentionDays, setRetentionDays] = useState(30);
+  const [driftWebhookUrl, setDriftWebhookUrl] = useState("");
+  const [driftWebhookSecret, setDriftWebhookSecret] = useState("");
+  const [driftWebhookSecretSet, setDriftWebhookSecretSet] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -138,6 +141,8 @@ function WorkspaceBlock() {
         if (result.workspace) {
           setName(result.workspace.name);
           setRetentionDays(result.workspace.retentionDays);
+          setDriftWebhookUrl(result.workspace.driftWebhookUrl ?? "");
+          setDriftWebhookSecretSet(result.workspace.driftWebhookSecretSet);
         }
       })
       .catch((reason: unknown) => {
@@ -156,7 +161,15 @@ function WorkspaceBlock() {
     setError(undefined);
     setSaved(false);
     try {
-      await updateWorkspace({ name, retentionDays });
+      const result = await updateWorkspace({
+        name,
+        retentionDays,
+        driftWebhookUrl,
+        ...(driftWebhookSecret.trim() ? { driftWebhookSecret } : {}),
+      });
+      setDriftWebhookUrl(result.workspace.driftWebhookUrl ?? "");
+      setDriftWebhookSecret("");
+      setDriftWebhookSecretSet(result.workspace.driftWebhookSecretSet);
       setSaved(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -185,6 +198,31 @@ function WorkspaceBlock() {
           />
         </Field>
       </div>
+      <Field
+        label="Drift webhook URL"
+        hint="Workspace default. A repository schedule can override it. Empty clears the setting."
+      >
+        <Input
+          value={driftWebhookUrl}
+          placeholder="https://hooks.slack.com/services/..."
+          onChange={(event) => setDriftWebhookUrl(event.target.value)}
+        />
+      </Field>
+      <Field
+        label="Drift webhook secret"
+        hint={
+          driftWebhookSecretSet
+            ? "Stored. Leave blank to keep it; typing replaces it."
+            : "Optional; sent as x-edgespec-secret."
+        }
+      >
+        <Input
+          type="password"
+          value={driftWebhookSecret}
+          placeholder={driftWebhookSecretSet ? "Stored" : "Optional shared secret"}
+          onChange={(event) => setDriftWebhookSecret(event.target.value)}
+        />
+      </Field>
       <div className="flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy}>
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
@@ -488,6 +526,10 @@ function SchedulesBlock({ repo }: { repo: string }) {
   const [enabled, setEnabled] = useState(true);
   const [intervalDays, setIntervalDays] = useState(7);
   const [scheduleOn, setScheduleOn] = useState(true);
+  const [overrideWebhook, setOverrideWebhook] = useState(false);
+  const [driftWebhookUrl, setDriftWebhookUrl] = useState("");
+  const [driftWebhookSecret, setDriftWebhookSecret] = useState("");
+  const [driftWebhookSecretSet, setDriftWebhookSecretSet] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -504,6 +546,9 @@ function SchedulesBlock({ repo }: { repo: string }) {
         if (mine) {
           setIntervalDays(mine.intervalDays);
           setScheduleOn(mine.enabled);
+          setOverrideWebhook(Boolean(mine.driftWebhookUrl));
+          setDriftWebhookUrl(mine.driftWebhookUrl ?? "");
+          setDriftWebhookSecretSet(Boolean(mine.driftWebhookSecretSet));
         }
       })
       .catch((reason: unknown) => {
@@ -521,9 +566,24 @@ function SchedulesBlock({ repo }: { repo: string }) {
     setBusy(true);
     setError(undefined);
     setSaved(false);
+    if (overrideWebhook && !driftWebhookUrl.trim()) {
+      setError("Enter a webhook URL or disable the repository override.");
+      return;
+    }
     try {
-      const result = await updateSchedule({ repo, intervalDays, enabled: scheduleOn });
+      const result = await updateSchedule({
+        repo,
+        intervalDays,
+        enabled: scheduleOn,
+        driftWebhookUrl: overrideWebhook ? driftWebhookUrl : "",
+        ...(overrideWebhook && driftWebhookSecret.trim() ? { driftWebhookSecret } : {}),
+      });
       setSchedules(result.schedules);
+      const saved = result.schedules.find((entry) => entry.repo === repo);
+      setOverrideWebhook(Boolean(saved?.driftWebhookUrl));
+      setDriftWebhookUrl(saved?.driftWebhookUrl ?? "");
+      setDriftWebhookSecret("");
+      setDriftWebhookSecretSet(Boolean(saved?.driftWebhookSecretSet));
       setSaved(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -574,6 +634,42 @@ function SchedulesBlock({ repo }: { repo: string }) {
             />
           </Field>
         </div>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-[10px] text-zinc-400">Override workspace webhook</span>
+          <Switch
+            size="sm"
+            className="ml-auto"
+            checked={overrideWebhook}
+            onCheckedChange={setOverrideWebhook}
+            aria-label="Override the workspace drift webhook for this repository"
+          />
+        </div>
+        {overrideWebhook && (
+          <div className="mt-2 space-y-2">
+            <Field label="Repository webhook URL" hint="Used before the workspace and environment.">
+              <Input
+                value={driftWebhookUrl}
+                placeholder="https://hooks.slack.com/services/..."
+                onChange={(event) => setDriftWebhookUrl(event.target.value)}
+              />
+            </Field>
+            <Field
+              label="Repository webhook secret"
+              hint={
+                driftWebhookSecretSet
+                  ? "Stored. Leave blank to keep it; typing replaces it."
+                  : "Optional; sent as x-edgespec-secret."
+              }
+            >
+              <Input
+                type="password"
+                value={driftWebhookSecret}
+                placeholder={driftWebhookSecretSet ? "Stored" : "Optional shared secret"}
+                onChange={(event) => setDriftWebhookSecret(event.target.value)}
+              />
+            </Field>
+          </div>
+        )}
         <div className="mt-2 flex items-center gap-2">
           <Button size="sm" onClick={save} disabled={busy}>
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}

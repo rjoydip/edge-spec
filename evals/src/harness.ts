@@ -12,8 +12,8 @@ import {
   type EvalScore,
   type GoldenCase,
   type GoldenResult,
-} from "../packages/core/src/eval";
-import { classifyTree } from "../packages/core/src/scanner";
+} from "../../packages/core/src/eval";
+import { classifyTree } from "../../packages/core/src/scanner";
 
 const SKIP = new Set([".git", "node_modules", "dist", "coverage", ".wrangler"]);
 

@@ -72,7 +72,7 @@ export async function appJwt(config: GitHubAppConfig, now = Date.now()): Promise
   } catch {
     throw new HttpError(
       501,
-      "The GitHub App private key is not a valid PKCS#8 PEM. Check GITHUB_APP_PRIVATE_KEY.",
+      "The GitHub App private key is not a valid PKCS#8 PEM. Check GH_APP_PRIVATE_KEY.",
     );
   }
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, encoder.encode(unsigned));
@@ -169,10 +169,10 @@ export class InstallationTokenCache {
 
 /** Reads the deployment's app credentials, when both are configured. */
 export function gitHubAppFromEnv(env: {
-  GITHUB_APP_ID?: string;
-  GITHUB_APP_PRIVATE_KEY?: string;
+  GH_APP_ID?: string;
+  GH_APP_PRIVATE_KEY?: string;
 }): GitHubAppConfig | undefined {
-  const appId = env.GITHUB_APP_ID?.trim();
-  const privateKey = env.GITHUB_APP_PRIVATE_KEY?.trim();
+  const appId = env.GH_APP_ID?.trim();
+  const privateKey = env.GH_APP_PRIVATE_KEY?.trim();
   return appId && privateKey ? { appId, privateKey } : undefined;
 }

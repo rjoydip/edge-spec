@@ -35,7 +35,7 @@ These corrections to the first mockup are part of the definition of done.
 | Interactive path | `POST /api/run` (SSE)                                                                                                           | Live step logs; BYO keys never enter durable workflow state      |
 | LLM              | Workers AI binding, or any OpenAI-compatible / Anthropic / Gemini endpoint                                                      | User's choice; key stays client-side                             |
 | GitHub           | REST via `fetch`                                                                                                                | No SDK, no bundle weight; token per request                      |
-| Test validation  | Optional sandbox runner (`SANDBOX_RUNNER_URL`), else static check                                                               | Honest `verified` flag instead of pretending tests ran           |
+| Test validation  | Optional user-configured sandbox runner, else static check                                                                      | Honest `verified` flag instead of pretending tests ran           |
 | State            | Optional D1 for history, backlog, policies, memory, schedules, workspace and audit; browser local storage for per-user settings | Stateless by default; shared data is opt-in and never holds keys |
 | Dashboard        | React 19 + Tailwind v4 + Vite                                                                                                   | Same stack as the reference project                              |
 | Icons            | `lucide-react`                                                                                                                  | Matches the mockup                                               |
@@ -157,10 +157,10 @@ bucket_name = "edge-spec-artifacts"
 - Without `RUNS_DB` the Worker still scans, generates and opens pull requests;
   history, backlog, policies, memory, workspace and audit answer disabled, and
   the cron does nothing.
-- Secrets are for the automation path only: `GITHUB_APP_ID` +
-  `GITHUB_APP_PRIVATE_KEY` (or `GITHUB_TOKEN`), `GITHUB_WEBHOOK_SECRET`,
-  `SANDBOX_RUNNER_URL`, `SANDBOX_API_KEY`, `DRIFT_WEBHOOK_URL`,
-  `DRIFT_WEBHOOK_SECRET`.
+- Secrets are for the automation path only: `GH_APP_ID` +
+  `GH_APP_PRIVATE_KEY` (or `GH_TOKEN`), `GH_WEBHOOK_SECRET`,
+  `DRIFT_WEBHOOK_URL`, `DRIFT_WEBHOOK_SECRET`. The sandbox runner is configured
+  per user in the dashboard.
 - The interactive path uses headers: `x-github-token`, `x-ai-key`,
   `x-ai-base-url`, `x-sandbox-url`, `x-sandbox-key`, `x-sandbox-config`.
 - No KV and no Queue binding. Workspace records hold a name, a retention
@@ -315,8 +315,8 @@ a dialog, not a stage (one configuration surface, not two).
    ones with risk and exported symbols.
 2. **Generate** — prompt contains path + source; output is parsed out of a code
    fence; the file must contain at least one `describe`/`it`/`test`.
-3. **Validate** — if `SANDBOX_RUNNER_URL` is configured, POST source + test and
-   run `bun test`; otherwise run the static check and report
+3. **Validate** — if the request supplies a sandbox runner, POST source + test
+   and run `bun test`; otherwise run the static check and report
    `verified: false` ("static check only").
 4. **Self-correct** — if validation is verified and fails, feed the output back
    to the model up to `maxRetries`.
@@ -421,18 +421,17 @@ bun run deploy
 Optional secrets for the webhook/automation path:
 
 ```bash
-bunx wrangler secret put GITHUB_APP_ID
-bunx wrangler secret put GITHUB_APP_PRIVATE_KEY
-bunx wrangler secret put GITHUB_TOKEN             # fallback when no App
-bunx wrangler secret put GITHUB_WEBHOOK_SECRET
-bunx wrangler secret put SANDBOX_RUNNER_URL
-bunx wrangler secret put SANDBOX_API_KEY
+bunx wrangler secret put GH_APP_ID
+bunx wrangler secret put GH_APP_PRIVATE_KEY
+bunx wrangler secret put GH_TOKEN             # fallback when no App
+bunx wrangler secret put GH_WEBHOOK_SECRET
 bunx wrangler secret put DRIFT_WEBHOOK_URL
 bunx wrangler secret put DRIFT_WEBHOOK_SECRET
 ```
 
-Point `SANDBOX_RUNNER_URL` at a self-hosted runner (`bun run sandbox`) or a
-hosted driver, with the same `SANDBOX_API_KEY` on both sides.
+Configure a self-hosted runner (`bun run sandbox`) or a hosted driver per user
+in **Settings → Sandbox**. The runner's own `SANDBOX_API_KEY` is separate from
+the Worker and travels as `x-sandbox-key`.
 
 Optional D1 setup:
 

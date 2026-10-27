@@ -1,7 +1,7 @@
 /**
  * The durable path for GitHub webhooks: it scans a repository, writes the
  * missing test, checks it and opens the pull request. It runs with
- * deployment-owned credentials (Workers AI + GITHUB_TOKEN) because Workflow
+ * deployment-owned credentials (Workers AI + GH_TOKEN) because Workflow
  * params are persisted; a visitor's API key must never end up in that state.
  */
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
@@ -496,10 +496,10 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
     const token =
       app && params.installationId && params.installationId > 0
         ? await installationTokens.get(app, params.installationId, repo)
-        : this.env.GITHUB_TOKEN;
+        : this.env.GH_TOKEN;
     if (!token) {
       throw new Error(
-        "The webhook has no GitHub credential. Configure the GitHub App secrets or GITHUB_TOKEN.",
+        "The webhook has no GitHub credential. Configure the GitHub App secrets or GH_TOKEN.",
       );
     }
     const github = new GitHub(token);

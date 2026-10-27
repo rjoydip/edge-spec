@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "eval": "bun run run.ts",
+    "eval": "bun run src/run.ts",
     "typecheck": "bun check",
     "test": "bun test"
   },

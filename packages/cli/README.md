@@ -14,7 +14,7 @@ Commands: `scan`, `generate`, `run`, `watch`, `catalog`. Use `--url` or
 `EDGESPEC_URL` to point at a deployment; the default is
 `http://127.0.0.1:8787`.
 
-Secrets are environment-only by design: `GITHUB_TOKEN`, `EDGESPEC_AI_KEY`
+Secrets are environment-only by design: `GH_TOKEN`, `EDGESPEC_AI_KEY`
 (or a provider key such as `OPENAI_API_KEY`), `EDGESPEC_AI_BASE_URL`,
 `EDGESPEC_SANDBOX_URL`, `EDGESPEC_SANDBOX_KEY`, `EDGESPEC_DEPLOYMENT_AI=1`.
 There are no key flags.

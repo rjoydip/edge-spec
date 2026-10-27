@@ -20,7 +20,7 @@ Resources:
 
 Environment:
   EDGESPEC_URL                 EdgeSpec Worker URL (default: http://127.0.0.1:8787)
-  GITHUB_TOKEN                 GitHub token (or EDGESPEC_GITHUB_TOKEN)
+  GH_TOKEN                 GitHub token (GITHUB_TOKEN / EDGESPEC_GITHUB_TOKEN are aliases)
   EDGESPEC_AI_PROVIDER         Default provider id
   EDGESPEC_AI_MODEL            Default model id
   EDGESPEC_AI_KEY              Provider key; provider-specific keys also work

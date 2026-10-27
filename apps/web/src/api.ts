@@ -303,6 +303,10 @@ export interface Workspace {
   name: string;
   /** Days to keep runs, audit events and command rate-limit rows. */
   retentionDays: number;
+  /** Optional workspace-wide drift notification target. */
+  driftWebhookUrl?: string;
+  /** The secret is write-only; this only says whether one is stored. */
+  driftWebhookSecretSet: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -315,6 +319,8 @@ export function fetchWorkspace(): Promise<{ enabled: boolean; workspace?: Worksp
 export function updateWorkspace(input: {
   name?: string;
   retentionDays?: number;
+  driftWebhookUrl?: string;
+  driftWebhookSecret?: string;
 }): Promise<{ enabled: boolean; workspace: Workspace }> {
   return apiJson<{ enabled: boolean; workspace: Workspace }>("/api/workspace", {
     method: "PUT",
@@ -347,6 +353,8 @@ export interface ScheduledRepo {
   enabled: boolean;
   installationId?: number;
   lastRunAt?: number;
+  driftWebhookUrl?: string;
+  driftWebhookSecretSet?: boolean;
 }
 
 export function fetchSchedules(): Promise<{ enabled: boolean; schedules: ScheduledRepo[] }> {
@@ -355,7 +363,7 @@ export function fetchSchedules(): Promise<{ enabled: boolean; schedules: Schedul
 
 /** Upserts one schedule; the response is the full list. */
 export function updateSchedule(
-  input: ScheduledRepo,
+  input: ScheduledRepo & { driftWebhookSecret?: string },
 ): Promise<{ enabled: boolean; schedules: ScheduledRepo[] }> {
   return apiJson<{ enabled: boolean; schedules: ScheduledRepo[] }>("/api/schedules", {
     method: "PUT",

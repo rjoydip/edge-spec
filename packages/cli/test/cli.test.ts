@@ -77,7 +77,7 @@ describe("edge-spec CLI", () => {
   });
 
   it("scans a repository and sends the GitHub token header", async () => {
-    const result = await run(["scan", "owner/repo", "--json"], { GITHUB_TOKEN: "gh-test" });
+    const result = await run(["scan", "owner/repo", "--json"], { GH_TOKEN: "gh-test" });
     expect(result.code).toBe(0);
     const scan = JSON.parse(result.stdout);
     expect(scan.gaps[0].path).toBe("src/a.ts");

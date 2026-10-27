@@ -12,6 +12,8 @@ import {
   putPolicy,
   putWorkspace,
   recordAudit,
+  scheduledRepoView,
+  workspaceView,
 } from "../src/db";
 import type { D1Database, D1PreparedStatement } from "../src/env";
 
@@ -233,11 +235,20 @@ function workspaceDb() {
             id: values[0],
             name: values[1],
             retention_days: values[2],
+            drift_webhook_url: null,
+            drift_webhook_secret: null,
             created_at: values[3],
             updated_at: values[4],
           };
         } else if (sql.startsWith("UPDATE workspaces")) {
-          row = { ...row, name: values[0], retention_days: values[1], updated_at: values[2] };
+          row = {
+            ...row,
+            name: values[0],
+            retention_days: values[1],
+            drift_webhook_url: values[2],
+            drift_webhook_secret: values[3],
+            updated_at: values[4],
+          };
         } else if (sql.startsWith("INSERT INTO audit_events")) {
           events.unshift({
             id: events.length + 1,
@@ -276,6 +287,43 @@ describe("workspace settings and audit", () => {
     expect(updated.name).toBe("Platform");
     expect(updated.retentionDays).toBe(1);
     expect(await getWorkspace(db)).toMatchObject({ name: "Platform", retentionDays: 1 });
+  });
+
+  it("stores workspace drift webhooks and never exposes the secret in public views", async () => {
+    const { db } = workspaceDb();
+    const updated = await putWorkspace(db, {
+      driftWebhookUrl: "https://hooks.example/workspace",
+      driftWebhookSecret: "shared-secret",
+    });
+    expect(updated).toMatchObject({
+      driftWebhookUrl: "https://hooks.example/workspace",
+      driftWebhookSecret: "shared-secret",
+    });
+    expect(workspaceView(updated)).toMatchObject({
+      driftWebhookUrl: "https://hooks.example/workspace",
+      driftWebhookSecretSet: true,
+    });
+    expect("driftWebhookSecret" in workspaceView(updated)).toBe(false);
+
+    const changed = await putWorkspace(db, {
+      driftWebhookUrl: "https://hooks.example/replaced",
+    });
+    expect(changed.driftWebhookUrl).toBe("https://hooks.example/replaced");
+    expect(changed.driftWebhookSecret).toBeUndefined();
+
+    const cleared = await putWorkspace(db, { driftWebhookUrl: "" });
+    expect(cleared.driftWebhookUrl).toBeUndefined();
+    expect(cleared.driftWebhookSecret).toBeUndefined();
+
+    const schedule = scheduledRepoView({
+      repo: "acme/api",
+      intervalDays: 7,
+      enabled: true,
+      driftWebhookUrl: "https://hooks.example/repo",
+      driftWebhookSecret: "repo-secret",
+    });
+    expect(schedule.driftWebhookSecretSet).toBe(true);
+    expect("driftWebhookSecret" in schedule).toBe(false);
   });
 
   it("removes secret-looking keys from audit detail", async () => {

@@ -404,8 +404,22 @@ export interface Workspace {
   name: string;
   /** Days to keep runs, audit events and command rate-limit rows. */
   retentionDays: number;
+  /** Optional workspace-wide drift notification target. */
+  driftWebhookUrl?: string;
+  /** Write-only secret; never return this from an HTTP route. */
+  driftWebhookSecret?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+/** Public workspace shape: the webhook secret is never serialized. */
+export type WorkspaceView = Omit<Workspace, "driftWebhookSecret"> & {
+  driftWebhookSecretSet: boolean;
+};
+
+export function workspaceView(workspace: Workspace): WorkspaceView {
+  const { driftWebhookSecret, ...rest } = workspace;
+  return { ...rest, driftWebhookSecretSet: Boolean(driftWebhookSecret) };
 }
 
 export interface AuditEvent {
@@ -438,12 +452,16 @@ function redact(value: unknown, depth = 0): unknown {
 
 export async function getWorkspace(db: D1Database, id = "default"): Promise<Workspace> {
   const row = await db
-    .prepare("SELECT id, name, retention_days, created_at, updated_at FROM workspaces WHERE id = ?")
+    .prepare(
+      "SELECT id, name, retention_days, drift_webhook_url, drift_webhook_secret, created_at, updated_at FROM workspaces WHERE id = ?",
+    )
     .bind(id)
     .first<{
       id: string;
       name: string;
       retention_days: number;
+      drift_webhook_url: string | null;
+      drift_webhook_secret: string | null;
       created_at: number;
       updated_at: number;
     }>();
@@ -452,6 +470,8 @@ export async function getWorkspace(db: D1Database, id = "default"): Promise<Work
       id: row.id,
       name: row.name,
       retentionDays: row.retention_days,
+      ...(row.drift_webhook_url ? { driftWebhookUrl: row.drift_webhook_url } : {}),
+      ...(row.drift_webhook_secret ? { driftWebhookSecret: row.drift_webhook_secret } : {}),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -474,7 +494,12 @@ export async function getWorkspace(db: D1Database, id = "default"): Promise<Work
 
 export async function putWorkspace(
   db: D1Database,
-  input: { name?: string; retentionDays?: number },
+  input: {
+    name?: string;
+    retentionDays?: number;
+    driftWebhookUrl?: string;
+    driftWebhookSecret?: string;
+  },
   id = "default",
 ): Promise<Workspace> {
   const current = await getWorkspace(db, id);
@@ -483,12 +508,35 @@ export async function putWorkspace(
   const retentionDays = Number.isFinite(days)
     ? Math.min(365, Math.max(1, Math.round(days)))
     : current.retentionDays;
+  const requestedUrl = input.driftWebhookUrl?.trim();
+  const urlChanged = requestedUrl !== undefined && requestedUrl !== (current.driftWebhookUrl ?? "");
+  const driftWebhookUrl =
+    input.driftWebhookUrl === undefined ? current.driftWebhookUrl : requestedUrl || undefined;
+  const driftWebhookSecret =
+    driftWebhookUrl === undefined
+      ? undefined
+      : input.driftWebhookSecret !== undefined
+        ? input.driftWebhookSecret.trim() || undefined
+        : urlChanged
+          ? undefined
+          : current.driftWebhookSecret;
   const updatedAt = Date.now();
   await db
-    .prepare("UPDATE workspaces SET name = ?, retention_days = ?, updated_at = ? WHERE id = ?")
-    .bind(name, retentionDays, updatedAt, id)
+    .prepare(
+      "UPDATE workspaces SET name = ?, retention_days = ?, drift_webhook_url = ?, drift_webhook_secret = ?, updated_at = ? WHERE id = ?",
+    )
+    .bind(name, retentionDays, driftWebhookUrl ?? null, driftWebhookSecret ?? null, updatedAt, id)
     .run();
-  return { ...current, name, retentionDays, updatedAt };
+  const next: Workspace = {
+    id: current.id,
+    name,
+    retentionDays,
+    createdAt: current.createdAt,
+    updatedAt,
+  };
+  if (driftWebhookUrl) next.driftWebhookUrl = driftWebhookUrl;
+  if (driftWebhookSecret) next.driftWebhookSecret = driftWebhookSecret;
+  return next;
 }
 
 export async function recordAudit(
@@ -597,6 +645,19 @@ export interface ScheduledRepo {
   enabled: boolean;
   installationId?: number;
   lastRunAt?: number;
+  /** Optional per-repository override; takes precedence over the workspace. */
+  driftWebhookUrl?: string;
+  /** Write-only secret; never return this from an HTTP route. */
+  driftWebhookSecret?: string;
+}
+
+export type ScheduledRepoView = Omit<ScheduledRepo, "driftWebhookSecret"> & {
+  driftWebhookSecretSet: boolean;
+};
+
+export function scheduledRepoView(schedule: ScheduledRepo): ScheduledRepoView {
+  const { driftWebhookSecret, ...rest } = schedule;
+  return { ...rest, driftWebhookSecretSet: Boolean(driftWebhookSecret) };
 }
 
 interface ScheduleRow {
@@ -605,6 +666,8 @@ interface ScheduleRow {
   enabled: number;
   installation_id: number | null;
   last_run_at: number | null;
+  drift_webhook_url: string | null;
+  drift_webhook_secret: string | null;
 }
 
 function scheduleOf(row: ScheduleRow): ScheduledRepo {
@@ -614,32 +677,77 @@ function scheduleOf(row: ScheduleRow): ScheduledRepo {
     enabled: row.enabled === 1,
     ...(row.installation_id !== null ? { installationId: row.installation_id } : {}),
     ...(row.last_run_at !== null ? { lastRunAt: row.last_run_at } : {}),
+    ...(row.drift_webhook_url ? { driftWebhookUrl: row.drift_webhook_url } : {}),
+    ...(row.drift_webhook_secret ? { driftWebhookSecret: row.drift_webhook_secret } : {}),
   };
 }
 
 export async function listScheduledRepos(db: D1Database): Promise<ScheduledRepo[]> {
   const result = await db
     .prepare(
-      "SELECT repo, interval_days, enabled, installation_id, last_run_at FROM scheduled_repos ORDER BY repo",
+      "SELECT repo, interval_days, enabled, installation_id, last_run_at, drift_webhook_url, drift_webhook_secret FROM scheduled_repos ORDER BY repo",
     )
     .all<ScheduleRow>();
   return (result.results ?? []).map(scheduleOf);
 }
 
+export async function getScheduledRepo(
+  db: D1Database,
+  repo: string,
+): Promise<ScheduledRepo | undefined> {
+  const row = await db
+    .prepare(
+      "SELECT repo, interval_days, enabled, installation_id, last_run_at, drift_webhook_url, drift_webhook_secret FROM scheduled_repos WHERE repo = ?",
+    )
+    .bind(repo)
+    .first<ScheduleRow>();
+  return row ? scheduleOf(row) : undefined;
+}
+
 export async function putScheduledRepo(
   db: D1Database,
-  input: { repo: string; intervalDays: number; enabled: boolean; installationId?: number },
+  input: {
+    repo: string;
+    intervalDays: number;
+    enabled: boolean;
+    installationId?: number;
+    driftWebhookUrl?: string;
+    driftWebhookSecret?: string;
+  },
 ): Promise<void> {
+  const current = await getScheduledRepo(db, input.repo);
+  const requestedUrl = input.driftWebhookUrl?.trim();
+  const urlChanged =
+    requestedUrl !== undefined && requestedUrl !== (current?.driftWebhookUrl ?? "");
+  const driftWebhookUrl =
+    input.driftWebhookUrl === undefined ? current?.driftWebhookUrl : requestedUrl || undefined;
+  const driftWebhookSecret =
+    driftWebhookUrl === undefined
+      ? undefined
+      : input.driftWebhookSecret !== undefined
+        ? input.driftWebhookSecret.trim() || undefined
+        : urlChanged
+          ? undefined
+          : current?.driftWebhookSecret;
   await db
     .prepare(
-      `INSERT INTO scheduled_repos (repo, interval_days, enabled, installation_id, last_run_at)
-       VALUES (?, ?, ?, ?, NULL)
+      `INSERT INTO scheduled_repos (repo, interval_days, enabled, installation_id, last_run_at, drift_webhook_url, drift_webhook_secret)
+       VALUES (?, ?, ?, ?, NULL, ?, ?)
        ON CONFLICT(repo) DO UPDATE SET
          interval_days = excluded.interval_days,
          enabled = excluded.enabled,
-         installation_id = excluded.installation_id`,
+         installation_id = excluded.installation_id,
+         drift_webhook_url = excluded.drift_webhook_url,
+         drift_webhook_secret = excluded.drift_webhook_secret`,
     )
-    .bind(input.repo, input.intervalDays, input.enabled ? 1 : 0, input.installationId ?? null)
+    .bind(
+      input.repo,
+      input.intervalDays,
+      input.enabled ? 1 : 0,
+      input.installationId ?? null,
+      driftWebhookUrl ?? null,
+      driftWebhookSecret ?? null,
+    )
     .run();
 }
 

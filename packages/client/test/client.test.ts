@@ -152,7 +152,7 @@ describe("environment config", () => {
   it("maps provider-specific keys and normalizes the URL", () => {
     const env = {
       EDGESPEC_URL: "https://edge.example/",
-      GITHUB_TOKEN: "gh",
+      GH_TOKEN: "gh",
       EDGESPEC_AI_PROVIDER: "openai",
       EDGESPEC_AI_MODEL: "gpt-test",
       OPENAI_API_KEY: "sk-test",
@@ -166,6 +166,10 @@ describe("environment config", () => {
     expect(defaults.model).toBe("gpt-test");
     expect(defaults.deploymentAi).toBe(true);
     expect(clientConfigFromEnv(env, "openai").aiKey).toBe("sk-test");
+  });
+
+  it("accepts GITHUB_TOKEN as a legacy alias for GH_TOKEN", () => {
+    expect(envDefaults({ GITHUB_TOKEN: "legacy" }).githubToken).toBe("legacy");
   });
 
   it("lets EDGESPEC_AI_KEY override the provider key", () => {

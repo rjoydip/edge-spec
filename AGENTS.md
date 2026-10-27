@@ -90,7 +90,7 @@ dashboard and the deployment's Workers AI/sandbox.
    (`x-github-token`, `x-ai-key`, `x-ai-base-url`) per request.
 2. **Workflow params are persisted.** Never pass a user API key to
    `TestGenerationWorkflow`; it uses the deployment's Workers AI and a GitHub App
-   installation token (or `GITHUB_TOKEN` when no App is configured). The
+   installation token (or `GH_TOKEN` when no App is configured). The
    installation id is not a secret and may be persisted.
 3. **Be honest about validation.** `Validation.verified` is true only when a
    runner executed the suite. No sandbox means "static check only", never

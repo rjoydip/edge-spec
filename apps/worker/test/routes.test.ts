@@ -68,6 +68,29 @@ describe("public routes", () => {
       SANDBOX_RUNNER_URL: "https://runner.example",
     });
     expect(((await withRunner.json()) as { sandbox: boolean }).sandbox).toBe(true);
+
+    const withUserRunner = await fetchApp("/api/catalog", {
+      headers: { "x-sandbox-url": "https://user-runner.example" },
+    });
+    expect(((await withUserRunner.json()) as { sandbox: boolean }).sandbox).toBe(true);
+  });
+
+  it("handles GitHub App setup and unsupported OAuth callbacks", async () => {
+    const callback = await fetchApp("/auth");
+    expect(callback.status).toBe(200);
+    expect(await callback.text()).toContain("GitHub App callback");
+
+    const installed = await fetchApp("/auth?installation_id=123&setup_action=install");
+    expect(installed.status).toBe(200);
+    expect(await installed.text()).toContain("Installation 123 is ready");
+
+    const denied = await fetchApp("/auth?error=access_denied");
+    expect(denied.status).toBe(400);
+    expect(await denied.text()).toContain("access_denied");
+
+    const code = await fetchApp("/auth?code=abc");
+    expect(code.status).toBe(501);
+    expect(await code.text()).toContain("personal access token");
   });
 
   it("returns JSON 404 for unknown API paths and serves assets otherwise", async () => {
@@ -252,7 +275,7 @@ describe("webhooks", () => {
     fetchApp("/webhook", { method: "POST", body, headers }, env);
 
   it("rejects a bad signature before parsing the payload", async () => {
-    const env = { ...baseEnv(), GITHUB_WEBHOOK_SECRET: "secret" };
+    const env = { ...baseEnv(), GH_WEBHOOK_SECRET: "secret" };
     const response = await post("{}", { "x-hub-signature-256": "sha256=bad" }, env);
     expect(response.status).toBe(401);
     expect(((await response.json()) as { error: string }).error).toContain("signature");

@@ -23,7 +23,7 @@ Use an absolute path to the server entry point:
       "args": ["/absolute/path/to/edge-spec/packages/mcp/src/index.ts"],
       "env": {
         "EDGESPEC_URL": "https://edge-spec.example.workers.dev",
-        "GITHUB_TOKEN": "ghp_...",
+        "GH_TOKEN": "ghp_...",
         "EDGESPEC_AI_PROVIDER": "openai",
         "EDGESPEC_AI_MODEL": "gpt-6-astra",
         "OPENAI_API_KEY": "sk-..."
@@ -72,18 +72,18 @@ Resources are read-only and use the same environment credentials as the tools.
 
 ## Environment
 
-| Variable                   | Meaning                                           |
-| -------------------------- | ------------------------------------------------- |
-| `EDGESPEC_URL`             | Worker URL; default `http://127.0.0.1:8787`       |
-| `GITHUB_TOKEN`             | GitHub token (or `EDGESPEC_GITHUB_TOKEN`)         |
-| `EDGESPEC_AI_PROVIDER`     | Default provider id                               |
-| `EDGESPEC_AI_MODEL`        | Default model id                                  |
-| `EDGESPEC_AI_KEY`          | Provider key; overrides the provider-specific key |
-| `EDGESPEC_AI_BASE_URL`     | Base URL for the `private` provider               |
-| `CLOUDFLARE_ACCOUNT_ID`    | Account id for Workers AI BYOK                    |
-| `EDGESPEC_SANDBOX_URL`     | Test runner URL                                   |
-| `EDGESPEC_SANDBOX_KEY`     | Test runner key                                   |
-| `EDGESPEC_DEPLOYMENT_AI=1` | Use the deployment's Workers AI binding           |
+| Variable                   | Meaning                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| `EDGESPEC_URL`             | Worker URL; default `http://127.0.0.1:8787`                                           |
+| `GH_TOKEN`                 | Preferred GitHub token; `GITHUB_TOKEN` and `EDGESPEC_GITHUB_TOKEN` are legacy aliases |
+| `EDGESPEC_AI_PROVIDER`     | Default provider id                                                                   |
+| `EDGESPEC_AI_MODEL`        | Default model id                                                                      |
+| `EDGESPEC_AI_KEY`          | Provider key; overrides the provider-specific key                                     |
+| `EDGESPEC_AI_BASE_URL`     | Base URL for the `private` provider                                                   |
+| `CLOUDFLARE_ACCOUNT_ID`    | Account id for Workers AI BYOK                                                        |
+| `EDGESPEC_SANDBOX_URL`     | Test runner URL                                                                       |
+| `EDGESPEC_SANDBOX_KEY`     | Test runner key                                                                       |
+| `EDGESPEC_DEPLOYMENT_AI=1` | Use the deployment's Workers AI binding                                               |
 
 Provider-specific keys such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
 `GEMINI_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, and

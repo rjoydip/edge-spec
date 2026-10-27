@@ -378,17 +378,31 @@ operation names with the stored snapshot:
 
 - first run: baseline only;
 - no change: no notification, no pull request;
-- change: one summary to `DRIFT_WEBHOOK_URL` (Slack incoming webhooks accept
+- change: one summary to the effective webhook (Slack incoming webhooks accept
   `text`) and optionally `drift/<repo>/<timestamp>.json` in R2.
+
+The notification target resolves in this order:
+
+1. **Repository schedule override** (`PUT /api/schedules`, or Settings → Drift
+   scans → Override workspace webhook).
+2. **Workspace default** (`PUT /api/workspace`, or Settings → Workspace).
+3. **Deployment fallback** `DRIFT_WEBHOOK_URL` / `DRIFT_WEBHOOK_SECRET`.
+
+The workspace and repository URLs are returned by their APIs. Secrets are
+write-only: responses only report `driftWebhookSecretSet`. Changing a webhook
+URL without supplying a new secret clears the old secret. Secrets are stored in
+D1, so protect the deployment and dashboard behind Cloudflare Access if the
+workspace is shared. Run `bun run db:migrate` after pulling this migration.
 
 ```bash
 bunx wrangler secret put DRIFT_WEBHOOK_URL
 bunx wrangler secret put DRIFT_WEBHOOK_SECRET   # sent as x-edgespec-secret
 ```
 
-There is no email adapter yet. Without `RUNS_DB` the cron does nothing, and
-without `DRIFT_WEBHOOK_URL` drift is still recorded but not announced. The scan
-never opens a pull request; PR creation remains the explicit next step.
+The deployment secrets remain a fallback for deployments that do not configure
+a workspace target. There is no email adapter yet. Without `RUNS_DB` the cron
+does nothing. The scan never opens a pull request; PR creation remains the
+explicit next step.
 
 ## Workspace, audit and retention (optional)
 
@@ -426,15 +440,13 @@ only** and `validation.verified` is false. A runner is the security boundary:
 generated tests and repository code are untrusted, so run them in a hosted
 microVM or on Linux under `bwrap`—never directly on the Worker or a shared host.
 
-There are two ways to point at a runner:
-
-1. **Settings → Sandbox.** The URL travels in the `x-sandbox-url` header, its key
-   in `x-sandbox-key`, and the non-secret knobs in one `x-sandbox-config` JSON
-   header. The Worker calls it, so it has to be reachable from it;
-   `http://localhost` only works with a Worker running on your own machine. A
-   deployed Worker rejects loopback and private targets.
-2. **Deployment defaults.** `SANDBOX_RUNNER_URL` and `SANDBOX_API_KEY` are used
-   when the request carries no runner of its own. Caller config wins.
+Configure the runner in **Settings → Sandbox**. The URL travels in the
+`x-sandbox-url` header, its key in `x-sandbox-key`, and the non-secret knobs in
+one `x-sandbox-config` JSON header. The Worker calls it, so it has to be
+reachable from it; `http://localhost` only works with a Worker running on your
+own machine. A deployed Worker rejects loopback and private targets. Webhook
+runs have no user headers; they stay static-only unless an operator sets the
+optional deployment fallback.
 
 `x-sandbox-config` accepts `provider` (`auto`, `docker`, `podman`, `bwrap`,
 `e2b`, `vercel`, `daytona` or `custom`), `setup` (commands, one per line in the
@@ -526,11 +538,11 @@ the request, the dashboard config or the Worker. These providers own the
 filesystem, so the runner uploads the workspace and downloads the requested
 files; `isolation` is reported as `vm`.
 
-Point a local Worker at it with `SANDBOX_RUNNER_URL=http://127.0.0.1:8788`, or
-put it behind TLS and a key for a deployment. `POST /api/sandbox/health`
-proxies the runner's `/health`; the Settings dialog has a **Test connection**
-button for it. See `packages/sandbox/README.md` for limits, egress and
-authentication.
+Point the dashboard at it with `http://127.0.0.1:8788` in
+**Settings → Sandbox**, or put it behind TLS and a key for a deployment.
+`POST /api/sandbox/health` proxies the runner's `/health`; the Settings dialog
+has a **Test connection** button for it. See `packages/sandbox/README.md` for
+limits, egress and authentication.
 
 ### Your own runner
 
@@ -615,28 +627,27 @@ not the TypeScript sources.
 
 ### Secrets
 
-| Secret                   | Required              | Used by                              |
-| ------------------------ | --------------------- | ------------------------------------ |
-| `GITHUB_APP_ID`          | For App auth          | Mint installation tokens             |
-| `GITHUB_APP_PRIVATE_KEY` | For App auth          | PKCS#8 PEM used to sign the app JWT  |
-| `GITHUB_TOKEN`           | Fallback for webhooks | Workflow: scan, commit, PR           |
-| `GITHUB_WEBHOOK_SECRET`  | Recommended           | `POST /webhook` HMAC verification    |
-| `SANDBOX_RUNNER_URL`     | No                    | Validation, interactive and workflow |
-| `SANDBOX_API_KEY`        | No                    | Bearer token for the sandbox         |
+| Secret               | Required              | Used by                             |
+| -------------------- | --------------------- | ----------------------------------- |
+| `GH_APP_ID`          | For App auth          | Mint installation tokens            |
+| `GH_APP_PRIVATE_KEY` | For App auth          | PKCS#8 PEM used to sign the app JWT |
+| `GH_TOKEN`           | Fallback for webhooks | Workflow: scan, commit, PR          |
+| `GH_WEBHOOK_SECRET`  | Recommended           | `POST /webhook` HMAC verification   |
 
 ```bash
-bunx wrangler secret put GITHUB_APP_ID
-bunx wrangler secret put GITHUB_APP_PRIVATE_KEY
-bunx wrangler secret put GITHUB_WEBHOOK_SECRET
-bunx wrangler secret put GITHUB_TOKEN
-bunx wrangler secret put SANDBOX_RUNNER_URL
-bunx wrangler secret put SANDBOX_API_KEY
+bunx wrangler secret put GH_APP_ID
+bunx wrangler secret put GH_APP_PRIVATE_KEY
+bunx wrangler secret put GH_WEBHOOK_SECRET
+bunx wrangler secret put GH_TOKEN
 ```
+
+The sandbox runner is user configuration, not a deployment secret. Users set it
+in **Settings → Sandbox**; it travels as `x-sandbox-url` / `x-sandbox-key`.
 
 With both App secrets set, a webhook run mints a short-lived installation token
 scoped to the repository. Tokens are cached in the isolate only until a minute
 before GitHub expires them; a restart costs one mint request. Without the App
-secrets, the workflow falls back to `GITHUB_TOKEN`.
+secrets, the workflow falls back to `GH_TOKEN`.
 
 The interactive dashboard does **not** use either deployment credential; it
 uses the token from the browser. The deployment credentials exist for webhook
@@ -656,15 +667,16 @@ persisted). The installation id is not a secret and is passed instead.
 1. Repository **Settings → Webhooks → Add webhook**.
 2. Payload URL: `https://<worker>/webhook`.
 3. Content type: `application/json`.
-4. Secret: the same value as `GITHUB_WEBHOOK_SECRET`.
+4. Secret: the same value as `GH_WEBHOOK_SECRET`. Generate it with
+   `openssl rand -hex 32` and never reuse a GitHub token.
 5. Events: **push**, **pull request** (`opened`, `synchronize`, `reopened`), and
    **issue comments** (for `/edgespec retest|coverage|explain`).
-6. Use the GitHub App installation, or ensure `GITHUB_TOKEN` can write to the
+6. Use the GitHub App installation, or ensure `GH_TOKEN` can write to the
    repository, and keep Workers AI bound.
 
 For App auth, install the app on the repository, subscribe the app to pushes
 and pull requests, and set the app's webhook secret to
-`GITHUB_WEBHOOK_SECRET`. The app needs **Contents: read and write**,
+`GH_WEBHOOK_SECRET`. The app needs **Contents: read and write**,
 **Pull requests: read and write**, **Checks: read and write**, and
 **Issues: read and write** (for policy labels).
 

@@ -108,26 +108,26 @@ Lists providers, models, defaults, and whether a sandbox runner is configured.
 
 Secrets are read from the environment, never from flags:
 
-| Variable                            | Meaning                                           |
-| ----------------------------------- | ------------------------------------------------- |
-| `EDGESPEC_URL`                      | Worker URL; default `http://127.0.0.1:8787`       |
-| `GITHUB_TOKEN`                      | GitHub token (or `EDGESPEC_GITHUB_TOKEN`)         |
-| `EDGESPEC_AI_PROVIDER`              | Default provider id                               |
-| `EDGESPEC_AI_MODEL`                 | Default model id                                  |
-| `EDGESPEC_AI_KEY`                   | Provider key; overrides the provider-specific key |
-| `EDGESPEC_AI_BASE_URL`              | Base URL for the `private` provider               |
-| `OPENAI_API_KEY`                    | Key for `openai`                                  |
-| `ANTHROPIC_API_KEY`                 | Key for `anthropic`                               |
-| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Key for `google`                                  |
-| `GROQ_API_KEY`                      | Key for `groq`                                    |
-| `DEEPSEEK_API_KEY`                  | Key for `deepseek`                                |
-| `MISTRAL_API_KEY`                   | Key for `mistral`                                 |
-| `OPENROUTER_API_KEY`                | Key for `openrouter`                              |
-| `CLOUDFLARE_API_TOKEN`              | Key for `workers-ai` BYOK                         |
-| `CLOUDFLARE_ACCOUNT_ID`             | Account id for Workers AI BYOK                    |
-| `EDGESPEC_SANDBOX_URL`              | Test runner URL                                   |
-| `EDGESPEC_SANDBOX_KEY`              | Test runner key                                   |
-| `EDGESPEC_DEPLOYMENT_AI=1`          | Use the deployment's Workers AI binding           |
+| Variable                            | Meaning                                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------------------- |
+| `EDGESPEC_URL`                      | Worker URL; default `http://127.0.0.1:8787`                                           |
+| `GH_TOKEN`                          | Preferred GitHub token; `GITHUB_TOKEN` and `EDGESPEC_GITHUB_TOKEN` are legacy aliases |
+| `EDGESPEC_AI_PROVIDER`              | Default provider id                                                                   |
+| `EDGESPEC_AI_MODEL`                 | Default model id                                                                      |
+| `EDGESPEC_AI_KEY`                   | Provider key; overrides the provider-specific key                                     |
+| `EDGESPEC_AI_BASE_URL`              | Base URL for the `private` provider                                                   |
+| `OPENAI_API_KEY`                    | Key for `openai`                                                                      |
+| `ANTHROPIC_API_KEY`                 | Key for `anthropic`                                                                   |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Key for `google`                                                                      |
+| `GROQ_API_KEY`                      | Key for `groq`                                                                        |
+| `DEEPSEEK_API_KEY`                  | Key for `deepseek`                                                                    |
+| `MISTRAL_API_KEY`                   | Key for `mistral`                                                                     |
+| `OPENROUTER_API_KEY`                | Key for `openrouter`                                                                  |
+| `CLOUDFLARE_API_TOKEN`              | Key for `workers-ai` BYOK                                                             |
+| `CLOUDFLARE_ACCOUNT_ID`             | Account id for Workers AI BYOK                                                        |
+| `EDGESPEC_SANDBOX_URL`              | Test runner URL                                                                       |
+| `EDGESPEC_SANDBOX_KEY`              | Test runner key                                                                       |
+| `EDGESPEC_DEPLOYMENT_AI=1`          | Use the deployment's Workers AI binding                                               |
 
 Provider and model flags override their environment defaults. Keys stay in the
 `x-github-token`, `x-ai-key`, `x-ai-base-url`, `x-sandbox-url`, and

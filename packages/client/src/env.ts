@@ -49,7 +49,7 @@ export interface EnvDefaults {
 export function envDefaults(env: Env, provider?: string): EnvDefaults {
   const selectedProvider = provider?.trim() || env.EDGESPEC_AI_PROVIDER?.trim() || undefined;
   const providerKeys = selectedProvider ? (PROVIDER_KEYS[selectedProvider] ?? []) : [];
-  const githubToken = first(env, ["GITHUB_TOKEN", "EDGESPEC_GITHUB_TOKEN"]);
+  const githubToken = first(env, ["GH_TOKEN", "GITHUB_TOKEN", "EDGESPEC_GITHUB_TOKEN"]);
   const aiKey = first(env, ["EDGESPEC_AI_KEY", ...providerKeys]);
   const aiBaseUrl = env.EDGESPEC_AI_BASE_URL?.trim();
   const sandboxUrl = env.EDGESPEC_SANDBOX_URL?.trim();

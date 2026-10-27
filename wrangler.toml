@@ -28,11 +28,11 @@ name = "test-generation-workflow"
 binding = "TEST_GENERATION_WORKFLOW"
 class_name = "TestGenerationWorkflow"
 
-# GitHub App for webhook CI (optional; replaces GITHUB_TOKEN for workflow runs).
+# GitHub App for webhook CI (optional; replaces GH_TOKEN for workflow runs).
 # The app id and PKCS#8 private key are deployment secrets, never user config:
-#   wrangler secret put GITHUB_APP_ID
-#   wrangler secret put GITHUB_APP_PRIVATE_KEY
-#   wrangler secret put GITHUB_WEBHOOK_SECRET
+#   wrangler secret put GH_APP_ID
+#   wrangler secret put GH_APP_PRIVATE_KEY
+#   wrangler secret put GH_WEBHOOK_SECRET
 # The dashboard keeps using the visitor's per-request PAT. Installation tokens
 # are minted per run, scoped to the repository, and cached only until expiry.
 

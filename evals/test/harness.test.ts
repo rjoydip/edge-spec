@@ -8,7 +8,7 @@ import {
   readOutcomes,
   runGolden,
   scoreRuns,
-} from "../harness";
+} from "../src/harness";
 
 const root = join(import.meta.dir, "..", "..");
 
