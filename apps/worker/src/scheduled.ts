@@ -101,7 +101,12 @@ async function scanRepo(
       if (env.ARTIFACTS) {
         await env.ARTIFACTS.put(
           `drift/${schedule.repo}/${now}.json`,
-          JSON.stringify({ repo: schedule.repo, scannedAt: now, drift, summary }),
+          JSON.stringify({
+            repo: schedule.repo,
+            scannedAt: now,
+            drift,
+            summary,
+          }),
           { httpMetadata: { contentType: "application/json" } },
         ).catch(() => undefined);
       }

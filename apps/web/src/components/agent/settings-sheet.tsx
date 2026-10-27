@@ -253,7 +253,9 @@ export function SettingsSheet({
                 <Select
                   value={settings.sandboxProvider}
                   onValueChange={(value) =>
-                    update({ sandboxProvider: value as typeof settings.sandboxProvider })
+                    update({
+                      sandboxProvider: value as typeof settings.sandboxProvider,
+                    })
                   }
                 >
                   <SelectTrigger aria-label="Runner driver">
@@ -284,7 +286,9 @@ export function SettingsSheet({
                     max={6}
                     value={settings.sandboxConcurrency}
                     onChange={(event) =>
-                      update({ sandboxConcurrency: Number(event.target.value) || 1 })
+                      update({
+                        sandboxConcurrency: Number(event.target.value) || 1,
+                      })
                     }
                   />
                 </Field>
@@ -295,7 +299,9 @@ export function SettingsSheet({
                     step={30}
                     value={Math.round(settings.sandboxTimeoutMs / 1000)}
                     onChange={(event) =>
-                      update({ sandboxTimeoutMs: (Number(event.target.value) || 30) * 1000 })
+                      update({
+                        sandboxTimeoutMs: (Number(event.target.value) || 30) * 1000,
+                      })
                     }
                   />
                 </Field>
@@ -509,7 +515,9 @@ export function SettingsSheet({
                     step={1000}
                     value={settings.maxTokens}
                     onChange={(event) =>
-                      update({ maxTokens: Math.max(0, Number(event.target.value) || 0) })
+                      update({
+                        maxTokens: Math.max(0, Number(event.target.value) || 0),
+                      })
                     }
                   />
                 </Field>
@@ -521,7 +529,9 @@ export function SettingsSheet({
                     step={5}
                     value={settings.coverageTarget}
                     onChange={(event) =>
-                      update({ coverageTarget: Number(event.target.value) || 0 })
+                      update({
+                        coverageTarget: Number(event.target.value) || 0,
+                      })
                     }
                   />
                 </Field>
@@ -532,7 +542,9 @@ export function SettingsSheet({
                   <Input
                     value={settings.mutationCommand}
                     onChange={(event) =>
-                      update({ mutationCommand: event.target.value.slice(0, 500) })
+                      update({
+                        mutationCommand: event.target.value.slice(0, 500),
+                      })
                     }
                     placeholder="npx stryker run --mutate {file}"
                   />
@@ -577,7 +589,9 @@ export function SettingsSheet({
                     rows={2}
                     value={settings.contractAuthHeaders}
                     onChange={(event) =>
-                      update({ contractAuthHeaders: event.target.value.slice(0, 4000) })
+                      update({
+                        contractAuthHeaders: event.target.value.slice(0, 4000),
+                      })
                     }
                     placeholder='{"Authorization": "Bearer …"}'
                   />
@@ -590,7 +604,9 @@ export function SettingsSheet({
                     rows={2}
                     value={settings.contractAuthQuery}
                     onChange={(event) =>
-                      update({ contractAuthQuery: event.target.value.slice(0, 4000) })
+                      update({
+                        contractAuthQuery: event.target.value.slice(0, 4000),
+                      })
                     }
                     placeholder='{"api_key": "…"}'
                   />
@@ -688,7 +704,9 @@ export function SettingsSheet({
                       max={100}
                       value={settings.policy.maxFiles ?? 0}
                       onChange={(event) =>
-                        setPolicy({ maxFiles: Math.max(0, Number(event.target.value) || 0) })
+                        setPolicy({
+                          maxFiles: Math.max(0, Number(event.target.value) || 0),
+                        })
                       }
                     />
                   </Field>

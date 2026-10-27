@@ -54,7 +54,7 @@ import {
 } from "@/api";
 
 const D1_NOTICE =
-  "Not enabled on this deployment. Add the optional D1 binding in wrangler.toml and apply the migrations.";
+  "Not enabled on this deployment. Add the optional D1 binding in the Alchemy stack and apply the migrations.";
 
 const linesOf = (raw: string): string[] =>
   raw
@@ -755,9 +755,21 @@ const AUDIT_TONE: Record<string, AuditTone> = {
   command: { icon: Terminal, dot: "bg-sky-400", badge: "accent" },
   policy_updated: { icon: ShieldCheck, dot: "bg-violet-400", badge: "accent" },
   memory_updated: { icon: MemoryStick, dot: "bg-indigo-400", badge: "accent" },
-  schedule_updated: { icon: CalendarClock, dot: "bg-amber-400", badge: "warning" },
-  schedule_deleted: { icon: CalendarClock, dot: "bg-amber-400", badge: "warning" },
-  backlog_updated: { icon: ListChecks, dot: "bg-emerald-400", badge: "success" },
+  schedule_updated: {
+    icon: CalendarClock,
+    dot: "bg-amber-400",
+    badge: "warning",
+  },
+  schedule_deleted: {
+    icon: CalendarClock,
+    dot: "bg-amber-400",
+    badge: "warning",
+  },
+  backlog_updated: {
+    icon: ListChecks,
+    dot: "bg-emerald-400",
+    badge: "success",
+  },
   workspace_updated: { icon: Database, dot: "bg-indigo-400", badge: "accent" },
   drift_scan: { icon: Activity, dot: "bg-amber-400", badge: "warning" },
   retention_purge: { icon: Trash2, dot: "bg-rose-400", badge: "danger" },
@@ -778,7 +790,10 @@ const dayLabelOf = (key: string): string =>
       });
 
 const timeOf = (value: number): string =>
-  new Date(value).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  new Date(value).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 const detailOf = (detail: Record<string, unknown>): string =>
   Object.entries(detail)

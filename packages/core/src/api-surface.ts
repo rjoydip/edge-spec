@@ -27,7 +27,11 @@ const FRAMEWORKS: Array<{ dependency: RegExp; module: string; name: string }> = 
   { dependency: /^koa$|^@koa\/router$/i, module: "koa", name: "Koa" },
   { dependency: /^@nestjs\/core$/i, module: "@nestjs/core", name: "NestJS" },
   { dependency: /^next$/i, module: "next", name: "Next.js" },
-  { dependency: /^itty-router$/i, module: "itty-router", name: "itty-router" },
+  {
+    dependency: /^itty-router$/i,
+    module: "itty-router",
+    name: "itty-router",
+  },
 ];
 
 /** Files most likely to declare routes; everything else is still scanned. */
@@ -159,7 +163,12 @@ export function extractRoutes(files: readonly SourceFile[]): InferredRoute[] {
     const key = `${upper} ${path}`;
     if (seen.has(key)) return;
     seen.add(key);
-    routes.push({ method: upper, path, source: file.path, line: lineOf(file.content, index) });
+    routes.push({
+      method: upper,
+      path,
+      source: file.path,
+      line: lineOf(file.content, index),
+    });
   };
 
   for (const file of files) {
@@ -167,7 +176,11 @@ export function extractRoutes(files: readonly SourceFile[]): InferredRoute[] {
       const key = `${route.method.toUpperCase()} ${route.path}`;
       if (!seen.has(key)) {
         seen.add(key);
-        routes.push({ ...route, method: route.method.toUpperCase(), source: file.path });
+        routes.push({
+          ...route,
+          method: route.method.toUpperCase(),
+          source: file.path,
+        });
       }
     }
     for (const match of file.content.matchAll(ROUTE_CALL)) {
@@ -215,7 +228,9 @@ export function inferredOpenApi(input: {
       "x-edgespec-source": `${route.source}:${route.line}`,
       ...(parametersOf(path) ? { parameters: parametersOf(path) } : {}),
       responses: {
-        "200": { description: "Inferred success; verify the handler response." },
+        "200": {
+          description: "Inferred success; verify the handler response.",
+        },
       },
     };
   }

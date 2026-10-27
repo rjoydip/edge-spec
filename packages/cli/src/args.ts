@@ -123,8 +123,16 @@ function strictOf(values: Record<string, string | boolean | undefined>): boolean
 function parse(
   args: string[],
   options: ParseArgsConfig["options"],
-): { values: Record<string, string | boolean | undefined>; positionals: string[] } {
-  const parsed = parseArgs({ args, options, allowPositionals: true, strict: true });
+): {
+  values: Record<string, string | boolean | undefined>;
+  positionals: string[];
+} {
+  const parsed = parseArgs({
+    args,
+    options,
+    allowPositionals: true,
+    strict: true,
+  });
   return {
     values: parsed.values as Record<string, string | boolean | undefined>,
     positionals: parsed.positionals,

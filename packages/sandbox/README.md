@@ -81,7 +81,10 @@ driver. The dashboard sends it when a runner driver is picked.
   "cwd": "packages/api",
   "setup": ["bun install --frozen-lockfile"],
   "env": { "NODE_ENV": "test" },
-  "server": { "command": "bun run dev", "readyUrl": "http://127.0.0.1:3000/health" },
+  "server": {
+    "command": "bun run dev",
+    "readyUrl": "http://127.0.0.1:3000/health",
+  },
   "command": "bun test",
   "timeoutMs": 180000,
 }

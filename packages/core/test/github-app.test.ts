@@ -95,7 +95,10 @@ describe("installationToken", () => {
         authorization: headers.authorization ?? "",
       });
       return new Response(
-        JSON.stringify({ token: "ghs_test", expires_at: "2026-10-26T12:00:00Z" }),
+        JSON.stringify({
+          token: "ghs_test",
+          expires_at: "2026-10-26T12:00:00Z",
+        }),
         {
           status: 201,
         },

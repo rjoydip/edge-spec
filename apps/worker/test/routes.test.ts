@@ -56,10 +56,16 @@ describe("public routes", () => {
   it("reports health and the provider catalog", async () => {
     const health = await fetchApp("/api/health");
     expect(health.status).toBe(200);
-    expect(await health.json()).toMatchObject({ status: "ok", app: "EdgeSpec" });
+    expect(await health.json()).toMatchObject({
+      status: "ok",
+      app: "EdgeSpec",
+    });
 
     const catalog = await fetchApp("/api/catalog");
-    const body = (await catalog.json()) as { providers: unknown[]; sandbox: boolean };
+    const body = (await catalog.json()) as {
+      providers: unknown[];
+      sandbox: boolean;
+    };
     expect(body.providers.length).toBeGreaterThan(3);
     expect(body.sandbox).toBe(false);
 
@@ -106,7 +112,9 @@ describe("public routes", () => {
     for (const path of ["/local-api/scan", "/local-api/file"]) {
       const remote = await fetchApp(path);
       expect(remote.status).toBe(403);
-      const local = await fetchApp(`http://localhost${path}`, { headers: { host: "localhost" } });
+      const local = await fetchApp(`http://localhost${path}`, {
+        headers: { host: "localhost" },
+      });
       expect(local.status).toBe(400);
       expect(((await local.json()) as { error: string }).error).toContain("bun run dev");
     }
@@ -261,7 +269,11 @@ describe("run history and artifacts", () => {
   });
 
   it("deletes a repository's history and its R2 bundle", async () => {
-    const env = { ...baseEnv(), RUNS_DB: fakeDb([ID]), ARTIFACTS: fakeBucket() };
+    const env = {
+      ...baseEnv(),
+      RUNS_DB: fakeDb([ID]),
+      ARTIFACTS: fakeBucket(),
+    };
     await env.ARTIFACTS?.put(`runs/${ID}.json`, "{}");
     const response = await fetchApp("/api/runs?repo=acme/api", { method: "DELETE" }, env);
     expect(response.status).toBe(200);
@@ -285,7 +297,10 @@ describe("webhooks", () => {
     expect((await post("{")).status).toBe(400);
     expect((await post("{}")).status).toBe(400);
 
-    const valid = JSON.stringify({ repository: { full_name: "acme/api" }, ref: "refs/heads/main" });
+    const valid = JSON.stringify({
+      repository: { full_name: "acme/api" },
+      ref: "refs/heads/main",
+    });
     const response = await post(valid);
     expect(response.status).toBe(501);
     expect(((await response.json()) as { error: string }).error).toContain("Workflows");
@@ -309,7 +324,12 @@ describe("webhooks", () => {
       [{ "x-github-event": "issue_comment" }, { ...base, action: "edited" }, "edited"],
       [
         { "x-github-event": "issue_comment" },
-        { ...base, action: "created", issue: { number: 1 }, comment: { body: "/edgespec retest" } },
+        {
+          ...base,
+          action: "created",
+          issue: { number: 1 },
+          comment: { body: "/edgespec retest" },
+        },
         "not a pull request",
       ],
       [
@@ -318,7 +338,10 @@ describe("webhooks", () => {
           ...base,
           action: "created",
           issue: { number: 1, pull_request: {} },
-          comment: { body: "/edgespec retest", user: { login: "stranger", type: "User" } },
+          comment: {
+            body: "/edgespec retest",
+            user: { login: "stranger", type: "User" },
+          },
         },
         "unauthorized",
       ],

@@ -18,7 +18,11 @@ describe("golden scans", () => {
     expect(cases.map((testCase) => testCase.id)).toEqual(["mixed-gaps", "complete-app"]);
     const results = runGolden(root, cases);
     expect(results.every((result) => result.pass)).toBe(true);
-    expect(results[0]).toMatchObject({ caseId: "mixed-gaps", missing: [], unexpected: [] });
+    expect(results[0]).toMatchObject({
+      caseId: "mixed-gaps",
+      missing: [],
+      unexpected: [],
+    });
   });
 
   it("ignores build and dependency folders when listing files", () => {
@@ -29,7 +33,11 @@ describe("golden scans", () => {
 
   it("reports a mismatch instead of silently passing", () => {
     const [result] = runGolden(root, [
-      { id: "invented", path: "examples/complete-app", expectedGaps: ["src/gone.ts"] },
+      {
+        id: "invented",
+        path: "examples/complete-app",
+        expectedGaps: ["src/gone.ts"],
+      },
     ]);
     expect(result?.pass).toBe(false);
     expect(result?.missing).toEqual(["src/gone.ts"]);

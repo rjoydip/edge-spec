@@ -117,7 +117,10 @@ describe("run history queries", () => {
     } as D1Database;
 
     await putPolicy(db, "acme/api", { killSwitch: true, maxFiles: 9 });
-    expect(await getPolicy(db, "acme/api")).toEqual({ killSwitch: true, maxFiles: 9 });
+    expect(await getPolicy(db, "acme/api")).toEqual({
+      killSwitch: true,
+      maxFiles: 9,
+    });
   });
 
   it("rate limits one command per user and window", async () => {
@@ -283,10 +286,16 @@ describe("workspace settings and audit", () => {
       retentionDays: 30,
     });
 
-    const updated = await putWorkspace(db, { name: "  Platform  ", retentionDays: 0 });
+    const updated = await putWorkspace(db, {
+      name: "  Platform  ",
+      retentionDays: 0,
+    });
     expect(updated.name).toBe("Platform");
     expect(updated.retentionDays).toBe(1);
-    expect(await getWorkspace(db)).toMatchObject({ name: "Platform", retentionDays: 1 });
+    expect(await getWorkspace(db)).toMatchObject({
+      name: "Platform",
+      retentionDays: 1,
+    });
   });
 
   it("stores workspace drift webhooks and never exposes the secret in public views", async () => {
@@ -332,7 +341,10 @@ describe("workspace settings and audit", () => {
       repo: "acme/api",
       actor: "dashboard",
       action: "test",
-      detail: { aiKey: "secret", nested: { authorization: "Bearer x", files: 2 } },
+      detail: {
+        aiKey: "secret",
+        nested: { authorization: "Bearer x", files: 2 },
+      },
     });
 
     const [event] = await listAudit(db, { repo: "acme/api" });

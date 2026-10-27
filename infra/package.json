@@ -1,5 +1,5 @@
 {
-  "name": "@edge-spec/alchemy",
+  "name": "@edge-spec/infra",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
     "alchemy": "bunx alchemy",
     "plan": "bunx alchemy plan",
     "deploy": "bunx alchemy deploy",
-    "dev": "bunx alchemy dev",
+    "dev": "ALCHEMY_DEV=1 bunx alchemy dev",
     "destroy": "bunx alchemy destroy",
     "test": "bun test ./test/stack.integration.ts",
     "typecheck": "bun check --no-script -p ."

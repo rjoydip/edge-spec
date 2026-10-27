@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { resolveDriftWebhook } from "../src/drift-webhook";
 
 const env = {
-  DRIFT_WEBHOOK_URL: "https://hooks.example/environment",
-  DRIFT_WEBHOOK_SECRET: "env-secret",
+  DRIFT_ALERT_WEBHOOK_URL: "https://hooks.example/environment",
+  DRIFT_ALERT_WEBHOOK_SECRET: "env-secret",
 };
 
 const schedule = {
@@ -55,7 +55,7 @@ describe("resolveDriftWebhook", () => {
   it("returns undefined when no layer has a URL", () => {
     expect(
       resolveDriftWebhook(
-        { DRIFT_WEBHOOK_URL: "" },
+        { DRIFT_ALERT_WEBHOOK_URL: "" },
         { ...schedule, driftWebhookUrl: "" },
         { ...workspace, driftWebhookUrl: undefined },
       ),

@@ -19,8 +19,14 @@ describe("parseRepo", () => {
       owner: "cloudflare",
       name: "workers-sdk",
     });
-    expect(parseRepo("https://github.com/acme/api.git")).toEqual({ owner: "acme", name: "api" });
-    expect(parseRepo("  git@github.com:acme/api.git ")).toEqual({ owner: "acme", name: "api" });
+    expect(parseRepo("https://github.com/acme/api.git")).toEqual({
+      owner: "acme",
+      name: "api",
+    });
+    expect(parseRepo("  git@github.com:acme/api.git ")).toEqual({
+      owner: "acme",
+      name: "api",
+    });
   });
 
   it("rejects malformed and traversal input", () => {
@@ -117,7 +123,11 @@ describe("resolveAi", () => {
     expect(choice.accountId).toBe(accountId);
     expect(choice.apiKey).toBe("cf-token");
     expect(() =>
-      resolveAi({ provider: "workers-ai", model: DEFAULT_AI.model, accountId: "not-an-id" }),
+      resolveAi({
+        provider: "workers-ai",
+        model: DEFAULT_AI.model,
+        accountId: "not-an-id",
+      }),
     ).toThrow(/32 hexadecimal/);
   });
 
@@ -128,7 +138,11 @@ describe("resolveAi", () => {
       /both the Cloudflare account ID and the API token/,
     );
     expect(() =>
-      resolveAi({ provider: "workers-ai", model: DEFAULT_AI.model, apiKey: "cf-token" }),
+      resolveAi({
+        provider: "workers-ai",
+        model: DEFAULT_AI.model,
+        apiKey: "cf-token",
+      }),
     ).toThrow(/both the Cloudflare account ID and the API token/);
     // Both, or neither.
     expect(
@@ -170,7 +184,11 @@ describe("resolveAi", () => {
     expect(choice.apiKey).toBeUndefined();
     expect(() => resolveAi({ provider: "private", model: "x" })).toThrow(/base URL/);
     expect(() =>
-      resolveAi({ provider: "private", model: "x", baseUrl: "file:///etc/passwd" }),
+      resolveAi({
+        provider: "private",
+        model: "x",
+        baseUrl: "file:///etc/passwd",
+      }),
     ).toThrow(/http or https/);
   });
 
@@ -179,7 +197,11 @@ describe("resolveAi", () => {
       resolveAi({ provider: "openai", model: "gpt-6-astra", apiKey: "k" }),
     ).not.toThrow();
     expect(() =>
-      resolveAi({ provider: "openai", model: "claude-sonnet-5-5", apiKey: "k" }),
+      resolveAi({
+        provider: "openai",
+        model: "claude-sonnet-5-5",
+        apiKey: "k",
+      }),
     ).toThrow(/not available/);
   });
 });
@@ -187,7 +209,12 @@ describe("resolveAi", () => {
 describe("pipelineConfig", () => {
   it("clamps retries, coverage and file count into a safe range", () => {
     expect(
-      pipelineConfig({ maxRetries: 99, coverageTarget: -4, autoPr: false, maxFiles: 900 }),
+      pipelineConfig({
+        maxRetries: 99,
+        coverageTarget: -4,
+        autoPr: false,
+        maxFiles: 900,
+      }),
     ).toEqual({
       maxRetries: 5,
       maxAiRetries: 2,

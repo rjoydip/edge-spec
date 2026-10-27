@@ -108,6 +108,26 @@ commitment to a date.
       sufficient at current volume. Add Queues when the 10-repo cron cap or
       command latency becomes a real limit.
 
+## Later providers
+
+- [ ] **Second deployment target.** Cloudflare-first is deliberate: the Worker
+      uses `Workflows`, `D1`, `R2`, `AI` and `ASSETS`. Add `infra/aws.run.ts`
+      with its own state and stage only when AWS/Fly/Railway/Docker/K8s is real,
+      and port one seam at a time:
+
+      | Cloudflare        | Replacement              | Seam                           |
+      | ----------------- | ------------------------ | ------------------------------ |
+      | Worker + `ASSETS` | container + CDN          | `apps/worker/src/index.ts`     |
+      | D1                | Postgres                 | `apps/worker/src/db.ts`        |
+      | R2                | S3                       | `apps/worker/src/artifacts.ts` |
+      | Workflows         | queue/worker or Temporal | `apps/worker/src/workflow.ts`  |
+      | Workers AI        | provider HTTP APIs       | `packages/core/src/ai.ts`      |
+      | `env.ts` bindings | provider config          | `apps/worker/src/env.ts`       |
+
+      `packages/core` stays provider-neutral, so adapters belong in
+      `apps/worker` and the new stack file. Do not abstract the current stack
+      before that port exists.
+
 ## Non-goals
 
 Keep these out unless the product direction explicitly changes:

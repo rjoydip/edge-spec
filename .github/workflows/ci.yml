@@ -20,7 +20,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Format, lint, types, tests
-        run: bun run check
+        run: bun run verify
 
       - name: Build dashboard and Worker bundles
         run: bun run build

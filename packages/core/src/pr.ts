@@ -164,7 +164,12 @@ export function pullFilesOf(body: Record<string, unknown>): PullFile[] {
     // the client generated or the reviewer edited.
     assertTestOnly(path);
     const sourcePath = text(item.sourcePath);
-    files.push({ path, code, sourcePath: sourcePath || path, ...provenanceOf(item) });
+    files.push({
+      path,
+      code,
+      sourcePath: sourcePath || path,
+      ...provenanceOf(item),
+    });
   }
   if (files.length > 0) return files;
 

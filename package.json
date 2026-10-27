@@ -9,39 +9,38 @@
     "packages/*",
     "evals",
     "examples",
-    "alchemy"
+    "infra"
   ],
   "scripts": {
     "dev": "bun run --filter @edge-spec/web dev",
     "dev:all": "bun run scripts/dev.ts",
-    "dev:worker": "bun run db:migrate:local && bun run --filter @edge-spec/worker dev",
-    "db:migrate": "wrangler d1 migrations apply edge-spec-runs --remote",
-    "db:migrate:local": "wrangler d1 migrations apply edge-spec-runs --local",
+    "dev:worker": "bun run build:worker && bun run --cwd infra dev",
     "cli": "bun packages/cli/src/index.ts",
     "mcp": "bun packages/mcp/src/index.ts",
     "sandbox": "bun run --filter @edge-spec/sandbox start",
     "docs:dev": "bun run --filter @edge-spec/docs dev",
     "docs:build": "bun run --filter @edge-spec/docs build",
+    "docs:deploy": "bun run docs:build && bunx wrangler pages deploy apps/docs/.vitepress/dist --project-name edge-spec-docs --branch main",
     "docs:preview": "bun run --filter @edge-spec/docs preview",
     "eval": "bun evals/run.ts",
-    "alchemy": "bun run --cwd alchemy alchemy",
-    "deploy:stage": "bun run build && bun run --cwd alchemy deploy --stage",
-    "test:stack": "bun run build && bun run --cwd alchemy test",
+    "alchemy": "bun run --cwd infra alchemy",
+    "deploy:stage": "bun run build && bun run --cwd infra deploy --stage",
+    "test:stack": "bun run build && bun run --cwd infra test",
     "build": "bun run build:web && bun run build:worker",
     "build:web": "bun run --filter @edge-spec/web build",
     "build:worker": "bun run --filter @edge-spec/worker build",
     "preview": "bun run --filter @edge-spec/web preview",
-    "deploy": "bun run --filter @edge-spec/worker deploy",
+    "deploy": "bun run build && bun run alchemy deploy --stage prod",
     "typecheck": "bun run --workspaces --if-present typecheck",
     "lint": "oxlint . --deny-warnings",
-    "format": "bun fmt .",
-    "format:check": "bun fmt --check .",
+    "format": "bun fmt --print-width=100 --object-wrap=preserve .",
+    "format:check": "bun fmt --check --print-width=100 --object-wrap=preserve .",
     "test": "bun test",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test"
+    "verify": "bun run format:check && bun run lint && bun check . && bun run test"
   },
   "devDependencies": {
-    "oxlint": "^1.88.0",
-    "wrangler": "^4"
+    "@types/bun": "^1.4.4",
+    "oxlint": "^1.88.0"
   },
   "engines": {
     "node": ">=22.12.0"

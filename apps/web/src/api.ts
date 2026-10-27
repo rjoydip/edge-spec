@@ -19,7 +19,10 @@ import { getProject, requestHeaders, type Project, type Settings } from "./lib/s
 
 export interface Catalog {
   providers: Provider[];
-  defaults: { ai: { provider: string; model: string }; pipeline: Record<string, number | boolean> };
+  defaults: {
+    ai: { provider: string; model: string };
+    pipeline: Record<string, number | boolean>;
+  };
   sandbox: boolean;
 }
 
@@ -37,7 +40,10 @@ async function errorMessage(response: Response): Promise<string> {
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, { ...init, headers: { ...requestHeaders(), ...init?.headers } });
+    response = await fetch(path, {
+      ...init,
+      headers: { ...requestHeaders(), ...init?.headers },
+    });
   } catch (error) {
     throw new Error(
       `Cannot reach the Worker: ${error instanceof Error ? error.message : String(error)}`,
@@ -69,7 +75,9 @@ export async function checkSandbox(
   key: string,
   config?: Record<string, unknown>,
 ): Promise<SandboxHealth> {
-  const headers: Record<string, string> = { "content-type": "application/json" };
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
   if (key.trim()) headers["x-sandbox-key"] = key.trim();
   if (config) headers["x-sandbox-config"] = JSON.stringify(config);
 
@@ -312,7 +320,10 @@ export interface Workspace {
 }
 
 /** One workspace per deployment; `enabled: false` means no RUNS_DB. */
-export function fetchWorkspace(): Promise<{ enabled: boolean; workspace?: Workspace }> {
+export function fetchWorkspace(): Promise<{
+  enabled: boolean;
+  workspace?: Workspace;
+}> {
   return apiJson<{ enabled: boolean; workspace?: Workspace }>("/api/workspace");
 }
 
@@ -357,7 +368,10 @@ export interface ScheduledRepo {
   driftWebhookSecretSet?: boolean;
 }
 
-export function fetchSchedules(): Promise<{ enabled: boolean; schedules: ScheduledRepo[] }> {
+export function fetchSchedules(): Promise<{
+  enabled: boolean;
+  schedules: ScheduledRepo[];
+}> {
   return apiJson<{ enabled: boolean; schedules: ScheduledRepo[] }>("/api/schedules");
 }
 

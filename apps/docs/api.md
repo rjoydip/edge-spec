@@ -79,13 +79,19 @@ Everything the dashboard needs to render provider choices and defaults.
       "protocol": "workers-ai",
       "needsKey": false,
       "models": [
-        { "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "name": "Llama 3.3 70B Instruct" }
+        {
+          "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+          "name": "Llama 3.3 70B Instruct"
+        }
       ],
       "hint": "Runs on the deployment's Workers AI binding. No API key required."
     }
   ],
   "defaults": {
-    "ai": { "provider": "workers-ai", "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast" },
+    "ai": {
+      "provider": "workers-ai",
+      "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    },
     "pipeline": {
       "maxRetries": 2,
       "autoPr": true,
@@ -223,7 +229,11 @@ Response:
       "kind": "api",
       "evidence": {
         "specPath": "openapi.yaml",
-        "operation": { "method": "GET", "path": "/users/{id}", "operationId": "getUser" }
+        "operation": {
+          "method": "GET",
+          "path": "/users/{id}",
+          "operationId": "getUser"
+        }
       }
     }
   ],
@@ -279,7 +289,10 @@ chain that selected each one. It is the same bounded graph the PR check uses.
 ```json
 {
   "tests": [
-    { "test": "src/auth.test.ts", "via": ["src/util.ts", "src/auth.ts", "src/auth.test.ts"] }
+    {
+      "test": "src/auth.test.ts",
+      "via": ["src/util.ts", "src/auth.ts", "src/auth.test.ts"]
+    }
   ],
   "partial": false
 }
@@ -593,7 +606,13 @@ Request:
       "verified": true,
       "corrected": false,
       "checks": [
-        { "name": "bun test", "kind": "test", "command": "bun test", "ok": true, "durationMs": 840 }
+        {
+          "name": "bun test",
+          "kind": "test",
+          "command": "bun test",
+          "ok": true,
+          "durationMs": 840
+        }
       ],
       "coverage": {
         "status": "measured",
@@ -724,7 +743,7 @@ Resolution order:
 
 1. repository schedule override;
 2. workspace drift webhook;
-3. deployment `DRIFT_WEBHOOK_URL` fallback.
+3. deployment `DRIFT_ALERT_WEBHOOK_URL` fallback.
 
 A quiet repository sends nothing and opens nothing. The scan never opens a pull
 request: the summary is the action. The audit event records `notified` and
@@ -789,7 +808,7 @@ audit event.
 
 Per-repository schedules can override the workspace webhook through
 `PUT /api/schedules`. Resolution order is repository → workspace → deployment
-`DRIFT_WEBHOOK_URL`.
+`DRIFT_ALERT_WEBHOOK_URL`.
 
 ---
 
@@ -920,7 +939,13 @@ Lists recent runs for one repository, newest first.
       "model": "gpt-4o-mini",
       "startedAt": 1793000000000,
       "finishedAt": 1793000012000,
-      "totals": { "missing": 4, "coverage": 0, "api": 0, "unsupported": 0, "skipped": 0 }
+      "totals": {
+        "missing": 4,
+        "coverage": 0,
+        "api": 0,
+        "unsupported": 0,
+        "skipped": 0
+      }
     }
   ]
 }

@@ -65,7 +65,9 @@ function AlertDialogAction({
   className,
   variant = "default",
   ...props
-}: ComponentProps<typeof AlertDialogPrimitive.Action> & { variant?: "default" | "danger" }) {
+}: ComponentProps<typeof AlertDialogPrimitive.Action> & {
+  variant?: "default" | "danger";
+}) {
   return (
     <AlertDialogPrimitive.Action className={buttonStyles({ variant, className })} {...props} />
   );

@@ -169,16 +169,17 @@ token scoped to that repository.
 | `GH_TOKEN`           | Optional PAT fallback when no App is configured |
 
 For the Alchemy deployment, CI passes these as environment variables; the
-Alchemy stack binds them as Worker secrets. Locally:
+Alchemy stack binds them as Worker secrets for `prod`. Locally, export them or
+put them in `infra/.env` (git-ignored), then `bun run deploy`:
 
 ```bash
-bunx wrangler secret put GH_APP_ID
-bunx wrangler secret put GH_APP_PRIVATE_KEY < app.pk8.pem
-bunx wrangler secret put GH_WEBHOOK_SECRET
+export GH_APP_ID=…
+export GH_APP_PRIVATE_KEY="$(cat app.pk8.pem)"
+export GH_WEBHOOK_SECRET=…
 ```
 
-`wrangler secret put` accepts the PEM on stdin. In GitHub Actions, store the
-full PEM as the `GH_APP_PRIVATE_KEY` repository secret.
+In GitHub Actions, store the full PEM as the `GH_APP_PRIVATE_KEY` repository
+secret.
 
 ## 5. Redirect URI and `/auth`
 

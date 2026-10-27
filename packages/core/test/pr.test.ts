@@ -18,7 +18,11 @@ describe("pullFilesOf", () => {
 
   it("falls back to a single test", () => {
     expect(
-      pullFilesOf({ sourcePath: "src/a.ts", testPath: "src/a.test.ts", code: "test a" }),
+      pullFilesOf({
+        sourcePath: "src/a.ts",
+        testPath: "src/a.test.ts",
+        code: "test a",
+      }),
     ).toEqual([{ path: "src/a.test.ts", code: "test a", sourcePath: "src/a.ts" }]);
   });
 
@@ -33,10 +37,16 @@ describe("pullFilesOf", () => {
 
   it("refuses a source path instead of uploading it", () => {
     expect(() =>
-      pullFilesOf({ files: [{ path: "src/a.ts", code: "test a", sourcePath: "src/a.ts" }] }),
+      pullFilesOf({
+        files: [{ path: "src/a.ts", code: "test a", sourcePath: "src/a.ts" }],
+      }),
     ).toThrow(PolicyError);
     expect(() =>
-      pullFilesOf({ sourcePath: "src/a.ts", testPath: "src/a.ts", code: "test a" }),
+      pullFilesOf({
+        sourcePath: "src/a.ts",
+        testPath: "src/a.ts",
+        code: "test a",
+      }),
     ).toThrow(PolicyError);
   });
 

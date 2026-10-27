@@ -138,13 +138,21 @@ function testCode(
   if (!baseUrl) {
     return {
       code: `  it.skip(${asLiteral(name)}, () => {\n    // no base URL: set servers[0].url in the spec or BASE_URL in the environment.\n  });`,
-      skipped: { method: operation.method, path: operation.path, reason: "no base URL" },
+      skipped: {
+        method: operation.method,
+        path: operation.path,
+        reason: "no base URL",
+      },
     };
   }
   if (resolved.reason) {
     return {
       code: `  it.skip(${asLiteral(name)}, () => {\n    // ${resolved.reason}\n  });`,
-      skipped: { method: operation.method, path: operation.path, reason: resolved.reason },
+      skipped: {
+        method: operation.method,
+        path: operation.path,
+        reason: resolved.reason,
+      },
     };
   }
   if (secured && !options.auth) {
@@ -437,7 +445,10 @@ function firstLine(value: string): string {
 }
 
 /** The expected/actual pair an assertion prints, when it prints one. */
-function expectedActualOf(text: string): { expected?: string; actual?: string } {
+function expectedActualOf(text: string): {
+  expected?: string;
+  actual?: string;
+} {
   const expected = /Expected:\s*([^\n]+)/i.exec(text)?.[1];
   const actual = /(?:Received|Actual):\s*([^\n]+)/i.exec(text)?.[1];
   const loose = /expected\s+(.+?),?\s+got\s+(.+)/i.exec(text);
@@ -481,7 +492,10 @@ export function parseJUnit(xml: string, specPath = ""): ApiTestResult[] {
       ...(Number.isFinite(time) ? { durationMs: Math.round(time * 1000) } : {}),
       ...(errorText ? { error: errorText } : {}),
       ...(failed
-        ? { diagnosis: diagnosisOf(diagnosticText), ...expectedActualOf(diagnosticText) }
+        ? {
+            diagnosis: diagnosisOf(diagnosticText),
+            ...expectedActualOf(diagnosticText),
+          }
         : {}),
     });
   }

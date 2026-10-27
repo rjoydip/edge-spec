@@ -44,8 +44,14 @@ describe("parseMutationReport", () => {
   });
 
   it("labels a budget stop without inventing a score", () => {
-    const report = parseMutationReport(STRYKER, "npx stryker run", 10, { budgetStopped: true });
-    expect(report).toMatchObject({ status: "measured", budgetStopped: true, score: 50 });
+    const report = parseMutationReport(STRYKER, "npx stryker run", 10, {
+      budgetStopped: true,
+    });
+    expect(report).toMatchObject({
+      status: "measured",
+      budgetStopped: true,
+      score: 50,
+    });
   });
 
   it("reads root killed/survived totals and a reported score", () => {
@@ -54,7 +60,12 @@ describe("parseMutationReport", () => {
       "tool",
       5,
     );
-    expect(report).toMatchObject({ status: "measured", killed: 8, survived: 2, score: 80 });
+    expect(report).toMatchObject({
+      status: "measured",
+      killed: 8,
+      survived: 2,
+      score: 80,
+    });
   });
 
   it("is not measured for non-JSON, empty or mutant-free reports", () => {

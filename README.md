@@ -9,13 +9,13 @@ the dashboard.
 EdgeSpec is a Bun workspace. Install these once, then `bun install` from the
 repository root.
 
-| Tool     | Version / notes                                                  |
-| -------- | ---------------------------------------------------------------- |
-| Git      | Any recent version; needed for cloning and PR workflows          |
-| Bun      | `1.4.4` (pinned by `packageManager`); runs install, tests, build |
-| Node.js  | `>=22.12` (declared in `engines`); used by some tooling          |
-| Docker   | Optional: containerised self-hosted sandbox runs                 |
-| Wrangler | Installed by `bun install`; no global install needed             |
+| Tool               | Version / notes                                                  |
+| ------------------ | ---------------------------------------------------------------- |
+| Git                | Any recent version; needed for cloning and PR workflows          |
+| Bun                | `1.4.4` (pinned by `packageManager`); runs install, tests, build |
+| Node.js            | `>=22.12` (declared in `engines`); used by some tooling          |
+| Docker             | Optional: containerised self-hosted sandbox runs                 |
+| Cloudflare profile | Only to deploy; `bun run alchemy profile edit --add Cloudflare`  |
 
 **Linux**
 
@@ -53,7 +53,8 @@ Docker Desktop is optional; `bun run sandbox` uses it when present.
 
 ## Documentation
 
-- [`apps/docs/`](apps/docs/index.md) — documentation site (VitePress); run `bun run docs:dev`.
+- [`apps/docs/`](apps/docs/index.md) — documentation site (VitePress), hosted on
+  Cloudflare Pages at https://edge-spec-docs.pages.dev; run `bun run docs:dev`.
 - [`apps/docs/deployment.md`](apps/docs/deployment.md) — D1, R2, secrets and deployment.
 - [`PLAN.md`](PLAN.md) — requirements and design decisions.
 - [`AGENTS.md`](AGENTS.md) — repository conventions.
@@ -61,6 +62,7 @@ Docker Desktop is optional; `bun run sandbox` uses it when present.
 ```bash
 bun run docs:dev      # http://127.0.0.1:5174
 bun run docs:build    # static site in apps/docs/.vitepress/dist
+bun run docs:deploy   # build + publish to Cloudflare Pages
 bun run docs:preview  # serve the build locally
 ```
 
@@ -79,14 +81,15 @@ static check until a sandbox runner is configured.
 Build, check and evaluate:
 
 ```bash
-bun run check          # format, lint, types, tests
+bun run verify          # format, lint, types, tests
 bun run build          # dist/web + dist/worker
 bun run eval           # golden example scans (no AI, no network)
-bun run deploy -- --dry-run
+bun run deploy         # build + alchemy deploy --stage prod
+bun run test:stack     # local Alchemy stack (opt-in live with STACK_URL)
 ```
 
-Run `bun run db:migrate:local` if an existing checkout predates the migration
-hook in `dev:worker`; `bun run db:migrate` applies the same migrations remotely.
+Alchemy applies `migrations/` during deploy and `bun run dev:worker`; there is no
+separate database migration command.
 
 ## CLI and MCP
 
@@ -123,7 +126,7 @@ scripts/         combined dev stack
 
 `packages/core` is consumed as `@edge-spec/core/<module>` and the UI primitives
 as `@edge-spec/ui`. Vite bundles both deployable apps into the root `dist/` for
-Wrangler. Run `bun test examples` to check the examples locally.
+Alchemy. Run `bun test examples` to check the examples locally.
 
 ## Configuration
 
@@ -165,20 +168,24 @@ and returns `{ "exitCode": 0, "stdout": "…", "stderr": "…" }`.
 
 ### Deployment secrets
 
+Set these before `bun run deploy`, or copy `infra/.env.example` to
+`infra/.env` (git-ignored). CI passes the same names as repository secrets.
+
 ```bash
-bunx wrangler secret put GH_APP_ID           # GitHub App auth for webhooks
-bunx wrangler secret put GH_APP_PRIVATE_KEY  # PKCS#8 PEM
-bunx wrangler secret put GH_WEBHOOK_SECRET   # verifies x-hub-signature-256
-bunx wrangler secret put GH_TOKEN            # fallback when no App is set
+export GH_APP_ID=…                      # GitHub App auth for webhooks
+export GH_APP_PRIVATE_KEY="$(cat app.pk8.pem)"  # PKCS#8 PEM
+export GH_WEBHOOK_SECRET=…              # verifies x-hub-signature-256
+export GH_TOKEN=…                       # fallback when no App is set
 ```
 
 ## GitHub Actions
 
 - **CI** (`ci.yml`) runs format, lint, types, tests and both builds on every
   push and pull request. No Cloudflare credentials required.
-- **Deploy** (`deploy.yml`) builds and runs `wrangler deploy` on `main`, or on
-  demand. Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository
-  secrets.
+- **Deploy** (`deploy.yml`) builds and runs `bun run alchemy deploy --stage prod`
+  on `main`, or on demand. Add `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID` as repository secrets. The production cutover is
+  already adopted; use **adopt** only for a new account or a lost state store.
 
 ## How a run works
 

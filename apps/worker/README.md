@@ -4,9 +4,9 @@ The single Cloudflare Worker: Hono HTTP routes, SSE streaming for `/api/run`,
 the durable `TestGenerationWorkflow`, D1 history and R2 artifacts.
 
 ```bash
-bun run dev:worker     # wrangler dev on :8787, migrates local D1 first
+bun run dev:worker     # builds the bundle, then alchemy dev on :8787
 bun run --filter @edge-spec/worker build
-bun run deploy         # from the repo root, after bun run build
+bun run deploy         # build + alchemy deploy --stage prod
 ```
 
 - `src/index.ts` — routes, header parsing, SSE framing.
@@ -16,7 +16,7 @@ bun run deploy         # from the repo root, after bun run build
 - `src/scheduled.ts` — daily drift scans and retention.
 - `src/env.ts` — the binding surface, typed without Workers globals.
 
-Bindings in the root `wrangler.toml`: `ASSETS`, `AI`, `RUNS_DB` (D1),
+Bindings come from `infra/alchemy.run.ts`: `ASSETS`, `AI`, `RUNS_DB` (D1),
 `ARTIFACTS` (R2), `TEST_GENERATION_WORKFLOW`, plus optional sandbox and GitHub
 App secrets. Without D1/R2 the routes answer `enabled: false`; a run still works.
 

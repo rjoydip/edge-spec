@@ -86,7 +86,10 @@ describe("EdgeSpecClient", () => {
     const { fetchImpl, calls } = fakeFetch(() =>
       Response.json({ generation, validation, attempts: 1 }),
     );
-    const client = new EdgeSpecClient({ baseUrl: "https://edge.test", fetchImpl });
+    const client = new EdgeSpecClient({
+      baseUrl: "https://edge.test",
+      fetchImpl,
+    });
 
     await client.generate({ source: "export const a = 1;", path: "src/a.ts" });
 
@@ -104,7 +107,10 @@ describe("EdgeSpecClient", () => {
           headers: { "content-type": "application/json" },
         }),
     );
-    const client = new EdgeSpecClient({ baseUrl: "https://edge.test", fetchImpl });
+    const client = new EdgeSpecClient({
+      baseUrl: "https://edge.test",
+      fetchImpl,
+    });
     await expect(client.scan({ repo: "owner/missing" })).rejects.toThrow("repository not found");
   });
 
@@ -128,7 +134,10 @@ describe("EdgeSpecClient", () => {
       },
     });
     const { fetchImpl } = fakeFetch(() => new Response(stream, { status: 200 }));
-    const client = new EdgeSpecClient({ baseUrl: "https://edge.test", fetchImpl });
+    const client = new EdgeSpecClient({
+      baseUrl: "https://edge.test",
+      fetchImpl,
+    });
     const seen: RunEvent[] = [];
     const events = await client.run({ repo: "owner/repo" }, (event) => seen.push(event));
 
@@ -174,7 +183,11 @@ describe("environment config", () => {
 
   it("lets EDGESPEC_AI_KEY override the provider key", () => {
     const defaults = envDefaults(
-      { EDGESPEC_AI_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "a", EDGESPEC_AI_KEY: "b" },
+      {
+        EDGESPEC_AI_PROVIDER: "anthropic",
+        ANTHROPIC_API_KEY: "a",
+        EDGESPEC_AI_KEY: "b",
+      },
       "anthropic",
     );
     expect(defaults.aiKey).toBe("b");

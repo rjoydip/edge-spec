@@ -134,7 +134,13 @@ export function App() {
     logId.current += 1;
     setLogs((current) => [
       ...current,
-      { id: logId.current, level, time: clock(), text, ...(step ? { step } : {}) },
+      {
+        id: logId.current,
+        level,
+        time: clock(),
+        text,
+        ...(step ? { step } : {}),
+      },
     ]);
   }, []);
 
@@ -243,7 +249,10 @@ export function App() {
         }
         case "generation": {
           const path = event.generation.sourcePath;
-          setLive((current) => ({ ...current, [path]: { generation: event.generation } }));
+          setLive((current) => ({
+            ...current,
+            [path]: { generation: event.generation },
+          }));
           setPullUrls((current) => {
             if (!(path in current)) return current;
             const next = { ...current };
@@ -284,7 +293,10 @@ export function App() {
         case "result": {
           if (event.generation) {
             const path = event.generation.sourcePath;
-            setLive((current) => ({ ...current, [path]: { generation: event.generation } }));
+            setLive((current) => ({
+              ...current,
+              [path]: { generation: event.generation },
+            }));
           }
           // A run covers every gap it could: the first ready test is the one
           // that opens in the preview.
@@ -385,7 +397,11 @@ export function App() {
         addLog("info", "Run stopped.", currentStep.current);
       } else {
         addLog("error", message, currentStep.current);
-        showToast({ title: "Run failed", description: message, variant: "warning" });
+        showToast({
+          title: "Run failed",
+          description: message,
+          variant: "warning",
+        });
       }
     } finally {
       setRunning(false);
@@ -458,9 +474,16 @@ export function App() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setSteps({ ...INITIAL_STEPS, scan: { status: "failed", note: "scan failed" } });
+      setSteps({
+        ...INITIAL_STEPS,
+        scan: { status: "failed", note: "scan failed" },
+      });
       addGapLog("error", message);
-      showToast({ title: "Scan failed", description: message, variant: "warning" });
+      showToast({
+        title: "Scan failed",
+        description: message,
+        variant: "warning",
+      });
     } finally {
       setScanning(false);
     }
@@ -570,7 +593,10 @@ export function App() {
       setProviderError(undefined);
       setLive((current) => ({
         ...current,
-        [path]: { generation: result.generation, validation: result.validation },
+        [path]: {
+          generation: result.generation,
+          validation: result.validation,
+        },
       }));
       setPullUrls((current) => {
         if (!(path in current)) return current;
@@ -580,7 +606,10 @@ export function App() {
       });
       setGenerated((current) => {
         const index = current.findIndex((item) => item.generation.sourcePath === path);
-        const next = { generation: result.generation, validation: result.validation };
+        const next = {
+          generation: result.generation,
+          validation: result.validation,
+        };
         if (index === -1) return [...current, next];
         const copy = current.slice();
         copy[index] = next;

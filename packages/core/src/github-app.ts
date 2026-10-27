@@ -146,7 +146,12 @@ export async function installationToken(
 export class InstallationTokenCache {
   private readonly entries = new Map<string, InstallationToken>();
 
-  constructor(private readonly options: { fetchImpl?: typeof fetch; now?: () => number } = {}) {}
+  constructor(
+    private readonly options: {
+      fetchImpl?: typeof fetch;
+      now?: () => number;
+    } = {},
+  ) {}
 
   async get(
     config: GitHubAppConfig,

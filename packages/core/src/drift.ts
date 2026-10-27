@@ -35,7 +35,13 @@ const difference = (left: readonly string[], right: readonly string[]): string[]
 /** A first scan is a baseline, not drift: there is nothing to compare to. */
 export function detectDrift(previous: DriftSnapshot | undefined, current: DriftSnapshot): Drift {
   if (!previous) {
-    return { newFiles: [], closedFiles: [], apiAdded: [], apiRemoved: [], changed: false };
+    return {
+      newFiles: [],
+      closedFiles: [],
+      apiAdded: [],
+      apiRemoved: [],
+      changed: false,
+    };
   }
   const newFiles = difference(current.missing, previous.missing);
   const closedFiles = difference(previous.missing, current.missing);

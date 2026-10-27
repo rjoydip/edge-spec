@@ -16,7 +16,7 @@ export interface DriftWebhookTarget {
  * deployment environment. Empty values are ignored.
  */
 export function resolveDriftWebhook(
-  env: Pick<Env, "DRIFT_WEBHOOK_URL" | "DRIFT_WEBHOOK_SECRET">,
+  env: Pick<Env, "DRIFT_ALERT_WEBHOOK_URL" | "DRIFT_ALERT_WEBHOOK_SECRET">,
   schedule: Pick<ScheduledRepo, "driftWebhookUrl" | "driftWebhookSecret">,
   workspace?: Pick<Workspace, "driftWebhookUrl" | "driftWebhookSecret">,
 ): DriftWebhookTarget | undefined {
@@ -42,11 +42,13 @@ export function resolveDriftWebhook(
     };
   }
 
-  const environmentUrl = env.DRIFT_WEBHOOK_URL?.trim();
+  const environmentUrl = env.DRIFT_ALERT_WEBHOOK_URL?.trim();
   if (environmentUrl) {
     return {
       url: environmentUrl,
-      ...(env.DRIFT_WEBHOOK_SECRET?.trim() ? { secret: env.DRIFT_WEBHOOK_SECRET.trim() } : {}),
+      ...(env.DRIFT_ALERT_WEBHOOK_SECRET?.trim()
+        ? { secret: env.DRIFT_ALERT_WEBHOOK_SECRET.trim() }
+        : {}),
       source: "environment",
     };
   }

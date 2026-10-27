@@ -133,7 +133,12 @@ describe("evaluatePullPolicy", () => {
   it("allows a pull request that satisfies the gates", () => {
     expect(
       evaluatePullPolicy(
-        { draftOnly: true, maxFiles: 2, allowedPaths: ["src/**"], minCoverageDelta: 2 },
+        {
+          draftOnly: true,
+          maxFiles: 2,
+          allowedPaths: ["src/**"],
+          minCoverageDelta: 2,
+        },
         { files, draft: true },
       ),
     ).toEqual([]);
@@ -175,7 +180,9 @@ describe("evaluatePullPolicy", () => {
   it("blocks a coverage floor that was never measured", () => {
     const violations = evaluatePullPolicy(
       { minCoverageDelta: 1 },
-      { files: [{ path: "src/a.test.ts", coverage: { status: "not-measured" } }] },
+      {
+        files: [{ path: "src/a.test.ts", coverage: { status: "not-measured" } }],
+      },
     );
     expect(violations[0]).toMatchObject({ gate: "coverage-delta" });
     expect(violations[0]?.message).toContain("not measured");

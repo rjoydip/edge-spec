@@ -22,7 +22,9 @@ const { test, deploy, destroy, beforeAll, afterAll } = Test.make({
 });
 
 const deployed = beforeAll(
-  process.env.SKIP_DEPLOY ? Effect.succeed({ url: process.env.STACK_URL ?? "" }) : deploy(Stack),
+  process.env.SKIP_DEPLOY
+    ? Effect.succeed({ url: process.env.STACK_URL ?? "", docsUrl: process.env.DOCS_URL ?? "" })
+    : deploy(Stack),
   { timeout: 300_000 },
 );
 
@@ -71,5 +73,56 @@ test(
     expect(page.status).toBe(200);
     expect(page.contentType).toContain("text/html");
     expect(page.html).toContain("EdgeSpec");
+  }),
+);
+
+test(
+  "docs site is served by Pages",
+  Effect.gen(function* () {
+    // A fresh stage creates the Pages project but publishes nothing, so this
+    // only runs when DOCS_URL names a deployed docs site.
+    const docsUrl = process.env.DOCS_URL?.trim();
+    if (!docsUrl) return;
+    const page = yield* getPage(docsUrl);
+    expect(page.status).toBe(200);
+    expect(page.contentType).toContain("text/html");
+    expect(page.html).toContain("EdgeSpec");
+  }),
+);
+
+test(
+  "dashboard serves deep links through the SPA fallback",
+  Effect.gen(function* () {
+    const { url } = yield* deployed;
+    const origin = String(url).replace(/\/$/, "");
+    const page = yield* getPage(`${origin}/runs/deep/link`);
+    expect(page.status).toBe(200);
+    expect(page.contentType).toContain("text/html");
+    expect(page.html).toContain("EdgeSpec");
+  }),
+);
+
+test(
+  "D1 is bound and migrated",
+  Effect.gen(function* () {
+    const { url } = yield* deployed;
+    const origin = String(url).replace(/\/$/, "");
+
+    // The workspace row is created lazily, so a successful read proves the
+    // migrations ran, not just that the binding exists.
+    const workspace = yield* getJson<{
+      enabled?: boolean;
+      workspace?: { retentionDays?: number };
+    }>(`${origin}/api/workspace`);
+    expect(workspace.status).toBe(200);
+    expect(workspace.body.enabled).toBe(true);
+    expect(workspace.body.workspace?.retentionDays).toBeGreaterThan(0);
+
+    const runs = yield* getJson<{ enabled?: boolean; runs?: unknown[] }>(
+      `${origin}/api/runs?repo=octocat/Hello-World`,
+    );
+    expect(runs.status).toBe(200);
+    expect(runs.body.enabled).toBe(true);
+    expect(Array.isArray(runs.body.runs)).toBe(true);
   }),
 );

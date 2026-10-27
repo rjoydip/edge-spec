@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
+  <title id="title">EdgeSpec</title>
+  <defs>
+    <linearGradient id="edgespec-app" x1="96" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#818cf8" />
+      <stop offset="0.55" stop-color="#4f46e5" />
+      <stop offset="1" stop-color="#312e81" />
+    </linearGradient>
+  </defs>
+
+  <!-- Brand plate. GitHub rounds it again when displayed as the app icon. -->
+  <rect width="512" height="512" rx="116" fill="url(#edgespec-app)" />
+
+  <!-- Angle brackets: the "edge" of a code block. -->
+  <g fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M211 152 136 256l75 104" />
+    <path d="M301 152 376 256l-75 104" />
+  </g>
+
+  <!-- Spec point: the generated test at the centre of the scan. -->
+  <circle cx="256" cy="256" r="30" fill="#c7d2fe" />
+</svg>

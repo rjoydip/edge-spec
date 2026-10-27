@@ -9,7 +9,7 @@ API. It scans a user-supplied GitHub repository, generates a `bun:test` file
 with a user-chosen AI provider, validates it, and opens a PR. The CLI and MCP
 server are separate API clients in the same workspace.
 
-Stack: TypeScript, Hono, React 19, Tailwind v4, Vite, Wrangler, Bun.
+Stack: TypeScript, Hono, React 19, Tailwind v4, Vite, Alchemy, Bun.
 
 ## Commands
 
@@ -23,17 +23,23 @@ bun run mcp -- --help  # stdio MCP server
 bun run sandbox        # self-hosted test runner on http://127.0.0.1:8788
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
 bun run docs:build     # static site in apps/docs/.vitepress/dist
+bun run docs:deploy    # build + upload the site to Cloudflare Pages
+bun run test:stack     # build + local Alchemy stack test (opt-in live with STACK_URL)
 bun test               # discovers every workspace's test/ directory
 bun run typecheck      # bun check in every workspace
 bun run build
-bun run check          # format:check + lint + typecheck + test
-bun run deploy -- --dry-run
+bun run verify         # format:check + lint + check + test
+bun run deploy         # build + bun run alchemy deploy --stage prod
+bun run alchemy deploy --stage prod --dry-run
 ```
 
-Formatting is Bun-native (`bun fmt`); typechecking is Bun-native (`bun check`).
+Formatting is Bun-native (`bun fmt`), with the width and object-wrap flags in
+the root scripts; typechecking is Bun-native (`bun check`).
 Oxlint stays because Bun has no built-in linter. Do not reintroduce oxfmt.
 
-Run `bun run check` before claiming a change works. For a UI change, also run
+After every code change, run `bun fmt` (or `bun run format`) and `bun run check`
+before claiming it works. `bun run verify` runs the whole gate (format check,
+lint, `bun check .` across every project, tests). For a UI change, also run
 `bun run build` (Tailwind class typos only fail at build time).
 
 ## Layout
@@ -62,6 +68,12 @@ Run `bun run check` before claiming a change works. For a UI change, also run
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `evals/` — golden-scan harness (`harness.ts`, `run.ts`, `golden.json`) and its
   test; `bun run eval` spends no AI. `scripts/dev.ts` is the combined dev stack.
+- `config/` — shared `tsconfig.base.json`; every workspace tsconfig extends it.
+- `infra/` — the Cloudflare stack (`alchemy.run.ts`) and its opt-in live test.
+  There is no `wrangler.toml`; `bun run deploy` and `bun run dev:worker` go through
+  Alchemy.
+- `assets/github-app/` — GitHub App listing copy and its `icon.svg`. Change the
+  copy there, then paste it into the app's settings.
 - `PLAN.md` — product requirements and review feedback.
 
 Tests live in each workspace's `test/` directory. The exception is `examples/`:
@@ -77,7 +89,7 @@ holds what you import or run yourself: `packages/core`
 `packages/cli` and `packages/mcp`, and the self-hosted `packages/sandbox`
 runner. `apps/` is what this repository deploys: `@edge-spec/web`,
 `@edge-spec/worker`, and the `@edge-spec/docs` site. Vite outputs the web and
-worker bundles to the root `dist/`, which is what `wrangler.toml` uploads.
+worker bundles to the root `dist/`, which Alchemy uploads.
 
 The CLI and MCP server are **API clients**. Do not make them call
 `packages/core/src/pipeline.ts` directly; that would fork the behavior from the

@@ -423,7 +423,9 @@ export function sandboxConfigOf(settings: Settings): Record<string, unknown> | u
 
 /** Headers for one API call. Empty values are omitted, never sent as "undefined". */
 export function requestHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "content-type": "application/json" };
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
   if (secrets.githubToken.trim()) headers[TOKEN_HEADER] = secrets.githubToken.trim();
   if (secrets.aiKey.trim()) headers[AI_KEY_HEADER] = secrets.aiKey.trim();
   if (state.provider === "private" && state.baseUrl.trim()) {

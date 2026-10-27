@@ -72,7 +72,12 @@ describe("buildPrCheck", () => {
       gaps: [],
       affectedTests: ["src/a.test.ts"],
       runner: true,
-      impact: [{ test: "src/a.test.ts", via: ["src/c.ts", "src/b.ts", "src/a.test.ts"] }],
+      impact: [
+        {
+          test: "src/a.test.ts",
+          via: ["src/c.ts", "src/b.ts", "src/a.test.ts"],
+        },
+      ],
       partialImpact: true,
     });
     expect(check.output.summary).toContain("### Impact");

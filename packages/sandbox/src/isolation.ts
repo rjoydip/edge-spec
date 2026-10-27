@@ -73,7 +73,11 @@ export function detectIsolation(env: Record<string, string | undefined> = proces
     };
   }
   const bwrap = Bun.which("bwrap");
-  if (!bwrap) return { ...unisolated, reason: `bwrap is not installed. ${unisolated.reason}` };
+  if (!bwrap)
+    return {
+      ...unisolated,
+      reason: `bwrap is not installed. ${unisolated.reason}`,
+    };
 
   const egress = env.SANDBOX_ALLOW_EGRESS === "1";
   const roBinds = defaultRoBinds();
@@ -81,6 +85,13 @@ export function detectIsolation(env: Record<string, string | undefined> = proces
     kind: "bwrap",
     ...(egress ? { reason: "Egress is enabled (SANDBOX_ALLOW_EGRESS=1)." } : {}),
     wrap: (argv, options) =>
-      bwrapArgs({ bwrap, workdir: options.workdir, argv, env: options.env, egress, roBinds }),
+      bwrapArgs({
+        bwrap,
+        workdir: options.workdir,
+        argv,
+        env: options.env,
+        egress,
+        roBinds,
+      }),
   };
 }

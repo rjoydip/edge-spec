@@ -160,7 +160,10 @@ export interface PipelineOptions {
    * Contract auth values. They are injected as sandbox env, never embedded in
    * generated code, events, history or the PR.
    */
-  authFixture?: { headers?: Record<string, string>; query?: Record<string, string> };
+  authFixture?: {
+    headers?: Record<string, string>;
+    query?: Record<string, string>;
+  };
   /** Recorded exchanges; contract tests replay them without a live app. */
   fixtures?: FixtureFile;
   /** Approved repository conventions, loaded from opt-in memory. */
@@ -199,7 +202,10 @@ async function load(github: GitHub, repo: string, gap: Gap, ref: string): Promis
   try {
     const source = await github.file(repo, gap.path, ref);
     const exports = extractExports(source);
-    return { source, gap: { ...gap, exports, risk: riskOf(gap.path, exports.length) } };
+    return {
+      source,
+      gap: { ...gap, exports, risk: riskOf(gap.path, exports.length) },
+    };
   } catch {
     return null;
   }
@@ -377,7 +383,12 @@ export async function* runPipeline(
           totals,
           coverageStatus: "not-run",
         };
-        yield { type: "step", step: "scan", status: "done", note: "No missing tests" };
+        yield {
+          type: "step",
+          step: "scan",
+          status: "done",
+          note: "No missing tests",
+        };
         yield log("success", `No untested source files found in ${blobs.length} paths.`);
         yield {
           type: "result",
@@ -585,9 +596,16 @@ export async function* runPipeline(
         const routedConfig = (retry: boolean) => {
           if (!input.autoRouteModels) return aiConfig;
           const model =
-            routeModel(aiConfig.provider, { sourceLength: source.length, retry }) ?? aiConfig.model;
+            routeModel(aiConfig.provider, {
+              sourceLength: source.length,
+              retry,
+            }) ?? aiConfig.model;
           const fallback = nextModel(aiConfig.provider, model);
-          return { ...aiConfig, model, ...(fallback ? { fallbackModel: fallback } : {}) };
+          return {
+            ...aiConfig,
+            model,
+            ...(fallback ? { fallbackModel: fallback } : {}),
+          };
         };
         const generateConfig = routedConfig(false);
         if (input.autoRouteModels) {
@@ -683,7 +701,11 @@ export async function* runPipeline(
           const formatted = await formatWithRunner({
             sandbox: options.sandbox,
             ...(repoArg ? { repo: repoArg } : {}),
-            files: { ...checks.support, [gap.path]: source, [gap.testPath]: code },
+            files: {
+              ...checks.support,
+              [gap.path]: source,
+              [gap.testPath]: code,
+            },
             command: checks.formatter.command,
             path: gap.testPath,
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
@@ -742,7 +764,11 @@ export async function* runPipeline(
         const checkResults = await runRepositoryChecks({
           sandbox: options.sandbox,
           ...(repoArg ? { repo: repoArg } : {}),
-          files: { ...checks.support, [gap.path]: source, [gap.testPath]: code },
+          files: {
+            ...checks.support,
+            [gap.path]: source,
+            [gap.testPath]: code,
+          },
           checks: checks.checks,
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         });
@@ -859,7 +885,12 @@ export async function* runPipeline(
           }
           if (retryCode === undefined) throw retryGenerateError;
           code = retryCode;
-          generation = { ...generation, code, corrected: true, model: retryConfig.model };
+          generation = {
+            ...generation,
+            code,
+            corrected: true,
+            model: retryConfig.model,
+          };
           emit({ type: "generation", generation });
           if (retryRateLimit) emit({ type: "quota", rateLimit: retryRateLimit });
 
@@ -883,7 +914,11 @@ export async function* runPipeline(
           const retryChecks = await runRepositoryChecks({
             sandbox: options.sandbox,
             ...(repoArg ? { repo: repoArg } : {}),
-            files: { ...checks.support, [gap.path]: source, [gap.testPath]: code },
+            files: {
+              ...checks.support,
+              [gap.path]: source,
+              [gap.testPath]: code,
+            },
             checks: checks.checks,
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
           });
@@ -1045,10 +1080,14 @@ export async function* runPipeline(
               ? {
                   ...(options.authFixture.headers &&
                   Object.keys(options.authFixture.headers).length > 0
-                    ? { EDGESPEC_AUTH_HEADERS: JSON.stringify(options.authFixture.headers) }
+                    ? {
+                        EDGESPEC_AUTH_HEADERS: JSON.stringify(options.authFixture.headers),
+                      }
                     : {}),
                   ...(options.authFixture.query && Object.keys(options.authFixture.query).length > 0
-                    ? { EDGESPEC_AUTH_QUERY: JSON.stringify(options.authFixture.query) }
+                    ? {
+                        EDGESPEC_AUTH_QUERY: JSON.stringify(options.authFixture.query),
+                      }
                     : {}),
                 }
               : {}),
@@ -1070,7 +1109,10 @@ export async function* runPipeline(
           });
           if (run.unreachable || run.environmentError) {
             // No app, no test result. Never turn a boot failure into green.
-            results = results.map((result) => ({ ...result, status: "not-run" as const }));
+            results = results.map((result) => ({
+              ...result,
+              status: "not-run" as const,
+            }));
             validation = {
               ok: false,
               verified: false,
@@ -1125,7 +1167,12 @@ export async function* runPipeline(
     }
 
     if (budgetStopped) {
-      yield { type: "step", step: "pull-request", status: "failed", note: "Budget" };
+      yield {
+        type: "step",
+        step: "pull-request",
+        status: "failed",
+        note: "Budget",
+      };
       yield log(
         "warn",
         `Token budget reached after ${spentTokens} reported tokens. ${ordered.length} test(s) from the partial run are ready.`,
@@ -1141,7 +1188,12 @@ export async function* runPipeline(
     }
 
     if (ordered.length === 0) {
-      yield { type: "step", step: "pull-request", status: "failed", note: "No PR" };
+      yield {
+        type: "step",
+        step: "pull-request",
+        status: "failed",
+        note: "No PR",
+      };
       yield log("error", "No test passed the check. Open Missing tests to look at them.");
       yield {
         type: "result",
@@ -1180,6 +1232,11 @@ export async function* runPipeline(
           : String(error);
     yield log("error", message);
     yield { type: "error", message };
-    yield { type: "result", ok: false, reason: message, ...(retest ? { retest: true } : {}) };
+    yield {
+      type: "result",
+      ok: false,
+      reason: message,
+      ...(retest ? { retest: true } : {}),
+    };
   }
 }

@@ -100,7 +100,9 @@ describe("validateTest", () => {
     let body: unknown;
     const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
       body = JSON.parse(String(init?.body));
-      return new Response(JSON.stringify({ exitCode: 0, stdout: "2 pass" }), { status: 200 });
+      return new Response(JSON.stringify({ exitCode: 0, stdout: "2 pass" }), {
+        status: 200,
+      });
     }) as unknown as typeof fetch;
 
     const result = await validateTest({
@@ -132,7 +134,10 @@ describe("validateTest", () => {
     });
 
     expect(result.verified).toBe(true);
-    expect(body.repo).toEqual({ url: "https://github.com/acme/api.git", ref: "main" });
+    expect(body.repo).toEqual({
+      url: "https://github.com/acme/api.git",
+      ref: "main",
+    });
     expect(body.command).toBe("bun test 'src/math.test.ts'");
   });
 
@@ -219,7 +224,12 @@ describe("validateTest", () => {
       fetchImpl: fakeFetch,
     });
 
-    expect(result).toMatchObject({ ok: false, verified: false, flaky: true, runs: 2 });
+    expect(result).toMatchObject({
+      ok: false,
+      verified: false,
+      flaky: true,
+      runs: 2,
+    });
     expect(result.output).toContain("Flaky, quarantined");
   });
 

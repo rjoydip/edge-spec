@@ -72,7 +72,14 @@ describe("pullRequestBody", () => {
 
   it("labels a flaky test as quarantined", () => {
     const body = pullRequestBody({
-      files: [{ sourcePath: "src/a.ts", testPath: "src/a.test.ts", flaky: true, verified: false }],
+      files: [
+        {
+          sourcePath: "src/a.ts",
+          testPath: "src/a.test.ts",
+          flaky: true,
+          verified: false,
+        },
+      ],
     });
     expect(body).toContain("flaky, quarantined (not verified)");
     expect(body).toContain("1 test(s) are flaky and quarantined");

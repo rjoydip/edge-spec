@@ -20,7 +20,10 @@ export interface SandboxServer {
 export type SandboxProviderId =
   "auto" | "bwrap" | "docker" | "podman" | "e2b" | "vercel" | "daytona" | "custom";
 
-export const SANDBOX_PROVIDERS: ReadonlyArray<{ id: SandboxProviderId; label: string }> = [
+export const SANDBOX_PROVIDERS: ReadonlyArray<{
+  id: SandboxProviderId;
+  label: string;
+}> = [
   { id: "auto", label: "Auto (whatever the runner uses)" },
   { id: "docker", label: "Docker Desktop" },
   { id: "podman", label: "Podman" },
@@ -294,7 +297,9 @@ export function parseSandboxConfig(input: unknown): SandboxConfig {
       command,
       ...(readyUrl ? { readyUrl } : {}),
       ...(server.timeoutMs !== undefined
-        ? { timeoutMs: clampNumber(server.timeoutMs, "server.timeoutMs", 1_000, 300_000) }
+        ? {
+            timeoutMs: clampNumber(server.timeoutMs, "server.timeoutMs", 1_000, 300_000),
+          }
         : {}),
     };
   }
@@ -531,7 +536,10 @@ export async function checkSandboxHealth(input: {
       // The status code is still useful.
     }
     if (!response.ok) {
-      return { ok: false, error: `Sandbox returned ${response.status}: ${text.slice(0, 300)}` };
+      return {
+        ok: false,
+        error: `Sandbox returned ${response.status}: ${text.slice(0, 300)}`,
+      };
     }
     return {
       ok: body.ok !== false,
@@ -548,6 +556,9 @@ export async function checkSandboxHealth(input: {
       ...(typeof body.error === "string" ? { error: body.error } : {}),
     };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }

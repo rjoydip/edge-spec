@@ -10,7 +10,9 @@ export function collectGenerations(events: readonly RunEvent[]): Map<string, Gen
   const generated = new Map<string, GeneratedTest>();
   for (const event of events) {
     if (event.type === "generation") {
-      generated.set(event.generation.sourcePath, { generation: event.generation });
+      generated.set(event.generation.sourcePath, {
+        generation: event.generation,
+      });
     } else if (event.type === "validation") {
       // Concurrent events interleave, so the path must come from the event.
       const path = event.sourcePath;

@@ -35,7 +35,12 @@ export interface PrCheckInput {
   /** False when no sandbox is configured; the check is static only. */
   runner: boolean;
   /** `executed: false` means the runner was configured but could not run. */
-  testRun?: { ok: boolean; output: string; durationMs: number; executed?: boolean };
+  testRun?: {
+    ok: boolean;
+    output: string;
+    durationMs: number;
+    executed?: boolean;
+  };
   /** Why each test was selected, from the import graph. */
   impact?: ReadonlyArray<{ test: string; via: string[] }>;
   /** The graph fetch was bounded; some dependents may be absent. */

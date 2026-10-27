@@ -1,26 +1,39 @@
 # Deployment
 
 EdgeSpec deploys as one Cloudflare Worker (API plus the built dashboard) with
-optional D1, R2 and a separate Sandbox runner. Nothing here stores a visitor's
-configuration or keys: those still travel per request.
+D1, R2 and a separate Sandbox runner. The infrastructure lives in
+`infra/alchemy.run.ts`; there is no `wrangler.toml`. Nothing here stores a
+visitor's configuration or keys: those still travel per request.
 
 ## Prerequisites
 
-| Tool       | Notes                                                                |
-| ---------- | -------------------------------------------------------------------- |
-| Bun        | `1.4.4`; installs Wrangler and runs the build                        |
-| Node.js    | `>=22.12` (used by some tooling; Bun runs the tests)                 |
-| Wrangler   | installed by `bun install`; authenticated with `bunx wrangler login` |
-| Docker     | optional, for containerised `bun run sandbox` runs (Linux/WSL2)      |
-| GitHub App | optional, for webhook automation without a long-lived `GH_TOKEN`     |
+| Tool               | Notes                                                            |
+| ------------------ | ---------------------------------------------------------------- |
+| Bun                | `1.4.4`; installs Alchemy via the workspace and runs the build   |
+| Node.js            | `>=22.12` (used by some tooling; Bun runs the tests)             |
+| Cloudflare account | Alchemy profile with Workers, D1, R2 and Workers AI permissions  |
+| Docker             | optional, for containerised `bun run sandbox` runs (Linux/WSL2)  |
+| GitHub App         | optional, for webhook automation without a long-lived `GH_TOKEN` |
 
-Windows can deploy the Worker natively. Containerised sandbox runs
-(`bun run sandbox`) need Docker on a Linux host (or WSL2).
+Wrangler is no longer used. A Wrangler login is not an Alchemy credential:
+Alchemy keeps its own profile. Authenticate once:
 
 ```bash
 bun install
-bunx wrangler login
+bun run alchemy profile edit --profile default --add Cloudflare
+# or non-interactive:
+export CLOUDFLARE_API_TOKEN=…
+export CLOUDFLARE_ACCOUNT_ID=…
+bun run alchemy profile edit --profile default --add Cloudflare --method stored \
+  --set apiToken=env:CLOUDFLARE_API_TOKEN \
+  --set accountId=env:CLOUDFLARE_ACCOUNT_ID
 ```
+
+The token needs Workers Scripts, D1, R2 and Workers AI permissions. Check with
+`bun run alchemy profile show`.
+
+Windows can deploy the Worker natively. Containerised sandbox runs
+(`bun run sandbox`) need Docker on a Linux host (or WSL2).
 
 ## 1. D1 (run history and shared state)
 
@@ -28,47 +41,52 @@ D1 stores run summaries, backlog, policies, repository memory, schedules,
 workspace settings, audit events and PR-command rate limits. It never stores
 generated test source, prompts or keys.
 
-```bash
-bunx wrangler d1 create edge-spec-runs
-```
+The stack creates the database: `edge-spec-runs` for `--stage prod`, and
+`edge-spec-runs-<stage>` for every other stage. Migrations in `migrations/` run
+as part of `alchemy deploy` and `alchemy dev`; there is no separate
+`db:migrate` command.
 
-Copy the returned `database_id` into `wrangler.toml` (`RUNS_DB`), then apply the
-migrations:
-
-```bash
-bun run db:migrate          # remote
-bun run db:migrate:local    # the local .wrangler database
-```
-
-The Worker deploys without D1, but every history/backlog/workspace route then
-answers `enabled: false` and the cron does nothing.
+The Worker still deploys without the binding (for example in a local bundle
+test), but every history/backlog/workspace route then answers `enabled: false`
+and the cron does nothing.
 
 ## 2. R2 (run artifacts and drift summaries)
 
 D1 keeps summaries; R2 keeps the raw validation bundles and coverage facts
 (`runs/<id>.json`) and drift summaries (`drift/<repo>/<time>.json`).
 
-```bash
-bunx wrangler r2 bucket create edge-spec-artifacts
-```
-
-The bucket name is already bound as `ARTIFACTS` in `wrangler.toml`. Without the
-binding, runs still work and `GET /api/runs/:id/artifacts` answers
-`enabled: false`.
+The stack creates `edge-spec-artifacts` for `prod` and
+`edge-spec-artifacts-<stage>` elsewhere. Without the binding, runs still work
+and `GET /api/runs/:id/artifacts` answers `enabled: false`.
 
 ## 3. Secrets
 
 Secrets are deployment-owned. Visitor credentials are request headers and are
-never written to Worker state.
+never written to Worker state. The stack reads these through `Config.Redacted`,
+so a missing optional value is simply absent.
+
+| Secret                       | Required              | Used by                             |
+| ---------------------------- | --------------------- | ----------------------------------- |
+| `GH_APP_ID`                  | For App auth          | Mint installation tokens            |
+| `GH_APP_PRIVATE_KEY`         | For App auth          | PKCS#8 PEM used to sign the app JWT |
+| `GH_TOKEN`                   | Fallback for webhooks | Workflow: scan, commit, PR          |
+| `GH_WEBHOOK_SECRET`          | Recommended           | `POST /webhook` HMAC verification   |
+| `DRIFT_ALERT_WEBHOOK_URL`    | Optional              | Drift notifications                 |
+| `DRIFT_ALERT_WEBHOOK_SECRET` | Optional              | Sent as `x-edgespec-secret`         |
+
+For a local deploy, export them or copy `infra/.env.example` to
+`infra/.env` (git-ignored):
 
 ```bash
-bunx wrangler secret put GH_APP_ID            # GitHub App automation
-bunx wrangler secret put GH_APP_PRIVATE_KEY   # PKCS#8 PEM
-bunx wrangler secret put GH_WEBHOOK_SECRET    # verifies x-hub-signature-256
-bunx wrangler secret put GH_TOKEN             # fallback when no App is set
-bunx wrangler secret put DRIFT_WEBHOOK_URL        # optional fallback; prefer Settings
-bunx wrangler secret put DRIFT_WEBHOOK_SECRET     # sent as x-edgespec-secret
+export GH_APP_ID=…
+export GH_APP_PRIVATE_KEY="$(cat app.pk8.pem)"
+export GH_WEBHOOK_SECRET=…
+export GH_TOKEN=…                 # optional fallback
+bun run deploy
 ```
+
+In CI the same names are repository secrets passed as step env. Only `prod`
+receives `GH_*`; preview stages omit them and use the visitor's token.
 
 `GH_TOKEN` is only a fallback for workflow runs. The dashboard always uses
 the visitor's token.
@@ -76,16 +94,105 @@ the visitor's token.
 ## 4. Deploy the Worker
 
 ```bash
-bun run build
-bun run deploy            # wrangler deploy, reads dist/worker and dist/web
+bun run deploy                        # build + bun run alchemy deploy --stage prod
+bun run alchemy deploy --stage staging --yes
 ```
 
-`bun run deploy -- --dry-run` checks the bundle without uploading. The Worker
-serves the dashboard through the `ASSETS` binding and registers the
+`bun run deploy` builds `dist/web` and `dist/worker` first; Alchemy uploads the
+existing Vite bundle, so there is only one bundler. The stack also serves the
+dashboard through the `ASSETS` binding and registers the
 `test-generation-workflow` Workflow plus the daily cron `0 8 * * *`
-(per-repository schedules live in D1).
+(per-repository schedules live in D1). Previews get no cron.
 
-## 5. Sandbox runner (optional)
+### Adopting existing resources
+
+`bun run deploy` is the normal path; the production cutover already adopted the
+Worker, D1, R2 and Workflow into Alchemy state on 2026-10-27. Use `--adopt` only
+when Alchemy state is new — a fresh account, a lost state store, or a stage
+created outside Alchemy:
+
+```bash
+bun run alchemy deploy --stage prod --yes --adopt
+```
+
+The names in the stack (`edge-spec`, `edge-spec-runs`, `edge-spec-artifacts`,
+`test-generation-workflow`) are fixed for `prod`, which is what makes adoption
+possible. Do not change them in place.
+
+### Documentation site (Cloudflare Pages)
+
+The stack declares one Pages project for the VitePress site, `edge-spec-docs`,
+and only on `prod`. Preview and dev stages reuse the published site instead of
+creating an empty `edge-spec-docs-<stage>` subdomain that serves nothing.
+Alchemy owns the project; the Pages REST API has no public asset-upload
+endpoint, so the static files go up through Wrangler:
+
+```bash
+bun run docs:deploy   # docs:build + wrangler pages deploy … --project-name edge-spec-docs
+```
+
+Live at `https://edge-spec-docs.pages.dev`. `bun run docs:build` alone still
+only writes `apps/docs/.vitepress/dist`, so CI keeps checking the build without
+publishing. A landing page is not hosted yet — the stack has a placeholder
+comment where its project would go.
+
+### Rollback
+
+Wrangler is not a dependency any more, but `bunx wrangler` runs it without
+reinstalling anything. Two paths:
+
+**Fast — put the previous Worker version back.** This restores the code and its
+bindings; it does not change this repository:
+
+```bash
+bunx wrangler deployments list --name edge-spec
+bunx wrangler rollback --name edge-spec                # previous deployment
+bunx wrangler rollback <version-id> --name edge-spec   # a specific one
+```
+
+**Full — restore the last Wrangler config and deploy it.** Keep this for a
+release after the cutover, in case Alchemy itself has to be dropped:
+
+```bash
+git log --all --oneline -- wrangler.toml
+git show <commit>:wrangler.toml > wrangler.toml
+bunx wrangler deploy --dry-run --config wrangler.toml  # check first
+bunx wrangler deploy --config wrangler.toml
+```
+
+Neither path touches D1 or R2 data, so a later `bun run alchemy deploy --stage
+prod` picks the Worker back up without re-adopting.
+
+## 5. Staging parity
+
+Deploy a throwaway stage and run the stack test against it:
+
+```bash
+bun run build
+bun run alchemy deploy --stage staging --yes
+SKIP_DEPLOY=1 STACK_URL=https://edge-spec-staging.<subdomain>.workers.dev \
+  bun run --cwd infra test
+bun run alchemy destroy --stage staging --yes
+```
+
+The automated test covers `/api/health`, `/api/catalog`, the dashboard root and
+a deep link, and D1 (workspace + run history). The same assertions run locally
+against the emulators; stop `bun run dev:worker` first, because both bind 8787:
+
+```bash
+ALCHEMY_DEV=1 bun run --cwd infra test
+```
+
+Check the rest manually:
+
+- `GET /api/quota`
+- `/api/scan` against a public fixture repository
+- `/webhook` with a bad signature (production only; other stages have no secret)
+- a run that writes D1 history and an R2 artifact
+- Workflow create + poll `/api/runs/:id`
+- the `scheduled` path through `alchemy dev` or a staging cron
+
+## 6. Sandbox runner (optional)
 
 The generated suite is only executed when a runner is configured. The
 repository ships `packages/sandbox`, a Bun HTTP service that runs each request
@@ -111,7 +218,7 @@ curl -X POST https://<worker>/api/sandbox/health -d '{}'
 Without a runner, validation is **static check only** and `validation.verified`
 is false. Never describe that as passed.
 
-## 6. GitHub App and webhooks
+## 7. GitHub App and webhooks
 
 The webhook endpoint is `https://<worker>/webhook`; it accepts `push`,
 `pull_request`, and `issue_comment` payloads. A GitHub App is recommended for
@@ -134,12 +241,14 @@ Do not pass these to `TestGenerationWorkflow`; Workflow params are persisted.
 
 ## CI
 
-- `.github/workflows/ci.yml` runs `bun run check`, both builds and the docs build
+- `.github/workflows/ci.yml` runs `bun run verify`, both builds and the docs build
   on every push and pull request. No Cloudflare credentials required.
 - `.github/workflows/deploy.yml` builds and deploys `main` with Alchemy using
   `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and the optional GitHub App
-  credentials. The first production run needs `--adopt` to import the existing
-  Worker, D1, R2, and Workflow.
+  credentials. Dispatch it with **adopt** only when the Alchemy state store is
+  new; the production cutover is already in state.
+- Set the `STACK_URL` repository variable to smoke the deployment after each
+  production run.
 
 ## Verify a deployment
 

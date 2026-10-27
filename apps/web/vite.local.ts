@@ -32,6 +32,7 @@ const SKIP = new Set([
   ".turbo",
   ".vercel",
   ".vite",
+  ".alchemy",
   ".wrangler",
   "build",
   "coverage",
@@ -205,7 +206,11 @@ export function scanLocalProject(root: string): ScanResult {
     files,
   });
   if (detected.checks.length > 0) {
-    overview.checks = detected.checks.map(({ name, kind, command }) => ({ name, kind, command }));
+    overview.checks = detected.checks.map(({ name, kind, command }) => ({
+      name,
+      kind,
+      command,
+    }));
   }
   if (detected.formatter) overview.formatter = detected.formatter.name;
   overview.testRunner = detected.runner;
@@ -269,7 +274,9 @@ export function localApi(): Plugin {
           }
           reply(res, 404, { error: "Not found." });
         } catch (error) {
-          reply(res, 400, { error: error instanceof Error ? error.message : String(error) });
+          reply(res, 400, {
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       });
     },

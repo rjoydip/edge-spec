@@ -313,7 +313,11 @@ async function validSignature(secret: string, raw: string, header: string): Prom
 }
 
 app.get("/api/health", (c) =>
-  c.json({ status: "ok", app: "EdgeSpec", timestamp: new Date().toISOString() }),
+  c.json({
+    status: "ok",
+    app: "EdgeSpec",
+    timestamp: new Date().toISOString(),
+  }),
 );
 
 /**
@@ -761,7 +765,10 @@ app.post("/api/run", async (c) => {
     aiConfig: AiConfig;
     sandbox?: SandboxConfig;
     repoToken?: string;
-    authFixture?: { headers?: Record<string, string>; query?: Record<string, string> };
+    authFixture?: {
+      headers?: Record<string, string>;
+      query?: Record<string, string>;
+    };
     fixtures?: FixtureFile;
     input: ReturnType<typeof pipelineConfig> & {
       repo: string;
@@ -881,7 +888,10 @@ app.post("/api/run", async (c) => {
           });
         }
         if (event.type === "result") status = event.ok ? "ready" : "failed";
-        await stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+        await stream.writeSSE({
+          event: event.type,
+          data: JSON.stringify(event),
+        });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1007,7 +1017,11 @@ app.post("/api/generate", async (c) => {
       return generateTest({
         filePath: path,
         source,
-        config: { ...aiConfig, model, ...(fallback ? { fallbackModel: fallback } : {}) },
+        config: {
+          ...aiConfig,
+          model,
+          ...(fallback ? { fallbackModel: fallback } : {}),
+        },
         runner,
         ...(memory ? { memory } : {}),
         coverageTarget: config.coverageTarget,
@@ -1017,7 +1031,12 @@ app.post("/api/generate", async (c) => {
         onNotice: (text) => notices.push(text),
         ...(checks && checks.style.length ? { style: checks.style } : {}),
         ...(checks && checks.checks.length
-          ? { checks: checks.checks.map((check) => ({ name: check.name, command: check.command })) }
+          ? {
+              checks: checks.checks.map((check) => ({
+                name: check.name,
+                command: check.command,
+              })),
+            }
           : {}),
         onRateLimit: (info) => {
           rateLimit = info;
@@ -1118,7 +1137,10 @@ app.post("/api/pull-request", async (c) => {
     const meta = pullMetaOf(body);
     const policy = parsePullPolicy(body.policy);
     const blocked = policyBlocked(
-      evaluatePullPolicy(policy, { files, ...(meta.draft ? { draft: true } : {}) }),
+      evaluatePullPolicy(policy, {
+        files,
+        ...(meta.draft ? { draft: true } : {}),
+      }),
     );
     const auditDb = runsDb(c.env);
     if (blocked) {
@@ -1214,7 +1236,10 @@ app.post("/api/pull-request", async (c) => {
       await setRunDecisions(
         history,
         runId,
-        files.map((file) => ({ sourcePath: file.sourcePath, decision: "accepted" as const })),
+        files.map((file) => ({
+          sourcePath: file.sourcePath,
+          decision: "accepted" as const,
+        })),
       ).catch(() => undefined);
     }
     return c.json({ url, files: files.length });
@@ -1529,7 +1554,10 @@ app.get("/api/workspace", async (c) => {
   try {
     const db = runsDb(c.env);
     if (!db) return c.json({ enabled: false });
-    return c.json({ enabled: true, workspace: workspaceView(await getWorkspace(db)) });
+    return c.json({
+      enabled: true,
+      workspace: workspaceView(await getWorkspace(db)),
+    });
   } catch (err) {
     return fail(err);
   }
@@ -1789,7 +1817,12 @@ app.get("/api/runs/:id", async (c) => {
 app.get("/local-api/scan", (c) => {
   if (!isLocalRequest(c))
     return c.json({ error: "Local access is only available on localhost." }, 403);
-  return c.json({ error: "Local folder access requires the Vite dev server (bun run dev)." }, 400);
+  return c.json(
+    {
+      error: "Local folder access requires the Vite dev server (bun run dev).",
+    },
+    400,
+  );
 });
 
 app.get("/local-api/file", (c) => {
@@ -1801,7 +1834,7 @@ app.get("/local-api/file", (c) => {
 // Unknown API paths must return JSON, not the SPA's index.html.
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
-// Anything else is a static asset (assets-first routing in wrangler.toml).
+// Anything else is a static asset (assets-first routing in the Alchemy stack).
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default {

@@ -48,8 +48,8 @@ export interface Env {
   /** Optional artifact bucket for drift summaries. */
   ARTIFACTS?: R2Bucket;
   /** Optional Slack-compatible webhook for drift notifications. */
-  DRIFT_WEBHOOK_URL?: string;
-  DRIFT_WEBHOOK_SECRET?: string;
+  DRIFT_ALERT_WEBHOOK_URL?: string;
+  DRIFT_ALERT_WEBHOOK_SECRET?: string;
   AI?: AiBinding;
   TEST_GENERATION_WORKFLOW?: WorkflowBinding;
   /** Optional run history. Absent on a deployment that does not want it. */

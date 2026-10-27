@@ -45,7 +45,9 @@ function fakeGitHub(calls: string[]): GitHub {
 
 const aiFetch = (async () =>
   new Response(
-    JSON.stringify({ choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }] }),
+    JSON.stringify({
+      choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }],
+    }),
     { status: 200 },
   )) as unknown as typeof fetch;
 
@@ -147,7 +149,9 @@ describe("runPipeline", () => {
       await new Promise((resolve) => setTimeout(resolve, 15));
       inFlight -= 1;
       return new Response(
-        JSON.stringify({ choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }] }),
+        JSON.stringify({
+          choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }],
+        }),
         { status: 200 },
       );
     }) as unknown as typeof fetch;
@@ -274,7 +278,9 @@ describe("runPipeline", () => {
       return new Response(
         JSON.stringify({
           exitCode: 0,
-          artifacts: { "coverage/lcov.info": runnerRuns === 1 ? before : after },
+          artifacts: {
+            "coverage/lcov.info": runnerRuns === 1 ? before : after,
+          },
         }),
       );
     }) as unknown as typeof fetch;

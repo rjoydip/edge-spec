@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 // Worker build: bundles src/index.ts to the root dist/worker/index.js.
-// Cloudflare runtime modules stay external and are resolved by wrangler.
+// Cloudflare runtime modules stay external and are resolved by Alchemy.
 const root = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({

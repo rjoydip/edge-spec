@@ -206,7 +206,11 @@ export interface AgentWorkspaceProps {
   apiResults: ApiTestResult[];
   /** The last API result came from a retest, not a fresh run. */
   retest?: boolean;
-  toast?: { title: string; description?: string; variant: "default" | "success" | "warning" };
+  toast?: {
+    title: string;
+    description?: string;
+    variant: "default" | "success" | "warning";
+  };
   onRun: () => void;
   onScan: () => void;
   onRetest: (operations: RetestOperation[]) => void;
@@ -1561,7 +1565,9 @@ export function AgentWorkspace({
                                   "matrix-row cursor-pointer",
                                   result?.status === "failed" && "bg-rose-500/[0.04]",
                                 )}
-                                style={{ animationDelay: `${Math.min(index, 12) * 24}ms` }}
+                                style={{
+                                  animationDelay: `${Math.min(index, 12) * 24}ms`,
+                                }}
                                 onClick={() => openEndpoint(currentSpec.path, item)}
                               >
                                 <TableCell className="pl-3">

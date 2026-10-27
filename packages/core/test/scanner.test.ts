@@ -170,13 +170,22 @@ describe("describeRepository", () => {
       "src/app.ts",
     ]);
 
-    expect(overview.apiArtifacts).toContainEqual({ kind: "openapi", path: "openapi.yaml" });
-    expect(overview.apiArtifacts).toContainEqual({ kind: "openapi", path: "docs/swagger.json" });
+    expect(overview.apiArtifacts).toContainEqual({
+      kind: "openapi",
+      path: "openapi.yaml",
+    });
+    expect(overview.apiArtifacts).toContainEqual({
+      kind: "openapi",
+      path: "docs/swagger.json",
+    });
     expect(overview.apiArtifacts).toContainEqual({
       kind: "postman",
       path: "acme.postman_collection.json",
     });
-    expect(overview.apiArtifacts).toContainEqual({ kind: "bruno", path: "requests/users.bru" });
+    expect(overview.apiArtifacts).toContainEqual({
+      kind: "bruno",
+      path: "requests/users.bru",
+    });
     expect(overview.apiArtifacts).toHaveLength(6);
   });
 
@@ -272,7 +281,10 @@ describe("classifyTree", () => {
     ]);
     expect(missing).toHaveLength(0);
     expect(unsupported.map((gap) => gap.path)).toEqual(["cmd/server.go", "scripts/tool.py"]);
-    expect(unsupported[0]).toMatchObject({ kind: "unsupported", language: "Go" });
+    expect(unsupported[0]).toMatchObject({
+      kind: "unsupported",
+      language: "Go",
+    });
   });
 
   it("keeps a test infra file out of source discovery", () => {

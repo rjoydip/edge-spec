@@ -37,7 +37,13 @@ interface FileRow {
   coverage_json: string | null;
 }
 
-const EMPTY_TOTALS: ScanTotals = { missing: 0, coverage: 0, api: 0, unsupported: 0, skipped: 0 };
+const EMPTY_TOTALS: ScanTotals = {
+  missing: 0,
+  coverage: 0,
+  api: 0,
+  unsupported: 0,
+  skipped: 0,
+};
 
 /** The D1 binding, or `undefined` when history is not enabled. */
 export function runsDb(env: Env): D1Database | undefined {
