@@ -59,6 +59,13 @@
   --page-glow: color-mix(in oklab, var(--accent-base) 8%, transparent);
   --aurora-opacity: 0.22;
 
+  /* Stage hues are fixed on purpose: the accent swatches must not recolour a step. */
+  --stage-clone: #38bdf8;
+  --stage-analyze: #a78bfa;
+  --stage-test: #fbbf24;
+  --stage-fix: #e879f9;
+  --stage-review: #34d399;
+
   color-scheme: dark;
 }
 
@@ -114,6 +121,12 @@ html.light {
   --page-glow: color-mix(in oklab, var(--accent-base) 6%, transparent);
   --aurora-opacity: 0.12;
 
+  --stage-clone: #0369a1;
+  --stage-analyze: #6d28d9;
+  --stage-test: #b45309;
+  --stage-fix: #a21caf;
+  --stage-review: #047857;
+
   color-scheme: light;
 }
 
@@ -136,6 +149,11 @@ html.light {
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-stage-clone: var(--stage-clone);
+  --color-stage-analyze: var(--stage-analyze);
+  --color-stage-test: var(--stage-test);
+  --color-stage-fix: var(--stage-fix);
+  --color-stage-review: var(--stage-review);
   --font-sans: var(--edge-font-sans);
   --font-mono: var(--edge-font-mono);
   --radius-sm: calc(var(--radius) - 4px);
@@ -511,6 +529,242 @@ html.light {
 
 .tab-panel[data-state="active"] {
   animation: tab-in 0.24s ease-out;
+}
+
+/* ── Agent workspace ─────────────────────────────────────────────────────
+ * Motion is CSS only, staggered with inline animation delays, and collapses
+ * under the reduced-motion override below.
+ */
+.progress-indicator {
+  position: relative;
+  overflow: hidden;
+}
+.progress-indicator::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.4), transparent);
+  transform: translateX(-100%);
+  animation: sheen 2.8s ease-in-out infinite;
+}
+@keyframes sheen {
+  0% {
+    transform: translateX(-100%);
+  }
+  60%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.07), transparent);
+  transform: translateX(-100%);
+  animation: sheen 1.6s ease-in-out infinite;
+}
+
+/* A finished row lands; capped in JSX so a long matrix stays cheap. */
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.matrix-row {
+  animation: row-in 0.35s ease-out backwards;
+}
+
+/* The stage card's border doubles as its progress ring. */
+@property --stage-progress {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 0%;
+}
+
+.stage-ring {
+  --stage-track: var(--color-zinc-700);
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from -90deg,
+    var(--stage-tone, var(--color-zinc-600)) var(--stage-progress, 0%),
+    var(--stage-track) 0
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  transition: --stage-progress 0.6s ease;
+}
+
+/* A row that is being generated pulses its outline, not its background tint. */
+@keyframes row-flash {
+  0%,
+  100% {
+    border-color: color-mix(in oklab, var(--accent-500) 25%, transparent);
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    border-color: color-mix(in oklab, var(--accent-500) 75%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-500) 22%, transparent);
+  }
+}
+.row-flash {
+  animation: row-flash 0.9s ease-in-out infinite;
+}
+
+@keyframes line-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.diff-line {
+  animation: line-in 0.3s ease-out backwards;
+}
+
+/* One ring ping per newly active stage; it stops, it does not throb forever. */
+@keyframes ping-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+}
+.stage-ping {
+  animation: ping-ring 1.6s ease-out 2;
+}
+
+@keyframes burst {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.8);
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px) scale(1.1);
+  }
+}
+.success-burst span {
+  animation: burst 1s ease-out forwards;
+}
+.success-burst span:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.success-burst span:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+/* Radix overlays that are new in the agent shell. */
+.sheet-content[data-state="open"][data-side="right"] {
+  animation: sheet-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sheet-content[data-state="closed"][data-side="right"] {
+  animation: sheet-out-right 0.2s ease-in;
+}
+.sheet-content[data-state="open"][data-side="left"] {
+  animation: sheet-in-left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sheet-content[data-state="closed"][data-side="left"] {
+  animation: sheet-out-left 0.2s ease-in;
+}
+.sheet-content[data-state="open"][data-side="bottom"] {
+  animation: sheet-in-bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sheet-content[data-state="closed"][data-side="bottom"] {
+  animation: sheet-out-bottom 0.2s ease-in;
+}
+@keyframes sheet-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes sheet-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes sheet-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes sheet-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes sheet-in-bottom {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes sheet-out-bottom {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+.menu-content[data-state="open"],
+.popover-content[data-state="open"],
+.tooltip-content[data-state="instant-open"],
+.tooltip-content[data-state="delayed-open"] {
+  animation: pop-in 0.14s ease-out;
+}
+.menu-content[data-state="closed"],
+.popover-content[data-state="closed"],
+.tooltip-content[data-state="closed"] {
+  animation: pop-out 0.1s ease-in;
+}
+
+.accordion-content[data-state="open"] {
+  animation: accordion-down 0.2s ease-out;
+}
+.accordion-content[data-state="closed"] {
+  animation: accordion-up 0.18s ease-in;
+}
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
+}
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
 }
 
 @media (max-width: 640px) {

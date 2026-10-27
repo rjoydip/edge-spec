@@ -39,6 +39,43 @@ export function pullFilesOf(body: Record<string, unknown>): PullFile[] {
   return [];
 }
 
+/** Optional copy the reviewer can edit before the pull request is opened. */
+export interface PullMeta {
+  title?: string;
+  body?: string;
+  branch?: string;
+  commitMessage?: string;
+  draft?: boolean;
+}
+
+/** Reads the optional pull request fields; absent values are omitted. */
+export function pullMetaOf(body: Record<string, unknown>): PullMeta {
+  const title = text(body.title).slice(0, 200);
+  const prBody = text(body.body).slice(0, 20_000);
+  const branch = text(body.branch).slice(0, 120);
+  const commitMessage = text(body.commitMessage).slice(0, 200);
+  return {
+    ...(title ? { title } : {}),
+    ...(prBody ? { body: prBody } : {}),
+    ...(branch ? { branch } : {}),
+    ...(commitMessage ? { commitMessage } : {}),
+    ...(body.draft === true ? { draft: true } : {}),
+  };
+}
+
+/** A user-edited branch must be a safe, non-protected git ref. */
+export function validBranchName(value: string): boolean {
+  if (!value || value.length > 120) return false;
+  if (!/^[A-Za-z0-9._/-]+$/.test(value)) return false;
+  if (value.startsWith("-") || value.startsWith("/") || value.endsWith("/")) return false;
+  if (value.endsWith(".") || value.endsWith(".lock")) return false;
+  if (value.includes("..") || value.includes("//") || value.includes("@{") || value === "@") {
+    return false;
+  }
+  if (value.startsWith("refs/")) return false;
+  return !["main", "master", "HEAD"].includes(value);
+}
+
 /** A branch name fragment: the file name, safe for git. */
 export function slugOf(path: string): string {
   const base = path.slice(path.lastIndexOf("/") + 1).replace(/\.[^.]+$/, "");

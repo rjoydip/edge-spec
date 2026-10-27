@@ -12,7 +12,7 @@ export function Switch({
       className={cn(
         "peer inline-flex shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors",
         size === "sm" ? "h-5 w-8" : "h-6 w-11",
-        "data-[state=checked]:bg-indigo-600 data-[state=unchecked]:bg-zinc-800",
+        "data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-indigo-600 data-[state=checked]:to-violet-600 data-[state=unchecked]:bg-zinc-800",
         "focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:ring-offset-2 focus-visible:outline-none",
         "disabled:cursor-not-allowed disabled:opacity-50",
         className,

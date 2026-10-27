@@ -1,17 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Activity,
-  AlertCircle,
-  FileCode2,
-  CheckCircle2,
-  GitPullRequest,
-  LayoutDashboard,
-  ListChecks,
-  ShieldAlert,
-  X,
-  Zap,
-} from "lucide-react";
 import type {
+  ApiTestResult,
   CoverageStatus,
   Gap,
   GeneratedTest,
@@ -24,30 +13,25 @@ import type {
   StepId,
   Validation,
 } from "@edge-spec/core/types";
-import type { PullSummary } from "@edge-spec/core/github";
-import { providerById } from "@edge-spec/core/catalog";
-import { folderFirst } from "@edge-spec/core/scanner";
 import {
-  fetchCatalog,
-  fetchPulls,
   fetchQuota,
   openPullWithFiles,
   regenerate,
   runPipelineStream,
   scanRepo,
+  type PullMeta,
 } from "@/api";
-import { Gaps } from "@/components/gaps";
-import { Header } from "@/components/header";
-import { Overview } from "@/components/overview";
-import { Pipeline, INITIAL_STEPS, type Steps, type Verification } from "@/components/pipeline";
-import { Preview } from "@/components/preview";
-import { TerminalPanel } from "@/components/terminal";
-import { Pulls } from "@/components/pulls";
-import { Review } from "@/components/review";
-import { SettingsDialog, type SettingsSection } from "@/components/settings";
-import type { LogEntry, LogLevel } from "@/components/terminal";
-import { Button, Dialog, Tabs, TabsContent, TabsList, TabsTrigger, cn } from "@edge-spec/ui";
-import { setProject, setSettings, useProject, useSecrets, useSettings } from "@/lib/settings";
+import { AgentWorkspace } from "@/components/agent/workspace";
+import { SettingsSheet, type SettingsSection } from "@/components/agent/settings-sheet";
+import { INITIAL_STEPS, type LogEntry, type LogLevel, type Steps } from "@/components/agent/shared";
+import {
+  getProject,
+  getSettings,
+  setProject,
+  useProject,
+  useSecrets,
+  useSettings,
+} from "@/lib/settings";
 
 /** The provider refused the request because the quota is gone. */
 function isQuotaError(message: string): boolean {
@@ -74,19 +58,6 @@ function providerErrorTitle(message: string): string {
   return "Generation failed";
 }
 
-type Tab = "pipeline" | "overview" | "gaps" | "review" | "pulls";
-
-const TABS: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "pipeline", label: "Pipeline", icon: Activity },
-  { id: "gaps", label: "Missing tests", icon: ShieldAlert },
-  { id: "review", label: "Review", icon: ListChecks },
-  { id: "pulls", label: "Pull requests", icon: GitPullRequest },
-];
-
-/** The Pull requests tab is parked until the PR list is ready to ship. */
-const SHOW_PULLS_TAB: boolean = false;
-
 interface Toast {
   title: string;
   description?: string;
@@ -94,9 +65,6 @@ interface Toast {
 }
 
 const clock = (): string => new Date().toLocaleTimeString("en-GB", { hour12: false });
-
-const verificationOf = (result: Validation): Verification =>
-  result.ok ? (result.verified ? "verified" : "static") : "failed";
 
 /** One log line that says why validation failed, not just that it did. */
 const failureSummary = (output: string, max = 1200): string => {
@@ -116,14 +84,13 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** The settings section the dialog scrolls to when it opens. */
   const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>();
-  const [tab, setTab] = useState<Tab>("overview");
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [apiResults, setApiResults] = useState<ApiTestResult[]>([]);
   /** The log of the missing tests, apart from the pipeline run. */
   const [gapLogs, setGapLogs] = useState<LogEntry[]>([]);
   const [steps, setSteps] = useState<Steps>(INITIAL_STEPS);
   const [gaps, setGaps] = useState<Gap[]>([]);
   const [overview, setOverview] = useState<RepositoryOverview>();
-  const [selected, setSelected] = useState("");
   /** The test being written or previewed right now, one pair per source path. */
   const [live, setLive] = useState<
     Record<string, { generation?: Generation; validation?: Validation }>
@@ -133,39 +100,17 @@ export function App() {
   const [scanTruncated, setScanTruncated] = useState<ScanTruncation>();
   const [coverageStatus, setCoverageStatus] = useState<CoverageStatus>();
   const [coverageReason, setCoverageReason] = useState<string>();
-  /** The path shown in the preview pane. */
-  const [previewPath, setPreviewPath] = useState("");
-  /** Whether the preview shows the test or what the file is missing. */
-  const [previewMode, setPreviewMode] = useState<"code" | "meta">("code");
-  const [verification, setVerification] = useState<Verification>("none");
-  void verification;
   const [generated, setGenerated] = useState<GeneratedTest[]>([]);
-  /** Gaps picked for a bulk generation. */
-  const [checkedPaths, setCheckedPaths] = useState<string[]>([]);
-  /** A bulk generation waiting for a confirmation. */
-  const [pendingGenerate, setPendingGenerate] = useState<string[]>([]);
   /** What the provider says about the calls it has left. */
   const [quota, setQuota] = useState<RateLimitInfo>();
   /** The last refusal from the provider, e.g. an exhausted allocation. */
   const [providerError, setProviderError] = useState<string>();
-  /** The files whose last generation failed. */
-  const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
   const [pullUrls, setPullUrls] = useState<Record<string, string>>({});
   const [running, setRunning] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [prBusyPath, setPrBusyPath] = useState<string>();
   /** Paths whose generation is in flight right now: per-item spinner. */
   const [generatingPaths, setGeneratingPaths] = useState<string[]>([]);
-  /** The path being self-corrected from the validation dialog. */
-  const [correctingPath, setCorrectingPath] = useState<string>();
-  /** Gap paths that failed validation in the last pipeline run, for re-run. */
-  const [failedGapPaths, setFailedGapPaths] = useState<string[]>([]);
-  const [pulls, setPulls] = useState<PullSummary[]>([]);
-  const [pullsLoading, setPullsLoading] = useState(false);
-  const [pullsError, setPullsError] = useState<string>();
-  const [pullsTick, setPullsTick] = useState(0);
-  const [sandbox, setSandbox] = useState(false);
   const [toast, setToast] = useState<Toast>();
 
   const abortRef = useRef<AbortController | null>(null);
@@ -173,7 +118,6 @@ export function App() {
   const generationAbortRef = useRef<AbortController | null>(null);
   /** How many generation batches are in flight; parallel mode allows more than one. */
   const activeBatches = useRef(0);
-  const tabsRef = useRef<HTMLDivElement>(null);
   const logId = useRef(0);
   const gapLogId = useRef(0);
   /** The pipeline stage that is running, so its log entries can be filtered. */
@@ -260,46 +204,6 @@ export function App() {
     });
   }, [live]);
 
-  useEffect(() => {
-    tabsRef.current
-      ?.querySelector<HTMLElement>('[role="tab"][data-state="active"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [tab]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchCatalog()
-      .then((catalog) => {
-        if (!cancelled) setSandbox(catalog.sandbox);
-      })
-      .catch(() => {
-        // The catalog only labels the sandbox state; the app works without it.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (tab !== "pulls" || !project.repo) return;
-    let cancelled = false;
-    setPullsLoading(true);
-    setPullsError(undefined);
-    fetchPulls(project.repo)
-      .then((result) => {
-        if (!cancelled) setPulls(result.pulls);
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) setPullsError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        if (!cancelled) setPullsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tab, project.repo, pullsTick]);
-
   const handleEvent = useCallback(
     (event: RunEvent) => {
       switch (event.type) {
@@ -321,20 +225,16 @@ export function App() {
           setQuota(event.rateLimit);
           break;
         case "gaps": {
-          const ordered = folderFirst(event.gaps, project.folder);
           setGaps(event.gaps);
           if (event.totals) setScanTotals(event.totals);
           if (event.overview) setOverview(event.overview);
           if (event.coverageStatus !== undefined) setCoverageStatus(event.coverageStatus);
           if (event.coverageReason !== undefined) setCoverageReason(event.coverageReason);
-          if (ordered[0]) setSelected(ordered[0].path);
           break;
         }
         case "generation": {
           const path = event.generation.sourcePath;
           setLive((current) => ({ ...current, [path]: { generation: event.generation } }));
-          setPreviewPath(path);
-          setVerification("none");
           setPullUrls((current) => {
             if (!(path in current)) return current;
             const next = { ...current };
@@ -351,38 +251,38 @@ export function App() {
               [path]: { ...current[path], validation: event.validation },
             }));
           }
-          setVerification(verificationOf(event.validation));
           if (path) {
-            if (event.validation.ok) {
-              setFailedGapPaths((current) => current.filter((p) => p !== path));
-            } else {
-              setFailedGapPaths((current) => {
-                if (current.includes(path)) return current;
-                return [...current, path];
-              });
-            }
           }
           break;
         }
         case "api":
-          // Contract results arrive with their own log lines; the preview
-          // already shows the generated file through the generation event.
+          setApiResults((current) => {
+            const next = [...current];
+            for (const result of event.results) {
+              const index = next.findIndex(
+                (item) =>
+                  item.specPath === result.specPath &&
+                  item.method === result.method &&
+                  item.path === result.path,
+              );
+              if (index === -1) next.push(result);
+              else next[index] = result;
+            }
+            return next;
+          });
           break;
         case "result": {
           if (event.generation) {
             const path = event.generation.sourcePath;
             setLive((current) => ({ ...current, [path]: { generation: event.generation } }));
-            setPreviewPath(path);
           }
           // A run covers every gap it could: the first ready test is the one
           // that opens in the preview.
           if (event.ready?.length) {
-            setPreviewPath(event.ready[0] as string);
           }
           if (event.ok) {
             // The run stops at the pull request stage: the preview opens here
             // and the reviewer opens the PR by hand.
-            setTab("review");
             showToast({
               title: event.ready?.length ? `${event.ready.length} test(s) ready` : "Test ready",
               description: "Review the preview, then open the pull request.",
@@ -420,9 +320,9 @@ export function App() {
   );
 
   const run = async () => {
+    const active = getProject();
     if (running) return;
-    if (project.localPath) {
-      setTab("gaps");
+    if (active.localPath) {
       showToast({
         title: "Local project",
         description:
@@ -431,7 +331,7 @@ export function App() {
       });
       return;
     }
-    if (!project.repo) {
+    if (!active.repo) {
       showToast({
         title: "Repository required",
         description: "Enter owner/name or a local folder path in the header.",
@@ -442,17 +342,17 @@ export function App() {
 
     setRunning(true);
     setSteps(INITIAL_STEPS);
+    setApiResults([]);
     setLogs([]);
     setLive({});
-    setVerification("none");
-    setFailedGapPaths([]);
+    setApiResults([]);
     const controller = new AbortController();
     abortRef.current = controller;
     currentStep.current = "scan";
-    addLog("info", `EdgeSpec starting for ${project.repo}@${project.ref || "main"}.`, "scan");
+    addLog("info", `EdgeSpec starting for ${active.repo}@${active.ref || "main"}.`, "scan");
 
     try {
-      await runPipelineStream(project, settings, handleEvent, controller.signal, failedGapPaths);
+      await runPipelineStream(active, getSettings(), handleEvent, controller.signal);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (isAbortError(message)) {
@@ -483,8 +383,9 @@ export function App() {
   };
 
   const scan = async () => {
+    const active = getProject();
     if (scanning) return;
-    if (!project.repo && !project.localPath) {
+    if (!active.repo && !active.localPath) {
       showToast({
         title: "Project required",
         description: "Enter owner/name or a local folder path in the header.",
@@ -493,17 +394,28 @@ export function App() {
       return;
     }
     setScanning(true);
+    setSteps({ ...INITIAL_STEPS, scan: { status: "running" } });
     // The scan fills the Overview; the reader stays where they are.
     try {
-      const result = await scanRepo(project);
-      setGaps(result.gaps);
+      const result = await scanRepo(active);
+      setGaps([
+        ...result.gaps,
+        ...(result.coverageGaps ?? []),
+        ...(result.apiGaps ?? []),
+        ...(result.unsupported ?? []),
+      ]);
+      setSteps({
+        ...INITIAL_STEPS,
+        scan: {
+          status: "done",
+          note: `${result.gaps.length + (result.apiGaps?.length ?? 0) + (result.coverageGaps?.length ?? 0)} gaps`,
+        },
+      });
       if (result.totals) setScanTotals(result.totals);
       if (result.truncated) setScanTruncated(result.truncated);
       setCoverageStatus(result.coverageStatus ?? "not-run");
       setCoverageReason(result.coverageReason);
       if (result.overview) setOverview(result.overview);
-      const first = folderFirst(result.gaps, project.folder)[0];
-      if (first) setSelected(first.path);
       addGapLog(
         "success",
         `Scanned ${result.scanned} paths: ${result.gaps.length} untested file(s).`,
@@ -515,6 +427,7 @@ export function App() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      setSteps({ ...INITIAL_STEPS, scan: { status: "failed", note: "scan failed" } });
       addGapLog("error", message);
       showToast({ title: "Scan failed", description: message, variant: "warning" });
     } finally {
@@ -522,25 +435,35 @@ export function App() {
     }
   };
 
-  const selectedGap = gaps.find((gap) => gap.path === selected);
-  /** The scan is whole-repo; the start folder only changes the order. */
-  const displayGaps = folderFirst(gaps, project.folder);
-  const generatedPaths = generated.map((item) => item.generation.sourcePath);
-  /** A runner is configured, so the suite can really be executed. */
-  const hasRunner = sandbox || Boolean(settings.sandboxUrl.trim());
-  const readyCount = generated.filter(
-    (item) => item.validation.ok && !pullUrls[item.generation.sourcePath],
-  ).length;
-  /** The last validation result per source path, for the gap list markers. */
-  const validations: Record<string, boolean> = {};
-  for (const item of generated) validations[item.generation.sourcePath] = item.validation.ok;
-
-  /** The gaps tab previews the test of the focused gap. */
-  const gapItem = generated.find((item) => item.generation.sourcePath === selected);
-  const gapLive = live[selected];
-  const gapGeneration = gapItem?.generation ?? gapLive?.generation;
-  const gapValidation = gapItem?.validation ?? gapLive?.validation;
-  const gapPullUrl = gapItem ? pullUrls[gapItem.generation.sourcePath] : undefined;
+  /** Opens one pull request from the review queue with editable copy. */
+  const openPullForItems = async (items: GeneratedTest[], meta: PullMeta): Promise<string> => {
+    const active = getProject();
+    if (active.localPath) {
+      throw new Error("Pull requests need a GitHub repository.");
+    }
+    const result = await openPullWithFiles(
+      active,
+      getSettings(),
+      items.map((item) => ({
+        sourcePath: item.generation.sourcePath,
+        path: item.generation.testPath,
+        code: item.generation.code,
+      })),
+      meta,
+    );
+    setPullUrls((current) => {
+      const next = { ...current };
+      for (const item of items) next[item.generation.sourcePath] = result.url;
+      return next;
+    });
+    addGapLog("success", `Pull request opened with ${result.files} test file(s): ${result.url}`);
+    showToast({
+      title: `Pull request opened with ${result.files} test(s)`,
+      description: result.url,
+      variant: "success",
+    });
+    return result.url;
+  };
 
   /** The logo clears the workspace: repository, scan, tests and run. */
   const resetAll = () => {
@@ -549,16 +472,10 @@ export function App() {
     setOverview(undefined);
     setGenerated([]);
     setLive({});
-    setPreviewPath("");
-    setSelected("");
-    setCheckedPaths([]);
     setPullUrls({});
-    setPulls([]);
     setLogs([]);
     setGapLogs([]);
     setSteps(INITIAL_STEPS);
-    setVerification("none");
-    setTab("overview");
     showToast({
       title: "Everything was reset",
       description: "The repository, the scan and the generated tests are gone.",
@@ -566,30 +483,10 @@ export function App() {
     });
   };
 
-  useEffect(() => {
-    if (!project.folder) return;
-    // A saved start folder and an existing scan: open the first file in it.
-    // Scans select their own first file, so only a folder change needs this.
-    const prefix = `${project.folder.replace(/^\/+|\/+$/g, "")}/`;
-    const first = gaps.find((gap) => gap.path.startsWith(prefix));
-    if (first) setSelected(first.path);
-  }, [project.folder]);
-
   /** Opens Settings, optionally at one of its sections. */
   const openSettings = (section?: SettingsSection) => {
     setSettingsSection(section);
     setSettingsOpen(true);
-  };
-
-  const showGenerated = (item: GeneratedTest) => {
-    setPreviewPath(item.generation.sourcePath);
-    setPreviewMode("code");
-    setLive((current) => ({
-      ...current,
-      [item.generation.sourcePath]: { generation: item.generation, validation: item.validation },
-    }));
-    setVerification(verificationOf(item.validation));
-    setSelected(item.generation.sourcePath);
   };
 
   /** One generation. The caller decides whether these run in parallel. */
@@ -599,29 +496,13 @@ export function App() {
     previous?: { code: string; output: string },
   ): Promise<boolean> => {
     try {
-      // Clearing a stale error the moment a generation (re)starts, so the error
-      // icon disappears as soon as the reader asks to try again.
-      setFileErrors((current) => {
-        if (!(path in current)) return current;
-        const next = { ...current };
-        delete next[path];
-        return next;
-      });
-      const result = await regenerate(project, settings, path, signal, previous);
+      const result = await regenerate(getProject(), getSettings(), path, signal, previous);
       if (result.rateLimit) setQuota(result.rateLimit);
       setProviderError(undefined);
-      setFileErrors((current) => {
-        if (!(path in current)) return current;
-        const next = { ...current };
-        delete next[path];
-        return next;
-      });
       setLive((current) => ({
         ...current,
         [path]: { generation: result.generation, validation: result.validation },
       }));
-      setPreviewPath(path);
-      setVerification(verificationOf(result.validation));
       setPullUrls((current) => {
         if (!(path in current)) return current;
         const next = { ...current };
@@ -642,7 +523,6 @@ export function App() {
         `${previous ? "Rewrote" : "Generated"} ${result.generation.code.split("\n").length} lines for ${path}${passes}.`,
       );
       if (result.validation.ok) {
-        setFailedGapPaths((current) => current.filter((item) => item !== path));
         addGapLog("success", `${path}: validation passed${passes}.`);
       } else {
         addGapLog(
@@ -656,7 +536,6 @@ export function App() {
       const message = error instanceof Error ? error.message : String(error);
       if ((error instanceof DOMException && error.name === "AbortError") || isAbortError(message))
         return false;
-      setFileErrors((current) => ({ ...current, [path]: message }));
       if (isProviderError(message)) setProviderError(message);
       addGapLog("error", message);
       showToast({
@@ -666,34 +545,6 @@ export function App() {
       });
       return false;
     }
-  };
-
-  /** Asks the model to fix every failure in the current validation result. */
-  const correctOne = async (generation: Generation, validation: Validation) => {
-    if (validation.ok) return;
-    const path = generation.sourcePath;
-    const failed = validation.checks?.filter((check) => !check.ok && !check.skipped).length ?? 0;
-    setCorrectingPath(path);
-    addGapLog("ai", `Self-correcting ${path}${failed > 1 ? ` · fixing ${failed} errors` : ""}…`);
-    try {
-      await generateOne(path, undefined, { code: generation.code, output: validation.output });
-    } finally {
-      setCorrectingPath(undefined);
-    }
-  };
-
-  /**
-   * One test needs no confirmation; a batch does, because every file is a
-   * separate request to the model.
-   */
-  const requestGenerate = (paths: string[]) => {
-    if (paths.length === 0) return;
-    if (activeBatches.current > 0 && !settings.parallelGeneration) return;
-    if (paths.length === 1) {
-      void generatePaths(paths);
-      return;
-    }
-    setPendingGenerate(paths);
   };
 
   /**
@@ -711,9 +562,7 @@ export function App() {
     setGeneratingPaths((current) => [...new Set([...current, ...paths])]);
     if (activeBatches.current === 1) {
       setLive({});
-      setVerification("none");
     }
-    setCheckedPaths([]);
     addGapLog(
       "ai",
       settings.parallelGeneration
@@ -762,375 +611,48 @@ export function App() {
     addGapLog("warn", "Generation stopped.");
   };
 
-  /** One pull request that carries every listed test. */
-  const openPullForAll = async (items: GeneratedTest[]) => {
-    if (prBusyPath || items.length === 0) return;
-    if (project.localPath) {
-      showToast({
-        title: "Pull request needs GitHub",
-        description: "Local projects are tested in place; publish the generated test yourself.",
-        variant: "warning",
-      });
-      return;
-    }
-    setPrBusyPath("batch");
-    try {
-      const result = await openPullWithFiles(
-        project,
-        settings,
-        items.map((item) => ({
-          sourcePath: item.generation.sourcePath,
-          path: item.generation.testPath,
-          code: item.generation.code,
-        })),
-      );
-      setPullUrls((current) => {
-        const next = { ...current };
-        for (const item of items) next[item.generation.sourcePath] = result.url;
-        return next;
-      });
-      addGapLog("success", `Pull request opened with ${result.files} test file(s): ${result.url}`);
-      showToast({
-        title: `Pull request opened with ${result.files} test(s)`,
-        description: result.url,
-        variant: "success",
-      });
-      setPullsTick((tick) => tick + 1);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      addGapLog("error", message);
-      showToast({ title: "Could not open the PR", description: message, variant: "warning" });
-    } finally {
-      setPrBusyPath(undefined);
-    }
-  };
-
-  const selectGap = (gap: Gap, mode: "code" | "meta" = "code") => {
-    setSelected(gap.path);
-    setPreviewPath(gap.path);
-    setPreviewMode(mode);
-    const existing = generated.find((item) => item.generation.sourcePath === gap.path);
-    if (existing) {
-      setLive((current) => ({
-        ...current,
-        [gap.path]: { generation: existing.generation, validation: existing.validation },
-      }));
-      setVerification(verificationOf(existing.validation));
-    }
-  };
-
-  const toggleChecked = (paths: string | string[], checked: boolean) => {
-    const list = Array.isArray(paths) ? paths : [paths];
-    setCheckedPaths((current) =>
-      checked
-        ? [...new Set([...current, ...list])]
-        : current.filter((item) => !list.includes(item)),
-    );
-  };
-
-  /** Select all, or clear the selection outright. */
-  const setChecked = (paths: string[]) => setCheckedPaths(paths);
-
-  const modelName =
-    providerById(settings.provider)?.models.find((model) => model.id === settings.model)?.name ??
-    settings.model;
-  const projectLabel =
-    project.localPath || (project.folder ? `${project.repo}/${project.folder}` : project.repo);
-
   return (
-    <div className="no-scrollbar relative min-h-dvh overflow-x-hidden">
-      <div className="app-backdrop" aria-hidden="true">
-        <div className="app-aurora app-aurora-a" />
-        <div className="app-aurora app-aurora-b" />
-        <div className="app-aurora app-aurora-c" />
-      </div>
-
-      <div className="relative z-10 mx-auto max-w-7xl space-y-4 px-3 py-4 sm:px-6">
-        <Header
-          project={project}
-          settings={settings}
-          secrets={secrets}
-          running={running}
-          scanning={scanning}
-          onScan={scan}
-          onReset={resetAll}
-          quota={quota}
-          providerError={providerError}
-          onOpenSettings={() => openSettings()}
-          onOpenProvider={() => openSettings("provider")}
-          onOpenSandbox={() => openSettings("runner")}
-        />
-
-        <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="space-y-4">
-          <div
-            className="app-reveal glass-panel no-scrollbar flex items-center gap-1 overflow-x-auto rounded-2xl p-1.5"
-            style={{ animationDelay: "70ms" }}
-          >
-            <TabsList
-              ref={tabsRef}
-              className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
-            >
-              {TABS.filter(
-                (item) =>
-                  (item.id !== "review" || generated.some((entry) => entry.validation.ok)) &&
-                  (item.id !== "pulls" || SHOW_PULLS_TAB) &&
-                  (item.id !== "gaps" || gaps.length > 0),
-              ).map((item) => {
-                const Icon = item.icon;
-                const active = tab === item.id;
-                // A run in flight blinks the pipeline tab, so the state is
-                // visible from any tab.
-                const live = running && item.id === "pipeline";
-                return (
-                  <TabsTrigger
-                    key={item.id}
-                    value={item.id}
-                    className={cn(live && "tab-live text-indigo-300")}
-                  >
-                    <Icon
-                      className={cn(
-                        "size-4",
-                        active || live ? "text-indigo-400" : "text-zinc-500",
-                        live && "animate-pulse",
-                      )}
-                    />
-                    {item.label}
-                    {item.id === "gaps" && gaps.length > 0 && (
-                      <span
-                        className={cn(
-                          "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-                          active
-                            ? "border border-indigo-500/30 bg-indigo-500/20 text-indigo-300"
-                            : "bg-zinc-800 text-zinc-400",
-                        )}
-                      >
-                        {gaps.length}
-                      </span>
-                    )}
-                    {item.id === "review" && readyCount > 0 && (
-                      <span
-                        className={cn(
-                          "rounded-full px-1.5 py-0.5 font-mono text-[10px]",
-                          active
-                            ? "border border-indigo-500/30 bg-indigo-500/20 text-indigo-300"
-                            : "bg-zinc-800 text-zinc-400",
-                        )}
-                      >
-                        {readyCount}
-                      </span>
-                    )}
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
-
-            {!projectLabel && (
-              <div className="ml-auto hidden shrink-0 items-center gap-1.5 px-2 text-[11px] text-zinc-500 sm:flex">
-                <AlertCircle className="size-3.5 text-amber-400" />
-                no repository
-              </div>
-            )}
-          </div>
-
-          <TabsContent value="pipeline">
-            <Pipeline
-              steps={steps}
-              logs={logs}
-              running={running}
-              onRun={run}
-              onStop={stop}
-              scanned={!!overview}
-            />
-          </TabsContent>
-
-          <TabsContent value="overview">
-            <Overview
-              overview={overview}
-              gaps={gaps}
-              generatedPaths={generatedPaths}
-              repo={projectLabel}
-              providerId={settings.provider}
-              providerName={providerById(settings.provider)?.name ?? settings.provider}
-              modelName={modelName}
-              {...(settings.baseUrl.trim() ? { baseUrl: settings.baseUrl.trim() } : {})}
-              {...(settings.accountId.trim() ? { accountId: settings.accountId.trim() } : {})}
-              hasRunner={hasRunner}
-              {...(providerError ? { providerError } : {})}
-              onOpenGap={(gap) => {
-                selectGap(gap);
-                setTab("gaps");
-              }}
-              onOpenSettings={() => openSettings("runner")}
-              onChangeProvider={() => openSettings("provider")}
-            />
-          </TabsContent>
-
-          <TabsContent value="gaps">
-            <div className="space-y-5">
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-                <Gaps
-                  gaps={displayGaps}
-                  generatedPaths={generatedPaths}
-                  validations={validations}
-                  generating={generating}
-                  generatingPaths={generatingPaths}
-                  parallel={settings.parallelGeneration}
-                  onParallelChange={(value) => setSettings({ parallelGeneration: value })}
-                  pipelineRunning={running}
-                  {...(scanTotals ? { totals: scanTotals } : {})}
-                  {...(scanTruncated ? { truncated: scanTruncated } : {})}
-                  {...(coverageStatus ? { coverageStatus } : {})}
-                  {...(coverageReason ? { coverageReason } : {})}
-                  hasRunner={hasRunner}
-                  selected={selected}
-                  checked={checkedPaths}
-                  onSelect={(gap, mode) => selectGap(gap, mode)}
-                  onStop={stopGenerating}
-                  onToggleCheck={toggleChecked}
-                  onGenerate={requestGenerate}
-                  onSetChecked={setChecked}
-                  errors={fileErrors}
-                  repo={projectLabel}
-                  folder={project.folder}
-                  onClearFolder={() => setProject({ folder: "" })}
-                />
-                <Preview
-                  {...(selectedGap ? { gap: selectedGap } : {})}
-                  generation={gapGeneration}
-                  validation={gapValidation}
-                  {...(selectedGap && fileErrors[selectedGap.path]
-                    ? { error: fileErrors[selectedGap.path] as string }
-                    : {})}
-                  {...(gapPullUrl ? { pullUrl: gapPullUrl } : {})}
-                  busy={generatingPaths.includes(selectedGap?.path ?? "")}
-                  onRegenerate={
-                    gapGeneration ? () => void generatePaths([gapGeneration.sourcePath]) : undefined
-                  }
-                  {...(gapGeneration && gapValidation && !gapValidation.ok
-                    ? { onCorrect: () => void correctOne(gapGeneration, gapValidation) }
-                    : {})}
-                  correcting={correctingPath === gapGeneration?.sourcePath}
-                  mode={previewMode}
-                  placeholder="Pick an untested file to generate its test, or review one that is already here."
-                />
-              </div>
-
-              <TerminalPanel
-                logs={gapLogs}
-                running={generating}
-                title="Missing tests log"
-                empty="No events yet. Scan a repository, or generate a test."
-              />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="review">
-            <Review
-              items={generated}
-              pullUrls={pullUrls}
-              generatingPaths={generatingPaths}
-              {...(prBusyPath ? { busyPath: prBusyPath } : {})}
-              {...(previewPath ? { activePath: previewPath } : {})}
-              onPreview={showGenerated}
-              onOpenPull={(items) => void openPullForAll(items)}
-              onRegenerate={(item) => void generatePaths([item.generation.sourcePath])}
-            />
-          </TabsContent>
-
-          <TabsContent value="pulls">
-            <Pulls
-              pulls={pulls}
-              loading={pullsLoading}
-              {...(pullsError ? { error: pullsError } : {})}
-              repo={project.repo}
-              onRefresh={() => setPullsTick((tick) => tick + 1)}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      <SettingsDialog
-        open={settingsOpen}
-        onClose={() => {
-          setSettingsOpen(false);
-          setSettingsSection(undefined);
-        }}
+    <>
+      <AgentWorkspace
+        project={project}
         settings={settings}
-        secrets={secrets}
+        {...(quota ? { quota } : {})}
+        {...(providerError ? { providerError } : {})}
+        running={running}
+        scanning={scanning}
+        generating={generating}
+        generatingPaths={generatingPaths}
+        steps={steps}
+        logs={logs}
+        gapLogs={gapLogs}
+        gaps={gaps}
+        {...(scanTotals ? { totals: scanTotals } : {})}
+        {...(scanTruncated ? { truncated: scanTruncated } : {})}
+        {...(coverageStatus ? { coverageStatus } : {})}
+        {...(coverageReason ? { coverageReason } : {})}
+        {...(overview ? { overview } : {})}
+        generated={generated}
+        pullUrls={pullUrls}
+        apiResults={apiResults}
+        {...(toast ? { toast } : {})}
+        onRun={run}
+        onScan={scan}
+        onStop={stop}
+        onStopGenerating={stopGenerating}
+        onReset={resetAll}
+        onGenerate={generatePaths}
+        onOpenPull={openPullForItems}
+        onOpenSettings={openSettings}
+        onDismissToast={() => setToast(undefined)}
+      />
+      <SettingsSheet
+        open={settingsOpen}
+        onOpenChange={(next) => {
+          setSettingsOpen(next);
+          if (!next) setSettingsSection(undefined);
+        }}
         {...(settingsSection ? { section: settingsSection } : {})}
       />
-
-      <Dialog
-        open={pendingGenerate.length > 0}
-        onClose={() => setPendingGenerate([])}
-        title={`Generate ${pendingGenerate.length} test${pendingGenerate.length === 1 ? "" : "s"}?`}
-        description="Every selected file is a separate request to the model. It costs tokens and takes a moment."
-        footer={
-          <>
-            <Button variant="ghost" size="xs" onClick={() => setPendingGenerate([])}>
-              Cancel
-            </Button>
-            <Button
-              size="xs"
-              onClick={() => {
-                const paths = pendingGenerate;
-                setPendingGenerate([]);
-                void generatePaths(paths);
-              }}
-            >
-              <FileCode2 className="size-4" />
-              Generate {pendingGenerate.length} test{pendingGenerate.length === 1 ? "" : "s"}
-            </Button>
-          </>
-        }
-      >
-        <ul className="no-scrollbar max-h-48 space-y-1 overflow-auto font-mono text-[11px] text-zinc-400">
-          {pendingGenerate.slice(0, 12).map((path) => (
-            <li key={path} className="truncate">
-              {path}
-            </li>
-          ))}
-          {pendingGenerate.length > 12 && (
-            <li className="text-zinc-600">and {pendingGenerate.length - 12} more</li>
-          )}
-        </ul>
-      </Dialog>
-
-      {toast && (
-        <div
-          role="status"
-          className={cn(
-            "toast-in fixed right-4 bottom-4 z-50 flex max-w-sm items-start gap-3 rounded-xl border p-4 shadow-2xl backdrop-blur-xl",
-            toast.variant === "success"
-              ? "border-emerald-500/40 bg-zinc-900/90"
-              : toast.variant === "warning"
-                ? "border-amber-500/40 bg-zinc-900/90"
-                : "border-zinc-700/60 bg-zinc-900/90",
-          )}
-        >
-          {toast.variant === "success" ? (
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-400" />
-          ) : toast.variant === "warning" ? (
-            <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-400" />
-          ) : (
-            <Zap className="mt-0.5 size-4 shrink-0 text-indigo-400" />
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-zinc-100">{toast.title}</p>
-            {toast.description && (
-              <p className="mt-0.5 truncate text-[11px] text-zinc-400">{toast.description}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setToast(undefined)}
-            aria-label="Dismiss notification"
-            className="rounded p-0.5 text-zinc-500 hover:text-zinc-200"
-          >
-            <X className="size-3.5" />
-          </button>
-        </div>
-      )}
-    </div>
+    </>
   );
 }

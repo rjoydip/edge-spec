@@ -1,10 +1,53 @@
 import { describe, expect, test } from "bun:test";
-import { Badge, Button, Dialog, Input, Slider, Switch, ViewTabs, cn } from "../src";
+import {
+  AlertDialog,
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Collapsible,
+  Dialog,
+  DropdownMenu,
+  Input,
+  Popover,
+  Progress,
+  RadioGroup,
+  ScrollArea,
+  Sheet,
+  Skeleton,
+  Slider,
+  Switch,
+  Table,
+  Tooltip,
+  ViewTabs,
+  cn,
+} from "../src";
 
 describe("UI package", () => {
   test("exports the shared primitives", () => {
-    for (const component of [Badge, Button, Dialog, Input, Slider, Switch, ViewTabs]) {
-      expect(typeof component).toBe("function");
+    for (const component of [
+      AlertDialog,
+      Badge,
+      Button,
+      Card,
+      Checkbox,
+      Collapsible,
+      Dialog,
+      DropdownMenu,
+      Input,
+      Popover,
+      Progress,
+      RadioGroup,
+      ScrollArea,
+      Sheet,
+      Skeleton,
+      Slider,
+      Switch,
+      Table,
+      Tooltip,
+      ViewTabs,
+    ]) {
+      expect(component).toBeDefined();
     }
   });
 

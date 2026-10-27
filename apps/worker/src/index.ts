@@ -15,7 +15,7 @@ import {
 import { GitHub } from "@edge-spec/core/github";
 import { readRepositoryChecks, runPipeline, withChecks } from "@edge-spec/core/pipeline";
 import { detectChecks, SUPPORT_FILES } from "@edge-spec/core/ci";
-import { pullFilesOf, slugOf } from "@edge-spec/core/pr";
+import { pullFilesOf, pullMetaOf, slugOf, validBranchName } from "@edge-spec/core/pr";
 import {
   classifyTree,
   describeRepository,
@@ -703,43 +703,50 @@ app.post("/api/pull-request", async (c) => {
     const github = githubFor(c);
     const base = await github.defaultBranch(repo);
     const sha = await github.headSha(repo, base);
+    const meta = pullMetaOf(body);
+    if (meta.branch && !validBranchName(meta.branch)) {
+      throw new HttpError(400, "Enter a safe branch name other than the default branch.");
+    }
     const single = files.length === 1;
-    const branch = single
+    const fallbackBranch = single
       ? `edgespec/test-${slugOf(files[0]?.sourcePath ?? files[0]?.path ?? "tests")}-${Date.now()}`
       : `edgespec/tests-${Date.now()}`;
+    const branch = meta.branch ?? fallbackBranch;
+    const commitMessage =
+      meta.commitMessage ??
+      `test: add generated tests for ${single ? files[0]?.sourcePath : `${files.length} files`}`;
 
     await github.createBranch(repo, branch, sha);
     // Every test lands on the same branch, so a batch is one pull request.
     for (const file of files) {
-      await github.putFile(
-        repo,
-        file.path,
-        file.code,
-        `test: add generated tests for ${file.sourcePath}`,
-        branch,
-      );
+      await github.putFile(repo, file.path, file.code, commitMessage, branch);
     }
 
     const listing = files
       .map((file) => `- \`${file.path}\` (for \`${file.sourcePath}\`)`)
-      .join("\n");
+      .join("\\n");
     const url = await github.openPull(repo, {
-      title: single
-        ? `test: add unit tests for ${files[0]?.sourcePath}`
-        : `test: add unit tests for ${files.length} files`,
+      title:
+        meta.title ??
+        (single
+          ? `test: add unit tests for ${files[0]?.sourcePath}`
+          : `test: add unit tests for ${files.length} files`),
       head: branch,
       base,
-      body: [
-        "### EdgeSpec",
-        "",
-        single
-          ? `Generated unit tests for \`${files[0]?.sourcePath}\`.`
-          : `Generated unit tests for ${files.length} files.`,
-        "",
-        listing,
-        "",
-        "Review before merging — generated tests are a draft, not a proof.",
-      ].join("\n"),
+      body:
+        meta.body ??
+        [
+          "### EdgeSpec",
+          "",
+          single
+            ? `Generated unit tests for \`${files[0]?.sourcePath}\`.`
+            : `Generated unit tests for ${files.length} files.`,
+          "",
+          listing,
+          "",
+          "Review before merging — generated tests are a draft, not a proof.",
+        ].join("\\n"),
+      ...(meta.draft ? { draft: true } : {}),
     });
     return c.json({ url, files: files.length });
   } catch (err) {

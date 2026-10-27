@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { pullFilesOf, slugOf } from "../src/pr";
+import { pullFilesOf, pullMetaOf, slugOf, validBranchName } from "../src/pr";
 
 describe("pullFilesOf", () => {
   it("reads a batch of test files so one pull request can carry them", () => {
@@ -34,6 +34,57 @@ describe("pullFilesOf", () => {
     expect(pullFilesOf({ files: [{ path: "src/a.test.ts", code: "x" }] })).toEqual([
       { path: "src/a.test.ts", code: "x", sourcePath: "src/a.test.ts" },
     ]);
+  });
+});
+
+describe("pullMetaOf", () => {
+  it("keeps the provided title, body, branch, commit and draft flag", () => {
+    expect(
+      pullMetaOf({
+        title: "  test: cover auth  ",
+        body: "## Summary",
+        branch: "edgespec/tests-1",
+        commitMessage: "test: add auth tests",
+        draft: true,
+      }),
+    ).toEqual({
+      title: "test: cover auth",
+      body: "## Summary",
+      branch: "edgespec/tests-1",
+      commitMessage: "test: add auth tests",
+      draft: true,
+    });
+  });
+
+  it("omits blank fields", () => {
+    expect(pullMetaOf({ title: " ", body: "", branch: "", draft: false })).toEqual({});
+  });
+});
+
+describe("validBranchName", () => {
+  it("accepts safe feature branches", () => {
+    expect(validBranchName("edgespec/tests-2026-10-25")).toBe(true);
+    expect(validBranchName("feature/auth-tests")).toBe(true);
+  });
+
+  it("rejects protected, malformed or unsafe refs", () => {
+    for (const branch of [
+      "",
+      "main",
+      "master",
+      "HEAD",
+      "-bad",
+      "/bad",
+      "bad/",
+      "a..b",
+      "a b",
+      "a//b",
+      "refs/heads/x",
+      "x.lock",
+      "a@{1}",
+    ]) {
+      expect(validBranchName(branch)).toBe(false);
+    }
   });
 });
 
