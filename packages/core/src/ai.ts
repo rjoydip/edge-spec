@@ -3,7 +3,9 @@
  * is only ever placed in the upstream request headers.
  */
 import type { Provider } from "./catalog";
-import { HttpError, type RateLimitInfo } from "./types";
+import { lineRanges, type CoverageTarget } from "./coverage";
+import { memoryPrompt, type RepoMemory } from "./memory";
+import { HttpError, type RateLimitInfo, type TestRunner } from "./types";
 
 /** Minimal shape of the Workers AI binding; avoids pulling Worker types into DOM. */
 export interface AiBinding {
@@ -13,12 +15,23 @@ export interface AiBinding {
 export interface AiConfig {
   provider: Provider;
   model: string;
+  /** Another model of the same provider, tried once on quota/5xx. */
+  fallbackModel?: string;
   apiKey?: string;
   baseUrl?: string;
   /** Cloudflare account for Workers AI BYOK. */
   accountId?: string;
   ai?: AiBinding;
 }
+
+/** Tokens a provider says it used. Only reported numbers are counted. */
+export interface TokenUsage {
+  input: number;
+  output: number;
+}
+
+/** Stamped on every generation so a result can be attributed to a prompt. */
+export const PROMPT_VERSION = "2026-10-26.1";
 
 export interface GenerateInput {
   filePath: string;
@@ -28,17 +41,49 @@ export interface GenerateInput {
   previous?: { code: string; output: string };
   /** Advisory: the prompt asks the model to aim for this branch coverage. */
   coverageTarget?: number;
+  /** Uncovered lines and branches from the last executed report, when measured. */
+  coverageHint?: CoverageTarget;
+  /** Opt-in fast-check properties, bounded and seeded. */
+  propertyTests?: { runs: number; seed: number };
+  /** The repository's detected test runner; Bun is the fallback. */
+  runner?: TestRunner;
+  /** Approved per-repository conventions and helpers. */
+  memory?: RepoMemory;
   /** The style rules the repository formats with. */
   style?: string[];
   /** The commands CI runs, so the test satisfies them. */
   checks?: { name: string; command: string }[];
   /** Called when the provider states how many calls are left. */
   onRateLimit?: (info: RateLimitInfo) => void;
+  /** Called with the usage the provider reported for the answer it returned. */
+  onUsage?: (usage: TokenUsage) => void;
+  /** A fallback, a caveat: something the reader should see in the log. */
+  onNotice?: (text: string) => void;
   fetchImpl?: typeof fetch;
 }
 
 const SYSTEM =
   "You write focused, deterministic TypeScript unit tests. You never invent APIs that are not in the provided source.";
+
+const RUNNER_FACTS: Record<TestRunner, { label: string; importLine: string; shape?: string }> = {
+  bun: {
+    label: "Bun (`bun:test`) with TypeScript",
+    importLine: 'import { describe, it, expect, mock, beforeEach } from "bun:test";',
+  },
+  vitest: {
+    label: "Vitest with TypeScript",
+    importLine: 'import { describe, it, expect, vi, beforeEach } from "vitest";',
+  },
+  jest: {
+    label: "Jest with TypeScript",
+    importLine: 'import { describe, it, expect, jest, beforeEach } from "@jest/globals";',
+  },
+  playwright: {
+    label: "Playwright (@playwright/test) with TypeScript",
+    importLine: 'import { test, expect } from "@playwright/test";',
+    shape: "Use `test(...)` for each case; use `test.describe` only when grouping is useful.",
+  },
+};
 
 export function buildPrompt(input: GenerateInput): string {
   const correction = input.previous
@@ -55,21 +100,37 @@ export function buildPrompt(input: GenerateInput): string {
         .join("\n")}\n`
     : "";
 
+  const hint = input.coverageHint;
+  const hintLines = hint ? lineRanges(hint.uncoveredLines) : "";
+  const hintBranches = hint?.uncoveredBranches.slice(0, 5).join(", ") ?? "";
+  const targeting =
+    hintLines || hintBranches
+      ? `\nA real coverage report for this file found gaps. Target them directly:\n${hintLines ? `- Uncovered lines: ${hintLines}. Add assertions for the behavior on these lines.\n` : ""}${hintBranches ? `- Uncovered branches on lines: ${hintBranches}. Exercise both outcomes.\n` : ""}`
+      : "";
+
+  const memory = memoryPrompt(input.memory);
+
+  const properties = input.propertyTests
+    ? `\nProperty-based tests are enabled and fast-check is already a dependency:\n- Import it as \`import * as fc from "fast-check";\`.\n- Add at least one property using \`fc.assert(fc.property(...), { numRuns: ${input.propertyTests.runs}, seed: ${input.propertyTests.seed} })\`.\n- Put \`[property]\` in that \`it(...)\` name.\n- Do not catch or rewrite fast-check failures; its seed and counterexample must surface.\n`
+    : "";
+
+  const runner = RUNNER_FACTS[input.runner ?? "bun"];
+
   return `Write a complete unit test file for the source below.
 
 File: ${input.filePath}
-Runner: Bun (\`bun:test\`) with TypeScript.
+Runner: ${runner.label}.
 
 Rules:
-- Use \`import { describe, it, expect, mock, beforeEach } from "bun:test";\`
-- Import the subject from \`./${importName(input.filePath)}\` (same directory as the test).
+- Use \`${runner.importLine}\`
+${runner.shape ? `- ${runner.shape}\n` : ""}- Import the subject from \`./${importName(input.filePath)}\` (same directory as the test).
 - Mock network, timers and randomness. No real HTTP, no sleeps.
 - Cover exported functions and the edge cases a reviewer would ask for: empty input, invalid input, thrown errors, boundaries.
 - Aim for at least ${input.coverageTarget ?? 90}% branch coverage of the exported surface.
 - Keep it one file and make it pass against the source exactly as written.
 - Write the code in the style of the repository, so a formatter does not change it.
 - Do not add a coverage comment or prose outside the code block.
-${style}${checks}
+${style}${checks}${targeting}${properties}${memory}
 Source:
 \`\`\`ts
 ${input.source.slice(0, 24000)}
@@ -102,6 +163,21 @@ export function isPlausibleTest(code: string): boolean {
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+
+/** Reads the token usage each protocol reports, if it reports any. */
+function usageOf(value: unknown): TokenUsage | undefined {
+  const record = asRecord(value);
+  const usage = asRecord(record.usage ?? record.usageMetadata);
+  const input = Number(usage.prompt_tokens ?? usage.input_tokens ?? usage.promptTokenCount);
+  const output = Number(
+    usage.completion_tokens ?? usage.output_tokens ?? usage.candidatesTokenCount,
+  );
+  if (!Number.isFinite(input) && !Number.isFinite(output)) return undefined;
+  return {
+    input: Number.isFinite(input) ? input : 0,
+    output: Number.isFinite(output) ? output : 0,
+  };
+}
 
 function str(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -196,10 +272,10 @@ async function postJson(
     }
     // Provider bodies can echo request headers; keep the message short and never
     // include the key ourselves.
-    throw new HttpError(
-      response.status === 401 || response.status === 403 ? 400 : 502,
-      `AI provider returned ${response.status}: ${text.slice(0, 300)}`,
-    );
+    // Keep the distinction the fallback rule needs: a client error is final,
+    // quota and server errors are worth one model fallback.
+    const status = response.status === 429 ? 429 : response.status >= 500 ? 502 : 400;
+    throw new HttpError(status, `AI provider returned ${response.status}: ${text.slice(0, 300)}`);
   }
   let data: unknown;
   try {
@@ -288,6 +364,8 @@ async function callWorkersAi(input: GenerateInput): Promise<string> {
   if (typeof record.error === "string") {
     throw new HttpError(502, `Workers AI: ${record.error.slice(0, 300)}`);
   }
+  const usage = usageOf(result);
+  if (usage) input.onUsage?.(usage);
   const reply = textFrom(record.response ?? record.result ?? result);
   if (!reply) throw new HttpError(502, "Workers AI returned an empty reply.");
   return reply;
@@ -315,6 +393,8 @@ async function callOpenAi(input: GenerateInput): Promise<string> {
     model,
   );
   if (rateLimit) input.onRateLimit?.(rateLimit);
+  const usage = usageOf(data);
+  if (usage) input.onUsage?.(usage);
   const choices = Array.isArray(asRecord(data).choices)
     ? (asRecord(data).choices as unknown[])
     : [];
@@ -347,6 +427,8 @@ async function callAnthropic(input: GenerateInput): Promise<string> {
     model,
   );
   if (rateLimit) input.onRateLimit?.(rateLimit);
+  const usage = usageOf(data);
+  if (usage) input.onUsage?.(usage);
   const content = asRecord(data).content;
   const reply = Array.isArray(content) ? textFrom(content) : "";
   if (!reply) throw new HttpError(502, "Anthropic returned an empty reply.");
@@ -373,6 +455,8 @@ async function callGoogle(input: GenerateInput): Promise<string> {
     model,
   );
   if (rateLimit) input.onRateLimit?.(rateLimit);
+  const usage = usageOf(data);
+  if (usage) input.onUsage?.(usage);
   const candidates = asRecord(data).candidates;
   const first = Array.isArray(candidates) ? asRecord(candidates[0]) : {};
   const parts = asRecord(asRecord(first.content).parts);
@@ -393,8 +477,13 @@ async function callGoogle(input: GenerateInput): Promise<string> {
   return reply;
 }
 
-/** One generation attempt. Throws `HttpError` with a status the route can use. */
-export async function generateTest(input: GenerateInput): Promise<string> {
+/** The prompt size as an order-of-magnitude token range. Never a billed number. */
+export function estimatePromptTokens(input: GenerateInput): { low: number; high: number } {
+  const tokens = Math.ceil(buildPrompt(input).length / 4);
+  return { low: Math.round(tokens * 0.75), high: Math.round(tokens * 1.25) };
+}
+
+async function generateOnce(input: GenerateInput): Promise<string> {
   let reply: string;
   switch (input.config.provider.protocol) {
     case "workers-ai":
@@ -417,4 +506,27 @@ export async function generateTest(input: GenerateInput): Promise<string> {
     );
   }
   return code;
+}
+
+/**
+ * One generation attempt. When the chosen model is rate-limited or the
+ * provider fails, try the next model of the same provider once and say so.
+ */
+export async function generateTest(input: GenerateInput): Promise<string> {
+  try {
+    return await generateOnce(input);
+  } catch (error) {
+    const status = error instanceof HttpError ? error.status : 0;
+    const fallback = input.config.fallbackModel?.trim();
+    if (!fallback || fallback === input.config.model || (status !== 429 && status < 500)) {
+      throw error;
+    }
+    input.onNotice?.(
+      `${input.config.model} did not answer (${status}); falling back to ${fallback}.`,
+    );
+    return generateOnce({
+      ...input,
+      config: { ...input.config, model: fallback, fallbackModel: undefined },
+    });
+  }
 }

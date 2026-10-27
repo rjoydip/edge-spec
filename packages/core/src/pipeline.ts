@@ -3,17 +3,21 @@
  * route and (step by step) the durable Workflow.
  */
 import type { AiBinding } from "./ai";
-import { generateTest } from "./ai";
+import { nextModel } from "./catalog";
+import { routeModel } from "./routing";
+import { PROMPT_VERSION, estimatePromptTokens, generateTest, type TokenUsage } from "./ai";
 import type { AiConfig } from "./ai";
 import type { GitHub } from "./github";
 import { detectChecks, SUPPORT_FILES } from "./ci";
 import {
   classifyTree,
   describeRepository,
+  expectedTestPath,
   extractExports,
   parseOpenApiSpec,
   riskOf,
 } from "./scanner";
+import { generatedMarkerReason, testPathProblem } from "./policy";
 import {
   formatWithRunner,
   runRepositoryChecks,
@@ -22,6 +26,9 @@ import {
   type SandboxConfig,
 } from "./validate";
 import { sandboxRepo, runInSandbox } from "./sandbox";
+import { coverageTargetFor, type CoverageReport, type CoverageTarget } from "./coverage";
+import type { FixtureFile } from "./fixtures";
+import type { RepoMemory } from "./memory";
 import { apiGaps, contractTestsFor, parseJUnit } from "./openapi";
 import {
   HttpError,
@@ -31,9 +38,11 @@ import {
   type Generation,
   type Gap,
   type OpenApiSpec,
+  type RetestOperation,
   type RunEvent,
   type ScanResult,
   type ScanTotals,
+  type TestRunner,
   type Validation,
 } from "./types";
 
@@ -52,6 +61,18 @@ export interface PipelineInput {
   mode?: "unit" | "api" | "both";
   /** When re-running after a failure, skip scan and regenerate only these paths. */
   retryGaps?: string[];
+  /** Provider-reported tokens this run may spend; 0 or absent means no cap. */
+  maxTokens?: number;
+  /** Extra repeats after a passing suite; 0 disables flaky detection. */
+  flakyRuns?: number;
+  /** Stryker-compatible command; empty means mutation is not measured. */
+  mutationCommand?: string;
+  /** Opt-in fast-check properties; only runs when fast-check is a dependency. */
+  propertyTests?: boolean;
+  /** Route cheap models to small files and strong models to failures. */
+  autoRouteModels?: boolean;
+  /** When set, run only these failed operations and label the run a retest. */
+  retestOperations?: RetestOperation[];
 }
 
 const DEFAULT_CONCURRENCY = 3;
@@ -135,6 +156,15 @@ export interface PipelineOptions {
   sandbox?: SandboxConfig;
   /** Sent to the sandbox only when `sandbox.allowRepoToken` is set. */
   repoToken?: string;
+  /**
+   * Contract auth values. They are injected as sandbox env, never embedded in
+   * generated code, events, history or the PR.
+   */
+  authFixture?: { headers?: Record<string, string>; query?: Record<string, string> };
+  /** Recorded exchanges; contract tests replay them without a live app. */
+  fixtures?: FixtureFile;
+  /** Approved repository conventions, loaded from opt-in memory. */
+  memory?: RepoMemory;
   ai?: AiBinding;
   fetchImpl?: typeof fetch;
 }
@@ -209,6 +239,8 @@ interface RepositoryRules {
   formatter?: { name: string; command: string };
   style: string[];
   support: Record<string, string>;
+  runner: TestRunner;
+  packageManager: string;
 }
 
 export async function readRepositoryChecks(
@@ -251,6 +283,8 @@ export async function readRepositoryChecks(
     ...(detected.formatter ? { formatter: detected.formatter } : {}),
     style: detected.style,
     support,
+    runner: detected.runner,
+    packageManager: detected.packageManager,
   };
 }
 
@@ -266,6 +300,9 @@ export async function* runPipeline(
     ...(options.sandbox ? { sandbox: options.sandbox } : {}),
     ...(options.repoToken ? { token: options.repoToken } : {}),
   });
+
+  const retestOperations = input.retestOperations ?? [];
+  const retest = retestOperations.length > 0;
 
   try {
     yield log("info", `EdgeSpec run started for ${input.repo}@${input.ref}.`);
@@ -287,7 +324,9 @@ export async function* runPipeline(
       yield log("info", `Re-running ${input.retryGaps?.length ?? 0} file(s) that did not pass.`);
       allGaps = (input.retryGaps ?? []).map((path) => ({
         path,
-        testPath: path,
+        // The retry paths are sources, so the test keeps the convention path;
+        // reusing the source path would write a test over the source file.
+        testPath: expectedTestPath(path),
         exports: [],
         reason: "",
         risk: "low" as const,
@@ -299,6 +338,12 @@ export async function* runPipeline(
       const classification = classifyTree(blobs);
       const gaps = unitMode ? classification.missing : [];
       unsupported = classification.unsupported;
+      if (classification.skipped > 0) {
+        yield log(
+          "info",
+          `${classification.skipped} file(s) skipped by policy (generated, vendored, migrations).`,
+        );
+      }
 
       if (apiMode) {
         const OPENAPI_LIKE = /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i;
@@ -320,9 +365,11 @@ export async function* runPipeline(
         coverage: 0,
         api: apiGapList.length,
         unsupported: unsupported.length,
+        skipped: classification.skipped,
       };
       const overview = describeRepository(blobs);
-      if (gaps.length === 0 && apiGapList.length === 0) {
+      // A retest runs the named operations even when the scan finds no gap.
+      if (!retest && gaps.length === 0 && apiGapList.length === 0) {
         yield {
           type: "gaps",
           gaps: unsupported,
@@ -332,13 +379,27 @@ export async function* runPipeline(
         };
         yield { type: "step", step: "scan", status: "done", note: "No missing tests" };
         yield log("success", `No untested source files found in ${blobs.length} paths.`);
-        yield { type: "result", ok: true, reason: "No missing tests found." };
+        yield {
+          type: "result",
+          ok: true,
+          reason: "No missing tests found.",
+          ...(retest ? { retest: true } : {}),
+        };
         return;
       }
 
       allGaps = gaps;
       // The run covers as many gaps as the settings allow, highest risk first.
-      const target = gaps.slice(0, input.maxFiles);
+      // A gap whose test path is not a test artifact is refused, never written.
+      const target: Gap[] = [];
+      let refused = 0;
+      for (const gap of gaps.slice(0, input.maxFiles)) {
+        if (testPathProblem(gap.testPath)) refused += 1;
+        else target.push(gap);
+      }
+      if (refused > 0) {
+        yield log("warn", `Skipped ${refused} gap(s): only test paths may be generated.`);
+      }
       // Source reads are independent; a bounded pool keeps a large scan honest.
       loaded = (await poolMap(target, 6, (gap) => load(github, input.repo, gap, input.ref))).filter(
         (file): file is Loaded => Boolean(file),
@@ -357,18 +418,27 @@ export async function* runPipeline(
         coverageStatus: "not-run",
         overview,
       };
+      if (!retest) {
+        yield {
+          type: "gaps",
+          gaps: [...gaps, ...apiGapList, ...unsupported],
+          overview,
+          totals,
+          coverageStatus: scan.coverageStatus,
+        };
+      }
       yield {
-        type: "gaps",
-        gaps: [...gaps, ...apiGapList, ...unsupported],
-        overview,
-        totals,
-        coverageStatus: scan.coverageStatus,
+        type: "step",
+        step: "scan",
+        status: "done",
+        note: retest ? "retest specs" : `${gaps.length} missing`,
       };
-      yield { type: "step", step: "scan", status: "done", note: `${gaps.length} missing` };
-      yield log(
-        "warn",
-        `${gaps.length} missing, 0 coverage, ${apiGapList.length} API; this run covers ${loaded.length} missing file(s)${apiSpecs.length > 0 ? ` and ${apiSpecs.length} API spec(s)` : ""}.`,
-      );
+      if (!retest) {
+        yield log(
+          "warn",
+          `${gaps.length} missing, 0 coverage, ${apiGapList.length} API; this run covers ${loaded.length} missing file(s)${apiSpecs.length > 0 ? ` and ${apiSpecs.length} API spec(s)` : ""}.`,
+        );
+      }
     }
 
     if (retry) {
@@ -377,13 +447,124 @@ export async function* runPipeline(
       for (const path of input.retryGaps ?? []) {
         const gap = allGaps.find((g) => g.path === path);
         if (!gap) continue;
+        const problem = testPathProblem(gap.testPath);
+        if (problem) {
+          yield log("warn", `Skipped retry of ${path}: ${problem}.`);
+          continue;
+        }
         const file = await load(github, input.repo, gap, input.ref);
         if (file) loaded.push(file);
       }
     }
 
+    // A file whose header says it is generated must not get a test, even when
+    // its path looks ordinary. The scan cannot see contents; this can.
+    if (loaded.length > 0) {
+      const usable: Loaded[] = [];
+      for (const file of loaded) {
+        const marker = generatedMarkerReason(file.source);
+        if (marker) {
+          yield log("warn", `Skipped ${file.gap.path}: ${marker}.`);
+          continue;
+        }
+        usable.push(file);
+      }
+      loaded = usable;
+    }
+
     const blobsForChecks = input.retryGaps && input.retryGaps.length > 0 ? [] : blobs;
     const checks = await readRepositoryChecks(github, input.repo, input.ref, blobsForChecks);
+
+    // Property tests stay opt-in and need the dependency the prompt will name.
+    const fastCheck = /"fast-check"\s*:/.test(checks.support["package.json"] ?? "");
+    const properties =
+      input.propertyTests === true && fastCheck ? { runs: 50, seed: 42 } : undefined;
+    if (input.propertyTests === true && !fastCheck) {
+      yield log(
+        "warn",
+        "Property tests were requested, but fast-check is not a dependency; skipped.",
+      );
+    }
+
+    // Coverage is measured only when the visitor asked for it and a runner can
+    // clone the repo. This first report is the baseline for every file's delta.
+    const sandbox = options.sandbox;
+    const testCheck = checks.checks.find((check) => check.kind === "test");
+    const measureCoverage = Boolean(
+      unitMode && loaded.length > 0 && sandbox?.coverage && repoArg && testCheck,
+    );
+    let baselineCoverage: CoverageReport | undefined;
+    if (measureCoverage && sandbox && repoArg && testCheck) {
+      yield log("info", `Measuring baseline coverage: ${testCheck.command}.`);
+      const run = await runInSandbox({
+        sandbox,
+        repo: repoArg,
+        command: testCheck.command,
+        coverage: { format: "lcov" },
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+      });
+      baselineCoverage = run.coverage;
+      yield log(
+        baselineCoverage ? "info" : "warn",
+        baselineCoverage
+          ? "Baseline coverage measured."
+          : `Baseline coverage not measured${run.output ? `: ${failureSummary(run.output, 300)}` : "."}`,
+      );
+    }
+
+    // The baseline tells the prompt which lines and branches the suite missed.
+    const coverageHints = new Map<string, CoverageTarget>();
+    if (baselineCoverage) {
+      for (const file of loaded) {
+        const target = coverageTargetFor(baselineCoverage, file.gap.path);
+        if (target) coverageHints.set(file.gap.path, target);
+      }
+      if (coverageHints.size > 0) {
+        yield log(
+          "info",
+          `Coverage targeting: ${coverageHints.size} file(s) with uncovered lines or branches.`,
+        );
+      }
+    }
+
+    // The budget is provider-reported tokens. With no cap, the run still shows
+    // an estimate so the reader knows the order of magnitude before spending.
+    const cap = Math.max(0, Math.round(input.maxTokens ?? 0));
+    let spentTokens = 0;
+    let usageSeen = false;
+    let budgetStopped = false;
+    if (loaded.length > 0) {
+      let low = 0;
+      let high = 0;
+      for (const file of loaded) {
+        const hint = coverageHints.get(file.gap.path);
+        const estimate = estimatePromptTokens({
+          filePath: file.gap.path,
+          source: file.source,
+          config: aiConfig,
+          runner: checks.runner,
+          ...(options.memory ? { memory: options.memory } : {}),
+          coverageTarget: input.coverageTarget,
+          ...(hint ? { coverageHint: hint } : {}),
+          ...(properties ? { propertyTests: properties } : {}),
+          ...(checks.style.length ? { style: checks.style } : {}),
+          ...(checks.checks.length
+            ? {
+                checks: checks.checks.map((check) => ({
+                  name: check.name,
+                  command: check.command,
+                })),
+              }
+            : {}),
+        });
+        low += estimate.low;
+        high += estimate.high;
+      }
+      yield log(
+        "info",
+        `Estimated input tokens: ${low}–${high} for ${loaded.length} file(s)${cap > 0 ? ` · budget ${cap}` : " · no budget cap"}.`,
+      );
+    }
 
     const ready = new Set<string>();
     // A sandbox may cap its own runs; honour the tighter of the two.
@@ -400,6 +581,28 @@ export async function* runPipeline(
       const runFile = async (file: Loaded, index: number): Promise<boolean> => {
         const { gap, source } = file;
         const position = `${index + 1}/${loaded.length}`;
+        const coverageHint = coverageHints.get(gap.path);
+        const routedConfig = (retry: boolean) => {
+          if (!input.autoRouteModels) return aiConfig;
+          const model =
+            routeModel(aiConfig.provider, { sourceLength: source.length, retry }) ?? aiConfig.model;
+          const fallback = nextModel(aiConfig.provider, model);
+          return { ...aiConfig, model, ...(fallback ? { fallbackModel: fallback } : {}) };
+        };
+        const generateConfig = routedConfig(false);
+        if (input.autoRouteModels) {
+          emit(log("ai", `Routed ${gap.path} to ${generateConfig.model}.`));
+        }
+
+        if (cap > 0 && spentTokens >= cap) {
+          if (!budgetStopped) {
+            budgetStopped = true;
+            emit(
+              log("warn", `Token budget reached (${spentTokens}/${cap}); no new files will start.`),
+            );
+          }
+          return false;
+        }
 
         emit({
           type: "step",
@@ -415,8 +618,26 @@ export async function* runPipeline(
         const generateInput = {
           filePath: gap.path,
           source,
-          config: aiConfig,
+          config: generateConfig,
+          runner: checks.runner,
+          ...(options.memory ? { memory: options.memory } : {}),
           coverageTarget: input.coverageTarget,
+          ...(coverageHint ? { coverageHint } : {}),
+          ...(properties ? { propertyTests: properties } : {}),
+          onUsage: (usage: TokenUsage) => {
+            usageSeen = true;
+            spentTokens += usage.input + usage.output;
+            if (cap > 0 && spentTokens >= cap && !budgetStopped) {
+              budgetStopped = true;
+              emit(
+                log(
+                  "warn",
+                  `Token budget reached (${spentTokens}/${cap}); finishing the current file.`,
+                ),
+              );
+            }
+          },
+          onNotice: (text: string) => emit(log("warn", text)),
           onRateLimit: (info: RateLimitInfo) => {
             rateLimit = info;
           },
@@ -477,8 +698,9 @@ export async function* runPipeline(
           testPath: gap.testPath,
           code,
           provider: aiConfig.provider.id,
-          model: aiConfig.model,
+          model: generateConfig.model,
           corrected: false,
+          promptVersion: PROMPT_VERSION,
           source,
         };
         emit({ type: "generation", generation });
@@ -506,6 +728,13 @@ export async function* runPipeline(
           strictTypes: input.strictTypes,
           ...(options.sandbox ? { sandbox: options.sandbox } : {}),
           ...(repoArg ? { repo: repoArg } : {}),
+          ...(measureCoverage ? { measureCoverage: true } : {}),
+          ...(baselineCoverage ? { baselineCoverage } : {}),
+          flakyRuns: input.flakyRuns ?? 0,
+          runner: checks.runner,
+          packageManager: checks.packageManager,
+          ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
+          requireProperties: Boolean(properties),
           ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         });
 
@@ -555,7 +784,7 @@ export async function* runPipeline(
           emit(log("error", `${gap.path} validation failed: ${failureSummary(validation.output)}`));
         }
 
-        while (!validation.ok && attempt < input.maxRetries) {
+        while (!validation.ok && attempt < input.maxRetries && !(cap > 0 && spentTokens >= cap)) {
           attempt += 1;
           emit({
             type: "step",
@@ -567,12 +796,31 @@ export async function* runPipeline(
           emit(log("ai", `Self-correction ${attempt}/${input.maxRetries}...`));
 
           let retryRateLimit: RateLimitInfo | undefined;
+          const retryConfig = routedConfig(true);
           const retryGenerateInput = {
             filePath: gap.path,
             source,
-            config: aiConfig,
+            config: retryConfig,
+            runner: checks.runner,
+            ...(options.memory ? { memory: options.memory } : {}),
             previous: { code, output: validation.output },
             coverageTarget: input.coverageTarget,
+            ...(coverageHint ? { coverageHint } : {}),
+            ...(properties ? { propertyTests: properties } : {}),
+            onUsage: (usage: TokenUsage) => {
+              usageSeen = true;
+              spentTokens += usage.input + usage.output;
+              if (cap > 0 && spentTokens >= cap && !budgetStopped) {
+                budgetStopped = true;
+                emit(
+                  log(
+                    "warn",
+                    `Token budget reached (${spentTokens}/${cap}); finishing the current file.`,
+                  ),
+                );
+              }
+            },
+            onNotice: (text: string) => emit(log("warn", text)),
             onRateLimit: (info: RateLimitInfo) => {
               retryRateLimit = info;
             },
@@ -611,7 +859,7 @@ export async function* runPipeline(
           }
           if (retryCode === undefined) throw retryGenerateError;
           code = retryCode;
-          generation = { ...generation, code, corrected: true };
+          generation = { ...generation, code, corrected: true, model: retryConfig.model };
           emit({ type: "generation", generation });
           if (retryRateLimit) emit({ type: "quota", rateLimit: retryRateLimit });
 
@@ -623,6 +871,13 @@ export async function* runPipeline(
             strictTypes: input.strictTypes,
             ...(options.sandbox ? { sandbox: options.sandbox } : {}),
             ...(repoArg ? { repo: repoArg } : {}),
+            ...(measureCoverage ? { measureCoverage: true } : {}),
+            ...(baselineCoverage ? { baselineCoverage } : {}),
+            flakyRuns: input.flakyRuns ?? 0,
+            runner: checks.runner,
+            packageManager: checks.packageManager,
+            ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
+            requireProperties: Boolean(properties),
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
           });
           const retryChecks = await runRepositoryChecks({
@@ -692,8 +947,28 @@ export async function* runPipeline(
     }
 
     if (apiMode && apiSpecs.length > 0) {
+      if (retest) {
+        yield log(
+          "info",
+          `Retest: only ${retestOperations.length} failed endpoint(s), not a fresh scan.`,
+        );
+      }
       for (const [index, spec] of apiSpecs.entries()) {
-        const contract = contractTestsFor(spec);
+        const contract = contractTestsFor(
+          spec,
+          retest
+            ? (operation) =>
+                retestOperations.some(
+                  (item) =>
+                    item.specPath === spec.path &&
+                    item.method.toUpperCase() === operation.method.toUpperCase() &&
+                    item.path === operation.path,
+                )
+            : undefined,
+          { auth: Boolean(options.authFixture), negative: true },
+        );
+        // A retest runs no operation from a spec that had no failures.
+        if (contract.operations.length === 0) continue;
         const position = `${index + 1}/${apiSpecs.length}`;
 
         yield {
@@ -752,8 +1027,11 @@ export async function* runPipeline(
           };
         } else {
           const started = Date.now();
-          const sandbox: SandboxConfig = { ...options.sandbox };
-          const readyUrl = options.sandbox.server?.readyUrl;
+          // Replay does not need the app booted; the generated mock serves it.
+          const sandbox: SandboxConfig = options.fixtures
+            ? { ...options.sandbox, server: undefined }
+            : { ...options.sandbox };
+          const readyUrl = sandbox.server?.readyUrl;
           if (readyUrl) {
             try {
               const base = new URL(readyUrl).origin;
@@ -762,9 +1040,26 @@ export async function* runPipeline(
               // A malformed ready URL is the runner's problem, not ours.
             }
           }
+          const contractEnv = {
+            ...(options.authFixture
+              ? {
+                  ...(options.authFixture.headers &&
+                  Object.keys(options.authFixture.headers).length > 0
+                    ? { EDGESPEC_AUTH_HEADERS: JSON.stringify(options.authFixture.headers) }
+                    : {}),
+                  ...(options.authFixture.query && Object.keys(options.authFixture.query).length > 0
+                    ? { EDGESPEC_AUTH_QUERY: JSON.stringify(options.authFixture.query) }
+                    : {}),
+                }
+              : {}),
+            ...(options.fixtures ? { EDGESPEC_FIXTURES: JSON.stringify(options.fixtures) } : {}),
+          };
           const run = await runInSandbox({
             sandbox,
             ...(repoArg ? { repo: repoArg } : {}),
+            ...(Object.keys(contractEnv).length > 0
+              ? { env: { ...sandbox.env, ...contractEnv } }
+              : {}),
             files: {
               [spec.path]: spec.content ?? "",
               [contract.path]: contract.code,
@@ -795,7 +1090,7 @@ export async function* runPipeline(
           }
         }
 
-        yield { type: "api", results };
+        yield { type: "api", results, ...(retest ? { retest: true } : {}) };
         yield { type: "validation", validation, sourcePath: spec.path };
         const passed = results.filter((result) => result.status === "passed").length;
         yield {
@@ -822,10 +1117,39 @@ export async function* runPipeline(
       ...(apiMode ? apiSpecs.map((spec) => spec.path).filter((path) => ready.has(path)) : []),
     ];
 
+    if (cap > 0 && !usageSeen && loaded.length > 0) {
+      yield log(
+        "warn",
+        "The provider did not report token usage; the token budget could not be enforced.",
+      );
+    }
+
+    if (budgetStopped) {
+      yield { type: "step", step: "pull-request", status: "failed", note: "Budget" };
+      yield log(
+        "warn",
+        `Token budget reached after ${spentTokens} reported tokens. ${ordered.length} test(s) from the partial run are ready.`,
+      );
+      yield {
+        type: "result",
+        ok: false,
+        reason: `Token budget reached (${spentTokens}/${cap} tokens).`,
+        ready: ordered,
+        ...(retest ? { retest: true } : {}),
+      };
+      return;
+    }
+
     if (ordered.length === 0) {
       yield { type: "step", step: "pull-request", status: "failed", note: "No PR" };
       yield log("error", "No test passed the check. Open Missing tests to look at them.");
-      yield { type: "result", ok: false, reason: "Validation did not pass.", ready: ordered };
+      yield {
+        type: "result",
+        ok: false,
+        reason: "Validation did not pass.",
+        ready: ordered,
+        ...(retest ? { retest: true } : {}),
+      };
       return;
     }
 
@@ -841,7 +1165,12 @@ export async function* runPipeline(
       "success",
       `${ordered.length} test(s) ready. Review the preview, then open the pull request.`,
     );
-    yield { type: "result", ok: true, ready: ordered };
+    yield {
+      type: "result",
+      ok: true,
+      ready: ordered,
+      ...(retest ? { retest: true } : {}),
+    };
   } catch (error) {
     const message =
       error instanceof HttpError
@@ -851,6 +1180,6 @@ export async function* runPipeline(
           : String(error);
     yield log("error", message);
     yield { type: "error", message };
-    yield { type: "result", ok: false, reason: message };
+    yield { type: "result", ok: false, reason: message, ...(retest ? { retest: true } : {}) };
   }
 }

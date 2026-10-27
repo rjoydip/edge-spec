@@ -4,6 +4,8 @@ The reference self-hosted runner for the EdgeSpec sandbox contract. It is a
 plain Bun HTTP service: no Dockerfile, no image build.
 
 ```bash
+bun test packages/sandbox
+bun run --filter @edge-spec/sandbox typecheck
 bun run sandbox                        # 127.0.0.1:8788, auto-detect
 SANDBOX_PROVIDER=docker bun run sandbox
 SANDBOX_PROVIDER=podman SANDBOX_IMAGE=node:22 bun run sandbox
@@ -23,6 +25,7 @@ directory; hosted providers upload the workspace into a microVM and download
 the requested files afterwards. No Dockerfile is added. A hosted template or
 image must include `git` and the runtime the repository needs, or `setup` fails
 as an environment error.
+
 `SANDBOX_ALLOW_UNISOLATED=1` is a development escape hatch and must never be
 used on a shared host.
 

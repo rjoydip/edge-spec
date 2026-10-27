@@ -3,7 +3,9 @@ import {
   classifyCommand,
   detectChecks,
   detectPackageManager,
+  detectRunner,
   detectStyle,
+  testCommandFor,
   workflowCommands,
 } from "../src/ci";
 
@@ -113,6 +115,49 @@ describe("classifyCommand", () => {
     expect(classifyCommand("bun test")).toBe("test");
     expect(classifyCommand("bun install")).toBeUndefined();
     expect(classifyCommand("echo hello")).toBeUndefined();
+  });
+});
+
+describe("detectRunner", () => {
+  it("reads the runner from dependencies or config files", () => {
+    expect(
+      detectRunner({ paths: ["package.json"], packageJson: manifest({}, { vitest: "^2" }) }),
+    ).toBe("vitest");
+    expect(
+      detectRunner({ paths: ["jest.config.ts", "package.json"], packageJson: manifest({}) }),
+    ).toBe("jest");
+    expect(
+      detectRunner({
+        paths: ["package.json"],
+        packageJson: manifest({}, { "@playwright/test": "^1" }),
+      }),
+    ).toBe("playwright");
+    expect(detectRunner({ paths: ["package.json", "bun.lock"] })).toBe("bun");
+  });
+
+  it("prefers Playwright, then Vitest, then Jest", () => {
+    expect(
+      detectRunner({
+        paths: ["vitest.config.ts", "playwright.config.ts"],
+        packageJson: manifest({}, { vitest: "^2", "@playwright/test": "^1" }),
+      }),
+    ).toBe("playwright");
+  });
+});
+
+describe("testCommandFor", () => {
+  it("uses the runner and package manager", () => {
+    expect(testCommandFor("bun", "'src/a.test.ts'", "bun")).toBe("bun test 'src/a.test.ts'");
+    expect(testCommandFor("vitest", "'src/a.test.ts'", "npm")).toBe(
+      "npx vitest run 'src/a.test.ts'",
+    );
+    expect(testCommandFor("jest", "'src/a.test.ts'", "pnpm")).toBe(
+      "pnpm exec jest 'src/a.test.ts' --runInBand",
+    );
+    expect(testCommandFor("playwright", "'e2e/a.spec.ts'", "bun")).toBe(
+      "bunx playwright test 'e2e/a.spec.ts'",
+    );
+    expect(testCommandFor("vitest", "", "npm")).toBe("npx vitest run");
   });
 });
 

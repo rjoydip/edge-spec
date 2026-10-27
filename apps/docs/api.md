@@ -184,6 +184,16 @@ The `overview` also carries the commands the repository runs in CI, read from
 the `package.json` scripts and the `run:` steps of `.github/workflows/*.yml`,
 and the formatter it uses. A run measures the generated test against them.
 
+When no OpenAPI document exists, the scan checks whether the repository is
+API-based (Hono, Express, Elysia, Fastify, Koa, NestJS, Next.js, or route calls
+in source). If it is, EdgeSpec infers a spec from route declarations, stores it
+as `openapi.inferred.json`, and adds it to `overview.openApiSpecs` with
+`inferred: true`. `overview.apiFramework` names the detected framework and
+`overview.apiHealth` is the static endpoint matrix (`status` is `covered` or
+`missing-test`, plus auth, request-body and parameter facts). The matrix is
+built from the tree, not from live HTTP calls; no app is started by a scan.
+Contract gaps from an inferred spec say so in their reason.
+
 Response:
 
 ```json
@@ -257,6 +267,52 @@ Behaviour:
 
 ---
 
+## `POST /api/impact`
+
+Returns the changed files' direct and transitive test dependents and the import
+chain that selected each one. It is the same bounded graph the PR check uses.
+
+```json
+{ "repo": "acme/api", "ref": "main", "changedPaths": ["src/util.ts"] }
+```
+
+```json
+{
+  "tests": [
+    { "test": "src/auth.test.ts", "via": ["src/util.ts", "src/auth.ts", "src/auth.test.ts"] }
+  ],
+  "partial": false
+}
+```
+
+`partial: true` means the 200-file fetch cap (or an unreadable file) cut the
+graph short; it never means “no dependents”.
+
+---
+
+## `POST /api/record`
+
+Records HTTP exchanges from a running app once, for later replay without it.
+Requires a sandbox runner and the app origin.
+
+```json
+{
+  "repo": "acme/api",
+  "ref": "main",
+  "specPath": "docs/openapi.yaml",
+  "baseUrl": "https://staging.example.test",
+  "authFixture": { "headers": { "Authorization": "Bearer …" } }
+}
+```
+
+The route generates the deterministic contract suite, runs it with
+`EDGESPEC_RECORD_FILE=recorded-fixtures.json`, and returns
+`{enabled:true, specPath, fixtures}`. Fixture bodies are returned to the caller;
+they are not logged or stored by the deployment. Pass the returned `fixtures` to
+`POST /api/run` (or keep the JSON wherever CI can read it; R2 is recommended).
+
+---
+
 ## `POST /api/coverage`
 
 Runs the repository's own test command in a sandbox runner with coverage, and
@@ -324,6 +380,14 @@ Request:
   "accountId": "0123456789abcdef0123456789abcdef",
   "maxRetries": 2,
   "maxFiles": 10,
+  "maxTokens": 0,
+  "flakyRuns": 2,
+  "mutationCommand": "npx stryker run --mutate {file}",
+  "propertyTests": false,
+  "authFixture": {
+    "headers": { "Authorization": "Bearer …" },
+    "query": { "api_key": "…" }
+  },
   "concurrency": 3,
   "mode": "unit",
   "strictTypes": true,
@@ -412,6 +476,48 @@ Flow details:
 - A run covers the first `maxFiles` gaps, highest risk first. Every file it
   covers streams its own `generation` and `validation` events, and `ready`
   lists the source paths whose tests passed.
+- `maxTokens` caps the provider-reported tokens for the run (`0` = no cap).
+  Reaching it ends the run with `result.ok: false`, the reason, and any
+  tests that already passed. With no cap, the run still logs an estimated
+  input-token range before spending.
+- `flakyRuns` repeats a passing suite (default 2). A pass/fail split returns
+  `validation {ok:false, verified:false, flaky:true, runs}`; it is quarantined,
+  never counted as verified.
+- `mutationCommand` runs only after a stable pass and only when set. The result
+  is `validation.mutation` with either `{status:"measured", killed, survived,
+total, score, command, budgetStopped?}` or `{status:"not-measured", reason}`.
+  No report means not measured; a timeout is a labelled budget stop.
+- `authFixture` carries optional `headers`/`query` values for contract tests.
+  They are injected as `EDGESPEC_AUTH_HEADERS`/`EDGESPEC_AUTH_QUERY` into the
+  sandbox environment only — never into generated code, events, run history or
+  the PR. Without a fixture, a secured operation is skipped with that reason.
+  Contract tests also exercise a missing required body field, a wrong scalar
+  type, and an unauthenticated request; the generated file contains only
+  placeholder env reads.
+- Every AI generation carries `promptVersion`; the PR body prints it so a
+  result is attributable to a prompt.
+- The test runner is detected per repository (Playwright, Vitest, Jest, then
+  Bun). Generated imports and validation commands use that runner; there is no
+  runner override in the request.
+- `autoRouteModels` is opt-in cheap-first routing; small first attempts use the
+  cheapest tier, retries and large files use the strongest. Each generation
+  event names the model actually used.
+- `propertyTests` is opt-in and only applied when the repository depends on
+  `fast-check`. Properties must be `[property]`-labelled with `numRuns: 50` and
+  `seed: 42`; static validation fails otherwise, and fast-check surfaces the
+  seed/counterexample on a failure.
+- `fixtures` (a recorded fixture file) makes the contract suite start a tiny
+  in-test mock server from `EDGESPEC_FIXTURES`; no live app is needed. If a
+  deliberate spec change makes a recorded status invalid, the replay fails.
+  Record with `POST /api/record`.
+- Quota and 5xx responses fall back once to the next model of the same
+  provider; the fallback appears as a `warn` log.
+- A retest sends `retestOperations: [{specPath, method, path}]`. The run is
+  forced to API mode, builds a contract file holding only those operations, and
+  labels its `api` and `result` events with `retest: true`.
+- Failed contract results carry `diagnosis` (`assertion`, `timeout`, `boot`,
+  `missing-fixture`, `network`, `unknown`) plus `expected`/`actual` when the
+  runner printed them.
 - If an error occurs after streaming starts, the HTTP status is already 200;
   clients must inspect the events, not just the status.
 
@@ -482,9 +588,30 @@ Request:
     {
       "sourcePath": "src/math.ts",
       "path": "src/math.test.ts",
-      "code": "import { describe, it, expect } from \"bun:test\";\n…"
+      "code": "import { describe, it, expect } from \"bun:test\";\n…",
+      "provider": "openai",
+      "model": "gpt-6-astra",
+      "verified": true,
+      "corrected": false,
+      "checks": [
+        { "name": "bun test", "kind": "test", "command": "bun test", "ok": true, "durationMs": 840 }
+      ],
+      "coverage": {
+        "status": "measured",
+        "path": "src/math.ts",
+        "lines": { "before": 1, "after": 4, "delta": 3, "total": 10 }
+      }
     }
   ],
+  "skipped": [{ "method": "GET", "path": "/users", "reason": "missing auth fixture" }],
+  "policy": {
+    "draftOnly": true,
+    "maxFiles": 10,
+    "allowedPaths": ["tests/**", "src/**/*.test.ts"],
+    "minCoverageDelta": 1,
+    "labels": ["tests"],
+    "reviewers": ["octocat"]
+  },
   "strictTypes": true
 }
 ```
@@ -507,8 +634,160 @@ Behaviour:
   branch head.
 - Every test of a batch is committed to the same branch, so the review covers
   all of them at once.
-- Commit message and PR body identify EdgeSpec and the source files.
+- The default PR body is built from the provenance the request carries: model,
+  executed vs static verification, checks with durations, measured coverage,
+  self-corrections, skipped contract operations, and the test-only guarantee.
+  Send `body` to replace it with your own copy.
+- Check output is never stored or echoed; only the check name, command,
+  duration and outcome are used.
+- `policy` gates run before any branch or commit exists. A violation returns
+  `403` with `Policy blocked this pull request: <gate> — <reason>`. Gates are
+  kill switch, draft-only, max files, allowed test-path globs, and a measured
+  minimum coverage delta (unmeasured never satisfies it). Labels and reviewers
+  are applied after opening and never fail the pull request.
 - Requires a GitHub token with permission to push and open PRs.
+
+---
+
+## `GET | PATCH /api/backlog?repo=owner/name`
+
+Durable test-debt items (D1). A full scan upserts every gap and closes items
+that disappeared; a returning closed item reopens. Explicit `accepted`,
+`rejected` and `ignored` states survive later scans. `owner` comes from
+`CODEOWNERS` when one exists.
+
+`GET` returns `{enabled, items}` with `path`, `kind`, `state`, `owner`, `risk`,
+`reason`, `firstSeen`, `lastSeen`, `closedAt` and `lastRunId`.
+
+`PATCH` changes one item:
+
+```json
+{ "path": "src/auth/token.ts", "state": "accepted", "owner": "@security" }
+```
+
+Valid states are `open`, `accepted`, `rejected`, `ignored`, and `closed`. Without
+`RUNS_DB` the list is empty and writes return 501.
+
+---
+
+## `GET | PUT | DELETE /api/memory?repo=owner/name`
+
+Opt-in repository memory (D1): approved conventions, helper paths, fixture
+paths and the test naming convention. It is short strings only — never source.
+
+```json
+{
+  "naming": "sibling .test.ts",
+  "conventions": ["use the repository test helper"],
+  "helpers": ["src/test-utils.ts"],
+  "fixtures": ["tests/fixtures/users.json"]
+}
+```
+
+`GET` returns `{enabled, memory}`; `PUT` sanitizes and stores; `DELETE` removes
+it. Without `RUNS_DB` the list is empty and writes return 501. The memory is
+loaded into `/api/run`, `/api/generate`, and the webhook workflow prompt.
+
+---
+
+## `GET | PUT | DELETE /api/schedules?repo=owner/name`
+
+Opt-in scheduled drift scans (D1). The cron runs daily; each repository decides
+whether it is due from `intervalDays` (1–30, default 7).
+
+```json
+{ "repo": "acme/api", "intervalDays": 7, "enabled": true, "installationId": 42 }
+```
+
+`GET` returns `{enabled, schedules}`; `PUT` upserts the schedule (`installationId`
+optional, used to mint an App token); `DELETE` removes it. Without `RUNS_DB` the
+list is empty and writes return 501.
+
+A due scan keeps a snapshot of untested paths and OpenAPI `METHOD /path` names.
+The first run is a baseline. Later runs compare against it; when anything
+changed, one summary is POSTed to `DRIFT_WEBHOOK_URL` (Slack-compatible `text`)
+with an optional `x-edgespec-secret` header, and written to R2 when the
+`ARTIFACTS` binding exists. A quiet repository sends nothing and opens nothing.
+The scan never opens a pull request: the summary is the action.
+
+---
+
+## `GET | PUT | DELETE /api/policies?repo=owner/name`
+
+Opt-in server-side policy for CI (the same D1 database as run history). The
+dashboard keeps its own copy in `localStorage` and sends it per request, so this
+endpoint is for webhook runs.
+
+```json
+{
+  "draftOnly": true,
+  "maxFiles": 10,
+  "allowedPaths": ["tests/**"],
+  "minCoverageDelta": 1,
+  "labels": ["tests"],
+  "reviewers": ["octocat"]
+}
+```
+
+`GET` returns `{enabled, policy}`; `PUT` stores the sanitized policy; `DELETE`
+removes it. Without a `RUNS_DB` binding the routes answer `enabled: false` or 501. The webhook workflow reads this policy before creating a pull request and
+returns `status: "blocked"` with the gate reason when it fails.
+
+---
+
+## `GET | PUT /api/workspace`
+
+One workspace per deployment; there is no multi-user account model. `GET`
+returns `{enabled, workspace}`; without `RUNS_DB` it answers `enabled: false`.
+The record is created lazily on first read.
+
+```json
+{
+  "enabled": true,
+  "workspace": {
+    "id": "default",
+    "name": "Default workspace",
+    "retentionDays": 30,
+    "createdAt": 1760000000000,
+    "updatedAt": 1760000000000
+  }
+}
+```
+
+`PUT` accepts `{name?, retentionDays?}`. The name is trimmed to 100 characters;
+retention is clamped to 1–365 days. Updating the workspace writes an audit event.
+
+---
+
+## `GET /api/audit?repo=owner/name&limit=100`
+
+Recent audit events, newest first. `repo` is optional and filters by
+`owner/name`; `limit` defaults to 100 and is clamped to 200. Without `RUNS_DB`
+the route answers `{enabled: false, events: []}`.
+
+```json
+{
+  "enabled": true,
+  "events": [
+    {
+      "id": 12,
+      "repo": "acme/api",
+      "actor": "github-app",
+      "action": "pr_opened",
+      "detail": { "url": "https://github.com/acme/api/pull/42", "files": 1 },
+      "createdAt": 1760000000000
+    }
+  ]
+}
+```
+
+Actions include `pr_opened`, `pr_blocked`, `pr_check`, `command`,
+`policy_updated`, `memory_updated`, `schedule_updated`, `schedule_deleted`,
+`backlog_updated`, `workspace_updated`, `drift_scan` and `retention_purge`.
+Detail is structural only: keys matching token/key/secret/password/
+authorization/cookie are dropped recursively, so a key or token is never
+stored. Actors are `dashboard`, `github-app`, `cron`, or a GitHub login for PR
+commands.
 
 ---
 
@@ -539,21 +818,101 @@ without one.
 
 ## `POST /webhook`
 
-GitHub webhook receiver for automation. Configure it for **push** events (the
-handler does not branch on event type, so subscribe only to the events you want
-runs for).
+GitHub webhook receiver for automation. Subscribe to **push** and
+**pull_request** events.
 
 Behaviour:
 
 1. If `GITHUB_WEBHOOK_SECRET` is set, verifies `x-hub-signature-256` against the
    raw body. Invalid → 401.
-2. Reads `repository.full_name` and `ref` (`refs/heads/x` → `x`; defaults to
-   `main`).
-3. Starts `TestGenerationWorkflow` with `{repo, ref}` and returns
-   `202 {"workflowId":"…"}`.
+2. Reads `repository.full_name` and `installation.id`.
+3. `push` starts `TestGenerationWorkflow` with `{repo, ref, event:"push",
+installationId?}` and returns `202 {"workflowId":"…"}`.
+4. `pull_request` (only `opened`, `synchronize`, `reopened`) starts the same
+   workflow in check mode with `{repo, ref:<head sha>, pullRequest, headSha,
+event:"pull_request"}`. Other actions return `202 {"ignored":"…"}` without
+   starting work.
+5. The workflow mints a repo-scoped installation token when
+   `GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY` are configured, cached until just
+   before expiry; otherwise it uses `GITHUB_TOKEN`.
 
-The workflow uses the deployment's Workers AI binding and `GITHUB_TOKEN`; it
-never receives visitor keys. Missing bindings return 501.
+Check mode is advisory: it scans the changed files, reports changed sources
+without tests, runs their existing tests when a runner is configured, and
+upserts one check run plus one marked comment. Re-runs update those instead of
+adding more. It never commits, generates a test, or opens a PR. It runs the
+changed files plus their direct and transitive test dependents from a bounded
+import graph (test files and their relative imports, up to 200 files); the
+summary says when the graph is partial. Without a runner the check is `neutral`
+and its annotations say static only.
+
+`issue_comment` events support three commands in a pull request comment:
+`/edgespec retest`, `/edgespec coverage`, and `/edgespec explain <file|METHOD
+/path>`. Only `OWNER`, `MEMBER` and `COLLABORATOR` comments are accepted; bots
+and outsiders are ignored. One command per user, pull request and command is
+accepted per 60-second window (D1 when configured, per-isolate otherwise). Each
+accepted command posts exactly one reply and upserts the same EdgeSpec check.
+`retest` re-runs the changed files' existing tests, `coverage` reports measured
+LCOV line rates from one run (never a delta), and `explain` answers from the
+tree, scanner and OpenAPI spec without spending AI. Missing arguments or
+unrelated comments are ignored with 202.
+
+The workflow uses the deployment's Workers AI binding and never receives
+visitor keys. Missing bindings return 501; no credential returns a failed run
+with a readable error.
+
+---
+
+## Run history
+
+History is optional and lives in D1 (`RUNS_DB`). Without the binding every
+route below answers `{ "enabled": false }` and nothing is stored. Summaries are
+kept in D1; raw checks and coverage facts are kept in R2 (`ARTIFACTS`); generated
+test source is never stored in either.
+
+### `GET /api/runs?repo=owner/name&limit=20`
+
+Lists recent runs for one repository, newest first.
+
+```json
+{
+  "enabled": true,
+  "runs": [
+    {
+      "id": "01234567-89ab-cdef-0123-456789abcdef",
+      "repo": "acme/api",
+      "ref": "main",
+      "status": "ready",
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "startedAt": 1793000000000,
+      "finishedAt": 1793000012000,
+      "totals": { "missing": 4, "coverage": 0, "api": 0, "unsupported": 0, "skipped": 0 }
+    }
+  ]
+}
+```
+
+### `DELETE /api/runs?repo=owner/name`
+
+Deletes that repository's runs, their files, and their stored R2 bundles.
+Returns `{ "deleted": 3 }`. `501` means the deployment has no D1 binding.
+
+### `GET /api/runs/:id/files`
+
+Returns one run and its per-file rows (`sourcePath`, `testPath`, `decision`,
+`verified`, `checks`, optional `coverage`). `404` when the id is unknown.
+History ids must be 8–64 URL-safe characters.
+
+### `POST /api/runs/:id/decisions`
+
+Records review decisions for files in a run.
+
+```json
+{ "decisions": [{ "sourcePath": "src/a.ts", "decision": "accepted" }] }
+```
+
+`decision` is `accepted`, `rejected` or `pending`; up to 200 entries are
+applied. Unknown paths are ignored. Returns `{ "updated": 1 }`.
 
 ---
 
@@ -567,6 +926,41 @@ webhook-triggered run.
 ```
 
 The exact fields are those of the Cloudflare Workflows `Instance.status()` API.
+
+---
+
+## `GET /api/runs/:id/artifacts`
+
+Returns the stored bundle for an interactive `/api/run`: per-file validation
+checks, coverage facts and totals. The bundle lives in R2 (`ARTIFACTS`), so it
+outlives the SSE stream; generated test source is not stored.
+
+```json
+{
+  "enabled": true,
+  "artifact": {
+    "runId": "…",
+    "repo": "acme/api",
+    "ref": "main",
+    "status": "ready",
+    "finishedAt": 1793000000000,
+    "files": [{ "sourcePath": "src/a.ts", "verified": true, "checks": [] }]
+  }
+}
+```
+
+`404` means the run stored no bundle; `{ "enabled": false }` means the
+deployment has no `ARTIFACTS` binding. Deleting a repository's history also
+deletes its bundles.
+
+---
+
+## Local development routes
+
+`GET /local-api/scan` and `GET /local-api/file` exist for the Vite dev server.
+The Worker itself answers `403` for any non-localhost `Host` and `400` on
+localhost; the real filesystem read happens in the Vite middleware, so a
+deployed Worker never touches a visitor's disk.
 
 ---
 

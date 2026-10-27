@@ -12,12 +12,22 @@ import type {
 
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs)$/i;
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/i;
-const GENERATED =
-  /(^|\/)(dist|build|out|coverage|node_modules|vendor|generated|__generated__|migrations)\//i;
 const TEST_DIR = /(^|\/)(test|tests|__tests__|__mocks__|e2e|fixtures)\//i;
-const DECLARATION = /\.d\.[cm]?ts$/i;
 const CONFIG_FILE =
   /(^|\/)(vite|vitest|jest|playwright|tailwind|postcss|eslint|wrangler|bun|tsconfig|config|setup|webpack|rollup)[^/]*\.[cm]?[jt]s$/i;
+/** Generated, vendored and build output is never a source to test. */
+const DENIED_DIR =
+  /(^|\/)(dist|build|out|coverage|node_modules|vendor|generated|__generated__|migrations)\//i;
+/** Declaration files and lockfiles are not source either. */
+const DECLARATION = /\.d\.[cm]?ts$/i;
+const LOCKFILE = /(^|\/)(bun\.lockb?|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/i;
+
+/** Why a path is skipped before a gap is created, or `undefined`. */
+export function skippedPathReason(path: string): string | undefined {
+  if (DENIED_DIR.test(path)) return "generated, vendored or build output";
+  if (DECLARATION.test(path) || LOCKFILE.test(path)) return "a declaration or lockfile";
+  return undefined;
+}
 
 /** `src/a/b.ts` -> `src/a/b.test.ts`; `.tsx` keeps its extension. */
 export function expectedTestPath(path: string): string {
@@ -26,9 +36,8 @@ export function expectedTestPath(path: string): string {
 
 export function isSourceFile(path: string): boolean {
   if (!SOURCE.test(path)) return false;
-  if (TEST_FILE.test(path) || DECLARATION.test(path)) return false;
-  if (GENERATED.test(path) || TEST_DIR.test(path) || CONFIG_FILE.test(path)) return false;
-  return true;
+  if (TEST_FILE.test(path) || TEST_DIR.test(path) || CONFIG_FILE.test(path)) return false;
+  return skippedPathReason(path) === undefined;
 }
 
 /** Best-effort exported symbol names. Regex, not a parser — enough to show in the UI. */
@@ -188,18 +197,25 @@ function sortGaps(gaps: Gap[]): Gap[] {
  * - `missing`: supported source with no test anywhere a convention looks.
  * - `unsupported`: a language EdgeSpec cannot generate for yet.
  * - `testsBySource`: the existing test files per supported source file.
+ * - `skipped`: sources excluded by the path policy (generated, vendored…).
  */
 export function classifyTree(paths: readonly string[]): {
   missing: Gap[];
   unsupported: Gap[];
   testsBySource: Map<string, string[]>;
+  skipped: number;
 } {
   const present = new Set(paths);
   const missing: Gap[] = [];
   const unsupported: Gap[] = [];
   const testsBySource = new Map<string, string[]>();
+  let skipped = 0;
 
   for (const path of present) {
+    if (SOURCE.test(path) && skippedPathReason(path)) {
+      skipped += 1;
+      continue;
+    }
     const language = unsupportedLanguage(path);
     if (language) {
       const { dir, base } = splitPath(path);
@@ -239,6 +255,7 @@ export function classifyTree(paths: readonly string[]): {
     missing: sortGaps(missing),
     unsupported: unsupported.sort((a, b) => a.path.localeCompare(b.path)),
     testsBySource,
+    skipped,
   };
 }
 

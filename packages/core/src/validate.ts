@@ -2,7 +2,10 @@
  * Validation. A real runner is optional: without one, EdgeSpec says so instead
  * of claiming a test passed.
  */
-import type { CheckKind, CheckResult, Validation } from "./types";
+import { testCommandFor } from "./ci";
+import { coverageDelta, type CoverageReport } from "./coverage";
+import { mutationCommandFor, parseMutationReport } from "./mutation";
+import type { CheckKind, CheckResult, MutationResult, TestRunner, Validation } from "./types";
 import { runInSandbox, type SandboxConfig, type SandboxRepo } from "./sandbox";
 
 export { runInSandbox } from "./sandbox";
@@ -16,7 +19,11 @@ export interface StaticProblem {
 }
 
 /** Deliberately shallow checks — a parser would be a dependency for little gain. */
-export function staticCheck(test: string, strictTypes: boolean): StaticProblem[] {
+export function staticCheck(
+  test: string,
+  strictTypes: boolean,
+  requireProperties = false,
+): StaticProblem[] {
   const problems: StaticProblem[] = [];
   const code = test.trim();
 
@@ -50,6 +57,21 @@ export function staticCheck(test: string, strictTypes: boolean): StaticProblem[]
     }
   }
 
+  if (requireProperties) {
+    if (!/from\s+["']fast-check["']/.test(code)) {
+      problems.push({ problem: "Property tests were requested but fast-check is not imported." });
+    }
+    if (!/\[property\]/.test(code)) {
+      problems.push({ problem: 'Property tests need a "[property]" label.' });
+    }
+    if (!/numRuns\s*:/.test(code)) {
+      problems.push({ problem: "Property tests need a bounded numRuns." });
+    }
+    if (!/\bseed\s*:/.test(code)) {
+      problems.push({ problem: "Property tests need an explicit seed." });
+    }
+  }
+
   return problems;
 }
 
@@ -62,12 +84,25 @@ export interface ValidateInput {
   sandbox?: SandboxConfig;
   /** The repository a v2 runner clones before writing the files. */
   repo?: SandboxRepo;
+  /** Extra repeats after a passing run; 0 disables flaky detection. */
+  flakyRuns?: number;
+  /** A Stryker-compatible command; empty or absent means mutation is not measured. */
+  mutationCommand?: string;
+  /** Fail static checks unless a labelled, seeded, bounded property exists. */
+  requireProperties?: boolean;
+  /** The detected runner and package manager for the test command. */
+  runner?: TestRunner;
+  packageManager?: string;
+  /** Ask the runner for LCOV and attach a per-file delta to the result. */
+  measureCoverage?: boolean;
+  /** The before report; a delta needs both reports. */
+  baselineCoverage?: CoverageReport;
   fetchImpl?: typeof fetch;
 }
 
 export async function validateTest(input: ValidateInput): Promise<Validation> {
   const started = Date.now();
-  const problems = staticCheck(input.test, input.strictTypes);
+  const problems = staticCheck(input.test, input.strictTypes, input.requireProperties === true);
   if (problems.length > 0) {
     return {
       ok: false,
@@ -87,6 +122,10 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
     };
   }
 
+  const runner = input.runner ?? "bun";
+  const command = input.repo
+    ? testCommandFor(runner, shellWord(input.testPath), input.packageManager)
+    : testCommandFor(runner, "", input.packageManager);
   const run = await runInSandbox({
     sandbox: input.sandbox,
     ...(input.repo ? { repo: input.repo } : {}),
@@ -94,9 +133,13 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
       [input.sourcePath]: input.source,
       [input.testPath]: input.test,
     },
-    command: input.repo ? `bun test ${shellWord(input.testPath)}` : "bun test",
+    command,
+    ...(input.measureCoverage ? { coverage: { format: "lcov" as const } } : {}),
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
   });
+  const coverage = input.measureCoverage
+    ? coverageDelta(input.baselineCoverage, run.coverage, input.sourcePath)
+    : undefined;
 
   if (!run.ok && (run.unreachable || run.environmentError)) {
     return {
@@ -104,15 +147,103 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
       verified: false,
       output: run.output,
       durationMs: Date.now() - started,
+      ...(coverage ? { coverage } : {}),
       ...(run.environmentError ? { environmentError: run.environmentError } : {}),
     };
+  }
+
+  // Repeat a passing suite; a pass/fail split is flaky, not verified.
+  const firstOutput =
+    run.output || (run.ok ? "bun test passed." : "bun test failed without output.");
+  const extra = run.ok ? Math.min(5, Math.max(0, Math.round(input.flakyRuns ?? 0))) : 0;
+  let runs = 1;
+  let flaky = false;
+  let repeatNote = "";
+  for (let index = 0; index < extra; index += 1) {
+    const repeat = await runInSandbox({
+      sandbox: input.sandbox,
+      ...(input.repo ? { repo: input.repo } : {}),
+      files: {
+        [input.sourcePath]: input.source,
+        [input.testPath]: input.test,
+      },
+      command,
+      ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+    });
+    runs += 1;
+    if (repeat.unreachable || repeat.environmentError) {
+      repeatNote = `Flaky repeats could not run: ${repeat.output}`;
+      break;
+    }
+    if (!repeat.ok) {
+      flaky = true;
+      repeatNote = repeat.output;
+      break;
+    }
+  }
+
+  if (flaky) {
+    return {
+      ok: false,
+      verified: false,
+      flaky: true,
+      runs,
+      output:
+        `Ran ${runs} time(s); the suite passed and failed on the same input. Flaky, quarantined.\n${repeatNote}`.trim(),
+      durationMs: Date.now() - started,
+      ...(coverage ? { coverage } : {}),
+    };
+  }
+
+  let mutation: MutationResult | undefined;
+  if (input.mutationCommand?.trim() && run.ok && !flaky) {
+    const command = mutationCommandFor(input.mutationCommand, input.sourcePath, input.testPath);
+    const mutationStarted = Date.now();
+    const mutationRun = await runInSandbox({
+      sandbox: input.sandbox,
+      ...(input.repo ? { repo: input.repo } : {}),
+      files: {
+        [input.sourcePath]: input.source,
+        [input.testPath]: input.test,
+      },
+      command,
+      ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+    });
+    const report =
+      mutationRun.artifacts["mutation.json"] ??
+      mutationRun.artifacts["reports/mutation/mutation.json"] ??
+      mutationRun.files["mutation.json"] ??
+      mutationRun.files["reports/mutation/mutation.json"];
+    mutation = report
+      ? parseMutationReport(report, command, Date.now() - mutationStarted, {
+          budgetStopped: mutationRun.timedOut === true,
+        })
+      : {
+          status: "not-measured",
+          tool: "stryker",
+          command,
+          reason: mutationRun.timedOut
+            ? "The mutation run hit the time budget."
+            : "The runner returned no mutation report.",
+        };
+    if (mutationRun.unreachable || mutationRun.environmentError) {
+      mutation = {
+        status: "not-measured",
+        tool: "stryker",
+        command,
+        reason: mutationRun.output || "The runner could not execute the mutation command.",
+      };
+    }
   }
 
   return {
     ok: run.ok,
     verified: true,
-    output: run.output || (run.ok ? "bun test passed." : "bun test failed without output."),
+    runs,
+    output: [firstOutput, repeatNote].filter(Boolean).join("\n"),
     durationMs: Date.now() - started,
+    ...(coverage ? { coverage } : {}),
+    ...(mutation ? { mutation } : {}),
   };
 }
 

@@ -7,6 +7,7 @@ import type {
   Generation,
   RateLimitInfo,
   RepositoryOverview,
+  RetestOperation,
   RunEvent,
   ScanTotals,
   ScanTruncation,
@@ -24,6 +25,7 @@ import {
 import { AgentWorkspace } from "@/components/agent/workspace";
 import { SettingsSheet, type SettingsSection } from "@/components/agent/settings-sheet";
 import { INITIAL_STEPS, type LogEntry, type LogLevel, type Steps } from "@/components/agent/shared";
+import { TooltipProvider } from "@edge-spec/ui";
 import {
   getProject,
   getSettings,
@@ -86,6 +88,8 @@ export function App() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [apiResults, setApiResults] = useState<ApiTestResult[]>([]);
+  /** True when the current API results came from a failed-endpoint retest. */
+  const [wasRetest, setWasRetest] = useState(false);
   /** The log of the missing tests, apart from the pipeline run. */
   const [gapLogs, setGapLogs] = useState<LogEntry[]>([]);
   const [steps, setSteps] = useState<Steps>(INITIAL_STEPS);
@@ -106,6 +110,8 @@ export function App() {
   /** The last refusal from the provider, e.g. an exhausted allocation. */
   const [providerError, setProviderError] = useState<string>();
   const [pullUrls, setPullUrls] = useState<Record<string, string>>({});
+  /** The run the history table knows, when the deployment has D1. */
+  const [runId, setRunId] = useState<string>();
   const [running, setRunning] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -207,6 +213,9 @@ export function App() {
   const handleEvent = useCallback(
     (event: RunEvent) => {
       switch (event.type) {
+        case "run":
+          setRunId(event.id);
+          break;
         case "log":
           addLog(event.level, event.text, currentStep.current);
           break;
@@ -256,6 +265,7 @@ export function App() {
           break;
         }
         case "api":
+          if (event.retest) setWasRetest(true);
           setApiResults((current) => {
             const next = [...current];
             for (const result of event.results) {
@@ -319,8 +329,9 @@ export function App() {
     [addLog, project.folder, showToast],
   );
 
-  const run = async () => {
+  const run = async (options: { retestOperations?: RetestOperation[] } = {}) => {
     const active = getProject();
+    const retesting = Boolean(options.retestOperations?.length);
     if (running) return;
     if (active.localPath) {
       showToast({
@@ -346,13 +357,28 @@ export function App() {
     setLogs([]);
     setLive({});
     setApiResults([]);
+    setWasRetest(retesting);
+    setRunId(undefined);
     const controller = new AbortController();
     abortRef.current = controller;
     currentStep.current = "scan";
-    addLog("info", `EdgeSpec starting for ${active.repo}@${active.ref || "main"}.`, "scan");
+    addLog(
+      "info",
+      retesting
+        ? `Retesting ${options.retestOperations?.length ?? 0} failed endpoint(s) for ${active.repo}@${active.ref || "main"}.`
+        : `EdgeSpec starting for ${active.repo}@${active.ref || "main"}.`,
+      "scan",
+    );
 
     try {
-      await runPipelineStream(active, getSettings(), handleEvent, controller.signal);
+      await runPipelineStream(
+        active,
+        getSettings(),
+        handleEvent,
+        controller.signal,
+        undefined,
+        options.retestOperations,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (isAbortError(message)) {
@@ -375,6 +401,11 @@ export function App() {
         return next;
       });
     }
+  };
+
+  /** Retests only the failed contract operations; the scan and unit work stay put. */
+  const retest = (operations: RetestOperation[]) => {
+    if (operations.length > 0) void run({ retestOperations: operations });
   };
 
   const stop = () => {
@@ -441,15 +472,33 @@ export function App() {
     if (active.localPath) {
       throw new Error("Pull requests need a GitHub repository.");
     }
+    const activeSettings = getSettings();
     const result = await openPullWithFiles(
       active,
-      getSettings(),
+      activeSettings,
       items.map((item) => ({
         sourcePath: item.generation.sourcePath,
         path: item.generation.testPath,
         code: item.generation.code,
+        provider: item.generation.provider,
+        model: item.generation.model,
+        ...(item.generation.promptVersion ? { promptVersion: item.generation.promptVersion } : {}),
+        corrected: item.generation.corrected,
+        ...(item.validation.flaky ? { flaky: true } : {}),
+        verified: item.validation.verified,
+        ...(item.validation.checks ? { checks: item.validation.checks } : {}),
+        ...(item.validation.coverage ? { coverage: item.validation.coverage } : {}),
+        ...(item.validation.mutation ? { mutation: item.validation.mutation } : {}),
       })),
-      meta,
+      { ...meta, ...(runId ? { runId } : {}) },
+      apiResults
+        .filter((result) => result.status === "skipped")
+        .map((result) => ({
+          method: result.method,
+          path: result.path,
+          reason: result.error ?? "skipped",
+        })),
+      activeSettings.policy,
     );
     setPullUrls((current) => {
       const next = { ...current };
@@ -473,6 +522,8 @@ export function App() {
     setGenerated([]);
     setLive({});
     setPullUrls({});
+    setRunId(undefined);
+    setWasRetest(false);
     setLogs([]);
     setGapLogs([]);
     setSteps(INITIAL_STEPS);
@@ -495,9 +546,27 @@ export function App() {
     signal?: AbortSignal,
     previous?: { code: string; output: string },
   ): Promise<boolean> => {
+    const evidence = gaps.find((gap) => gap.path === path)?.evidence;
+    const targeting =
+      evidence && (evidence.uncoveredLines?.length || evidence.uncoveredBranches?.length)
+        ? {
+            ...(evidence.uncoveredLines?.length ? { uncoveredLines: evidence.uncoveredLines } : {}),
+            ...(evidence.uncoveredBranches?.length
+              ? { uncoveredBranches: evidence.uncoveredBranches }
+              : {}),
+          }
+        : undefined;
     try {
-      const result = await regenerate(getProject(), getSettings(), path, signal, previous);
+      const result = await regenerate(
+        getProject(),
+        getSettings(),
+        path,
+        signal,
+        previous,
+        targeting,
+      );
       if (result.rateLimit) setQuota(result.rateLimit);
+      for (const notice of result.notices ?? []) addGapLog("warn", notice);
       setProviderError(undefined);
       setLive((current) => ({
         ...current,
@@ -633,10 +702,13 @@ export function App() {
         {...(overview ? { overview } : {})}
         generated={generated}
         pullUrls={pullUrls}
+        {...(runId ? { runId } : {})}
         apiResults={apiResults}
+        {...(wasRetest ? { retest: true } : {})}
         {...(toast ? { toast } : {})}
         onRun={run}
         onScan={scan}
+        onRetest={retest}
         onStop={stop}
         onStopGenerating={stopGenerating}
         onReset={resetAll}
@@ -645,14 +717,17 @@ export function App() {
         onOpenSettings={openSettings}
         onDismissToast={() => setToast(undefined)}
       />
-      <SettingsSheet
-        open={settingsOpen}
-        onOpenChange={(next) => {
-          setSettingsOpen(next);
-          if (!next) setSettingsSection(undefined);
-        }}
-        {...(settingsSection ? { section: settingsSection } : {})}
-      />
+      <TooltipProvider delayDuration={180}>
+        <SettingsSheet
+          open={settingsOpen}
+          onOpenChange={(next) => {
+            setSettingsOpen(next);
+            if (!next) setSettingsSection(undefined);
+          }}
+          repo={project.repo}
+          {...(settingsSection ? { section: settingsSection } : {})}
+        />
+      </TooltipProvider>
     </>
   );
 }

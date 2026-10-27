@@ -3,11 +3,18 @@ import type { Provider } from "@edge-spec/core/catalog";
 import type {
   Generation,
   RateLimitInfo,
+  RetestOperation,
   RunEvent,
   ScanResult,
   Validation,
 } from "@edge-spec/core/types";
 import type { PullSummary } from "@edge-spec/core/github";
+import type { BacklogItem, BacklogState } from "@edge-spec/core/backlog";
+import type { RunDecision, RunDetail, RunSummary } from "@edge-spec/core/history";
+import type { RepoMemory } from "@edge-spec/core/memory";
+import type { PullPolicy } from "@edge-spec/core/policy";
+import type { PullFile } from "@edge-spec/core/pr";
+import type { SkippedContractOperation } from "@edge-spec/core/provenance";
 import { getProject, requestHeaders, type Project, type Settings } from "./lib/settings";
 
 export interface Catalog {
@@ -122,11 +129,14 @@ export async function regenerate(
   path: string,
   signal?: AbortSignal,
   previous?: { code: string; output: string },
+  targeting?: { uncoveredLines?: number[]; uncoveredBranches?: number[] },
 ): Promise<{
   generation: Generation;
   validation: Validation;
   attempts: number;
   rateLimit?: RateLimitInfo;
+  /** Fallbacks and caveats the provider path produced. */
+  notices?: string[];
 }> {
   const body: Record<string, unknown> = {
     path,
@@ -137,7 +147,15 @@ export async function regenerate(
     strictTypes: settings.strictTypes,
     maxRetries: settings.maxRetries,
     maxAiRetries: settings.maxAiRetries,
+    flakyRuns: settings.flakyRuns,
+    mutationCommand: settings.mutationCommand,
+    propertyTests: settings.propertyTests,
+    autoRouteModels: settings.autoRouteModels,
     ...(previous ? { previous } : {}),
+    ...(targeting?.uncoveredLines?.length ? { uncoveredLines: targeting.uncoveredLines } : {}),
+    ...(targeting?.uncoveredBranches?.length
+      ? { uncoveredBranches: targeting.uncoveredBranches }
+      : {}),
   };
   if (project.localPath) {
     body.source = await localSource(project, path);
@@ -171,11 +189,7 @@ export function fetchQuota(
   return apiJson<{ rateLimit?: RateLimitInfo }>(`/api/quota?${query.toString()}`);
 }
 
-export interface PullFile {
-  sourcePath: string;
-  path: string;
-  code: string;
-}
+export type { PullFile };
 
 /** Optional copy the reviewer can edit in the pull request dialog. */
 export interface PullMeta {
@@ -184,6 +198,8 @@ export interface PullMeta {
   branch?: string;
   commitMessage?: string;
   draft?: boolean;
+  /** The run the accepted files came from, so history can record the decision. */
+  runId?: string;
 }
 
 /** Opens one pull request that carries every listed test file. */
@@ -192,6 +208,8 @@ export function openPullWithFiles(
   settings: Settings,
   files: PullFile[],
   meta?: PullMeta,
+  skipped?: SkippedContractOperation[],
+  policy?: PullPolicy,
 ): Promise<{ url: string; files: number }> {
   return apiJson<{ url: string; files: number }>("/api/pull-request", {
     method: "POST",
@@ -200,12 +218,242 @@ export function openPullWithFiles(
       ref: project.ref,
       strictTypes: settings.strictTypes,
       ...meta,
+      ...(skipped && skipped.length > 0 ? { skipped } : {}),
+      ...(policy && Object.keys(policy).length > 0 ? { policy } : {}),
       files: files.map((file) => ({
         path: file.path,
         code: file.code,
         sourcePath: file.sourcePath,
+        ...(file.provider ? { provider: file.provider } : {}),
+        ...(file.model ? { model: file.model } : {}),
+        ...(file.promptVersion ? { promptVersion: file.promptVersion } : {}),
+        ...(file.corrected ? { corrected: true } : {}),
+        ...(file.flaky ? { flaky: true } : {}),
+        ...(file.verified !== undefined ? { verified: file.verified } : {}),
+        ...(file.checks ? { checks: file.checks } : {}),
+        ...(file.coverage ? { coverage: file.coverage } : {}),
+        ...(file.mutation ? { mutation: file.mutation } : {}),
       })),
     }),
+  });
+}
+
+export interface BacklogResponse {
+  enabled: boolean;
+  items: BacklogItem[];
+}
+
+export function fetchBacklog(repo: string): Promise<BacklogResponse> {
+  return apiJson<BacklogResponse>(`/api/backlog?repo=${encodeURIComponent(repo)}`);
+}
+
+export function updateBacklog(
+  repo: string,
+  path: string,
+  state: BacklogState,
+  owner?: string,
+): Promise<{ updated: boolean }> {
+  return apiJson<{ updated: boolean }>(`/api/backlog?repo=${encodeURIComponent(repo)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ path, state, ...(owner ? { owner } : {}) }),
+  });
+}
+
+function jsonMapOf(raw: string): Record<string, string> | undefined {
+  if (!raw.trim()) return undefined;
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+    const entries = Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    );
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Contract auth values travel to the Worker only to become sandbox env. */
+function authFixtureOf(
+  settings: Settings,
+): { headers?: Record<string, string>; query?: Record<string, string> } | undefined {
+  const headers = jsonMapOf(settings.contractAuthHeaders);
+  const query = jsonMapOf(settings.contractAuthQuery);
+  return headers || query
+    ? { ...(headers ? { headers } : {}), ...(query ? { query } : {}) }
+    : undefined;
+}
+
+export interface RunsResponse {
+  enabled: boolean;
+  runs: RunSummary[];
+}
+
+/** Run history is optional; `enabled: false` means this deployment has no D1. */
+export function fetchRuns(repo: string): Promise<RunsResponse> {
+  return apiJson<RunsResponse>(`/api/runs?repo=${encodeURIComponent(repo)}`);
+}
+
+export function fetchRunDetail(id: string): Promise<{ enabled: boolean } & RunDetail> {
+  return apiJson<{ enabled: boolean } & RunDetail>(`/api/runs/${encodeURIComponent(id)}/files`);
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  /** Days to keep runs, audit events and command rate-limit rows. */
+  retentionDays: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** One workspace per deployment; `enabled: false` means no RUNS_DB. */
+export function fetchWorkspace(): Promise<{ enabled: boolean; workspace?: Workspace }> {
+  return apiJson<{ enabled: boolean; workspace?: Workspace }>("/api/workspace");
+}
+
+export function updateWorkspace(input: {
+  name?: string;
+  retentionDays?: number;
+}): Promise<{ enabled: boolean; workspace: Workspace }> {
+  return apiJson<{ enabled: boolean; workspace: Workspace }>("/api/workspace", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface AuditEvent {
+  id?: number;
+  repo?: string;
+  actor: string;
+  action: string;
+  detail: Record<string, unknown>;
+  createdAt: number;
+}
+
+/** Newest first. `repo` filters by `owner/name`; the Worker clamps the limit. */
+export function fetchAudit(
+  repo?: string,
+  limit = 100,
+): Promise<{ enabled: boolean; events: AuditEvent[] }> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (repo) params.set("repo", repo);
+  return apiJson<{ enabled: boolean; events: AuditEvent[] }>(`/api/audit?${params}`);
+}
+
+export interface ScheduledRepo {
+  repo: string;
+  intervalDays: number;
+  enabled: boolean;
+  installationId?: number;
+  lastRunAt?: number;
+}
+
+export function fetchSchedules(): Promise<{ enabled: boolean; schedules: ScheduledRepo[] }> {
+  return apiJson<{ enabled: boolean; schedules: ScheduledRepo[] }>("/api/schedules");
+}
+
+/** Upserts one schedule; the response is the full list. */
+export function updateSchedule(
+  input: ScheduledRepo,
+): Promise<{ enabled: boolean; schedules: ScheduledRepo[] }> {
+  return apiJson<{ enabled: boolean; schedules: ScheduledRepo[] }>("/api/schedules", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteSchedule(repo: string): Promise<{ deleted: boolean }> {
+  return apiJson<{ deleted: boolean }>(`/api/schedules?repo=${encodeURIComponent(repo)}`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchMemory(repo: string): Promise<{ enabled: boolean; memory: RepoMemory }> {
+  return apiJson<{ enabled: boolean; memory: RepoMemory }>(
+    `/api/memory?repo=${encodeURIComponent(repo)}`,
+  );
+}
+
+export function updateMemory(
+  repo: string,
+  memory: RepoMemory,
+): Promise<{ enabled: boolean; memory: RepoMemory }> {
+  return apiJson<{ enabled: boolean; memory: RepoMemory }>(
+    `/api/memory?repo=${encodeURIComponent(repo)}`,
+    { method: "PUT", body: JSON.stringify({ memory }) },
+  );
+}
+
+export function deleteMemory(repo: string): Promise<{ deleted: boolean }> {
+  return apiJson<{ deleted: boolean }>(`/api/memory?repo=${encodeURIComponent(repo)}`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchPolicy(repo: string): Promise<{ enabled: boolean; policy: PullPolicy }> {
+  return apiJson<{ enabled: boolean; policy: PullPolicy }>(
+    `/api/policies?repo=${encodeURIComponent(repo)}`,
+  );
+}
+
+export function updatePolicy(
+  repo: string,
+  policy: PullPolicy,
+): Promise<{ enabled: boolean; policy: PullPolicy }> {
+  return apiJson<{ enabled: boolean; policy: PullPolicy }>(
+    `/api/policies?repo=${encodeURIComponent(repo)}`,
+    { method: "PUT", body: JSON.stringify({ policy }) },
+  );
+}
+
+export function deletePolicy(repo: string): Promise<{ deleted: boolean }> {
+  return apiJson<{ deleted: boolean }>(`/api/policies?repo=${encodeURIComponent(repo)}`, {
+    method: "DELETE",
+  });
+}
+
+/** Stored R2 bundle for one run; the generated source is never included. */
+export interface RunArtifact {
+  runId: string;
+  repo: string;
+  ref: string;
+  status: string;
+  totals?: unknown;
+  finishedAt: number;
+  files: Array<{
+    sourcePath: string;
+    testPath: string;
+    verified: boolean;
+    checks: unknown[];
+    coverage?: unknown;
+  }>;
+}
+
+/** `enabled: false` means no ARTIFACTS binding; a 404 means no bundle for this run. */
+export function fetchRunArtifacts(
+  id: string,
+): Promise<{ enabled: boolean; artifact?: RunArtifact }> {
+  return apiJson<{ enabled: boolean; artifact?: RunArtifact }>(
+    `/api/runs/${encodeURIComponent(id)}/artifacts`,
+  );
+}
+
+/** One action deletes every run for the repository. */
+export function deleteRuns(repo: string): Promise<{ deleted: number }> {
+  return apiJson<{ deleted: number }>(`/api/runs?repo=${encodeURIComponent(repo)}`, {
+    method: "DELETE",
+  });
+}
+
+export function recordRunDecision(
+  runId: string,
+  sourcePath: string,
+  decision: RunDecision,
+): Promise<{ updated: number }> {
+  return apiJson<{ updated: number }>(`/api/runs/${encodeURIComponent(runId)}/decisions`, {
+    method: "POST",
+    body: JSON.stringify({ decisions: [{ sourcePath, decision }] }),
   });
 }
 
@@ -217,7 +465,10 @@ export async function runPipelineStream(
   signal?: AbortSignal,
   /** Re-run only these gap paths, skipping the scan stage. */
   retryGaps?: string[],
+  /** Re-run only these failed contract operations, not a fresh run. */
+  retestOperations?: RetestOperation[],
 ): Promise<void> {
+  const authFixture = authFixtureOf(settings);
   let response: Response;
   try {
     response = await fetch("/api/run", {
@@ -233,10 +484,17 @@ export async function runPipelineStream(
         maxAiRetries: settings.maxAiRetries,
         maxFiles: settings.maxFiles,
         concurrency: settings.concurrency,
+        maxTokens: settings.maxTokens,
+        flakyRuns: settings.flakyRuns,
+        mutationCommand: settings.mutationCommand,
+        propertyTests: settings.propertyTests,
+        autoRouteModels: settings.autoRouteModels,
+        ...(authFixture ? { authFixture } : {}),
         strictTypes: settings.strictTypes,
         coverageTarget: settings.coverageTarget,
         mode: "both",
         ...(retryGaps && retryGaps.length > 0 ? { retryGaps } : {}),
+        ...(retestOperations && retestOperations.length > 0 ? { retestOperations } : {}),
       }),
       ...(signal ? { signal } : {}),
     });

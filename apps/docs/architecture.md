@@ -24,8 +24,12 @@ Outbound from the Worker:
   SANDBOX_RUNNER_URL (optional)   executes `bun test`
 ```
 
-The Worker is stateless. There is no KV, D1 or R2 binding, and no session. A
-request carries everything needed to serve it.
+The Worker holds no session and no user configuration. A request carries
+everything needed to serve it. Run history, backlog, policies, memory, schedules,
+workspace settings and audit are an optional D1 binding (`RUNS_DB`); the raw
+validation bundles and drift summaries live in R2 (`ARTIFACTS`). Without the
+bindings the related routes answer `enabled: false` and nothing is stored.
+Generated test source, prompts and keys are never written to either store.
 
 ## Frontend bundle
 
@@ -50,26 +54,27 @@ the app code does not invalidate the cached vendor files.
 
 ## Modules
 
-| Module                          | Responsibility                                                                 | Rules                                                    |
-| ------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| `packages/core/src/types.ts`    | `Gap`, `Generation`, `Validation`, `RunEvent`, `HttpError`                     | No HTTP or provider knowledge                            |
-| `packages/core/src/catalog.ts`  | Provider/model catalog, `resolveAi`, `parseRepo`, `parseRef`, `pipelineConfig` | Single source of truth for validation and defaults       |
-| `packages/core/src/github.ts`   | REST client: tree, file, branch, commit, PR, PR list                           | `fetch`, no SDK; path segments encoded                   |
-| `packages/core/src/scanner.ts`  | `classifyTree`, ancestor test discovery, OpenAPI parsing, repository overview  | Regex-based, no TypeScript parser                        |
-| `packages/core/src/coverage.ts` | LCOV parsing and `coverageGaps`                                                | Facts from a runner; no report means "not measured"      |
-| `packages/core/src/openapi.ts`  | Deterministic contract tests, `apiGaps`, JUnit parsing                         | One test named `METHOD /path` per operation; no AI       |
-| `packages/core/src/ci.ts`       | Reads the repository's checks, formatter and style rules                       | Pure functions over the tree, the manifest and workflows |
-| `packages/core/src/ai.ts`       | Prompt, code extraction, provider dispatch                                     | Key only goes into upstream request headers              |
-| `packages/core/src/validate.ts` | Static checks + optional sandbox execution                                     | `verified` is true only after a runner ran               |
-| `packages/core/src/sandbox.ts`  | v1/v2 request contract, config parsing, runner health                          | v1 `{files, command}` stays the default body             |
-| `packages/core/src/pipeline.ts` | Async generator for scan → generate → validate → correct → PR                  | Transport-agnostic; bounded pool + channel               |
-| `apps/worker/src/index.ts`      | Hono routes, header parsing, SSE framing                                       | Translates HTTP to core calls                            |
-| `apps/worker/src/workflow.ts`   | Durable webhook automation                                                     | Deployment credentials only                              |
-| `apps/web/src/`                 | Dashboard                                                                      | `App.tsx` owns run state; components are presentational  |
-| `packages/ui/src/`              | React primitives and brand tokens                                              | Dashboard imports components; docs imports `theme.css`   |
-| `packages/client/src/`          | Worker API client, SSE parsing, env defaults                                   | No pipeline logic; CLI and MCP use it                    |
-| `packages/cli/src/`             | `scan`, `generate`, `run`, `catalog` commands                                  | Secrets from env, never flags                            |
-| `packages/mcp/src/`             | Stdio MCP tools over the shared client                                         | PR tool requires `confirm: true`                         |
+| Module                             | Responsibility                                                                 | Rules                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `packages/core/src/types.ts`       | `Gap`, `Generation`, `Validation`, `RunEvent`, `HttpError`                     | No HTTP or provider knowledge                            |
+| `packages/core/src/catalog.ts`     | Provider/model catalog, `resolveAi`, `parseRepo`, `parseRef`, `pipelineConfig` | Single source of truth for validation and defaults       |
+| `packages/core/src/github.ts`      | REST client: tree, file, branch, commit, PR, PR list                           | `fetch`, no SDK; path segments encoded                   |
+| `packages/core/src/scanner.ts`     | `classifyTree`, ancestor test discovery, OpenAPI parsing, repository overview  | Regex-based, no TypeScript parser                        |
+| `packages/core/src/coverage.ts`    | LCOV parsing and `coverageGaps`                                                | Facts from a runner; no report means "not measured"      |
+| `packages/core/src/openapi.ts`     | Deterministic contract tests, `apiGaps`, JUnit parsing                         | One test named `METHOD /path` per operation; no AI       |
+| `packages/core/src/ci.ts`          | Reads the repository's checks, formatter and style rules                       | Pure functions over the tree, the manifest and workflows |
+| `packages/core/src/ai.ts`          | Prompt, code extraction, provider dispatch                                     | Key only goes into upstream request headers              |
+| `packages/core/src/validate.ts`    | Static checks + optional sandbox execution                                     | `verified` is true only after a runner ran               |
+| `packages/core/src/sandbox.ts`     | v1/v2 request contract, config parsing, runner health                          | v1 `{files, command}` stays the default body             |
+| `packages/core/src/api-surface.ts` | Infers OpenAPI from route calls when a spec is missing                         | Explicitly `inferred`; regex, not an AST                 |
+| `packages/core/src/pipeline.ts`    | Async generator for scan → generate → validate → correct → PR                  | Transport-agnostic; bounded pool + channel               |
+| `apps/worker/src/index.ts`         | Hono routes, header parsing, SSE framing                                       | Translates HTTP to core calls                            |
+| `apps/worker/src/workflow.ts`      | Durable webhook automation                                                     | Deployment credentials only                              |
+| `apps/web/src/`                    | Dashboard                                                                      | `App.tsx` owns run state; components are presentational  |
+| `packages/ui/src/`                 | React primitives and brand tokens                                              | Dashboard imports components; docs imports `theme.css`   |
+| `packages/client/src/`             | Worker API client, SSE parsing, env defaults                                   | No pipeline logic; CLI and MCP use it                    |
+| `packages/cli/src/`                | `scan`, `generate`, `run`, `catalog` commands                                  | Secrets from env, never flags                            |
+| `packages/mcp/src/`                | Stdio MCP tools over the shared client                                         | PR tool requires a one-time approval token               |
 
 ## Interactive run (`POST /api/run`)
 
@@ -117,23 +122,69 @@ not. The dashboard lets the user generate another gap individually via
 
 ```text
 GitHub ── POST /webhook ──▶ verify HMAC (if GITHUB_WEBHOOK_SECRET is set)
-                            parse repository.full_name + ref
-                            binding.create({ repo, ref })  → 202 { workflowId }
-Workflow
+                            parse repository.full_name + ref + installation.id
+                            push:          binding.create({ repo, ref, event:"push" })
+                            pull_request:  binding.create({ repo, ref:headSha,
+                                            pullRequest, event:"pull_request" })
+                            issue_comment: authorize association, parse /edgespec,
+                                           rate limit, then binding.create({
+                                             pullRequest, event:"pr_command", command })
+                                                          → 202 { workflowId }
+Workflow · push
   scan-repository     tree, first gap, source          (durable step)
   generate-test       Workers AI                       (2 retries, exponential)
   validate-test       static + optional sandbox
   correct-test-N      bounded by maxRetries
   create-pull-request branch + file + PR
+
+Workflow · pull_request (advisory)
+  changed-files       first page of PR files
+  scan-changed        changed sources without tests
+  impact-graph        test import closure (≤200 files) → dependents + reasons
+  run-affected-tests  selected tests, only with a runner
+  publish-check       upsert one check run + one marked comment
+
+Workflow · pr_command (authorized /edgespec comment)
+  resolve-pull        head commit
+  changed-files       first page of PR files
+  scan-changed        changed sources and their tests
+  retest|coverage|explain
+  publish-command     one reply + the same EdgeSpec check upserted
 ```
 
 Workflow parameters are persisted by Cloudflare. Therefore the workflow:
 
 - never accepts a visitor's provider key,
-- uses the deployment's `AI` binding and `GITHUB_TOKEN`,
+- uses the deployment's `AI` binding,
+- mints a repo-scoped GitHub App installation token when the App secrets are
+  configured, cached only until shortly before expiry; `GITHUB_TOKEN` is the
+  fallback for deployments without an App,
 - rejects non-Workers-AI providers with a clear error.
 
 The dashboard remains the place for bring-your-own-key runs.
+
+## Test-debt backlog
+
+A full dashboard scan and the scheduled drift scan both call the same backlog
+sync. It upserts the current gaps, preserves accepted/rejected/ignored
+decisions, closes paths that disappeared, and reopens a closed path that
+returns. Ownership is the first `CODEOWNERS` owner for the path (last matching
+rule wins). The dashboard reads and updates the same D1 rows through
+`/api/backlog`.
+
+## Scheduled drift (`scheduled` handler)
+
+```text
+cron (daily) ──▶ due schedules from D1
+                 tree + OpenAPI operations
+                 compare with drift_snapshots
+                 changed? → webhook summary + optional R2 artifact
+                 update snapshot + last_run_at
+```
+
+The first scan stores a baseline. Only a repository whose untested paths or
+contract operations changed produces one notification. The handler never
+generates tests or opens a pull request.
 
 ## GitHub client
 

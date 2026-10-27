@@ -4,6 +4,10 @@ main = "dist/worker/index.js"
 compatibility_date = "2025-07-18"
 compatibility_flags = ["nodejs_compat"]
 
+# Daily cron; each repository's D1 schedule decides whether it is due.
+[triggers]
+crons = ["0 8 * * *"]
+
 # Dashboard SPA, built by `bun run build:web`.
 # Assets-first routing: requests that match a file are served statically;
 # everything else (/api/*, /webhook) falls through to the Worker.
@@ -23,3 +27,29 @@ remote = true
 name = "test-generation-workflow"
 binding = "TEST_GENERATION_WORKFLOW"
 class_name = "TestGenerationWorkflow"
+
+# GitHub App for webhook CI (optional; replaces GITHUB_TOKEN for workflow runs).
+# The app id and PKCS#8 private key are deployment secrets, never user config:
+#   wrangler secret put GITHUB_APP_ID
+#   wrangler secret put GITHUB_APP_PRIVATE_KEY
+#   wrangler secret put GITHUB_WEBHOOK_SECRET
+# The dashboard keeps using the visitor's per-request PAT. Installation tokens
+# are minted per run, scoped to the repository, and cached only until expiry.
+
+# Run history, backlog, policies, memory, schedules, workspace and audit.
+# Created with `wrangler d1 create edge-spec-runs`; migrations live in
+# migrations/ and are applied with `wrangler d1 migrations apply`.
+[[d1_databases]]
+binding = "RUNS_DB"
+database_name = "edge-spec-runs"
+database_id = "e6d6d95e-cbce-498f-952e-c4d30fc1f7de"
+
+# Drift notifications (optional, Slack-compatible webhook):
+#   wrangler secret put DRIFT_WEBHOOK_URL
+#   wrangler secret put DRIFT_WEBHOOK_SECRET
+# Run artifacts (validation output, coverage) and drift summaries. D1 keeps the
+# summaries; this bucket keeps the raw bundles. Created with:
+#   wrangler r2 bucket create edge-spec-artifacts
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "edge-spec-artifacts"

@@ -42,19 +42,33 @@ For local development, point `EDGESPEC_URL` at `http://127.0.0.1:8787` and start
 
 ## Tools
 
-| Tool                         | Side effects           | Purpose                                           |
-| ---------------------------- | ---------------------- | ------------------------------------------------- |
-| `edgespec_catalog`           | Read-only              | Providers, models, defaults, sandbox availability |
-| `edgespec_scan`              | Read-only              | Gaps and repository overview                      |
-| `edgespec_generate`          | Calls the AI provider  | Generate and validate one test                    |
-| `edgespec_run`               | Calls the AI provider  | Generate and validate several tests               |
-| `edgespec_open_pull_request` | Writes a branch and PR | Commit supplied tests                             |
+| Tool                            | Side effects           | Purpose                                            |
+| ------------------------------- | ---------------------- | -------------------------------------------------- |
+| `edgespec_catalog`              | Read-only              | Providers, models, defaults, sandbox availability  |
+| `edgespec_scan`                 | Read-only              | Gaps and repository overview                       |
+| `edgespec_generate`             | Calls the AI provider  | Generate and validate one test                     |
+| `edgespec_run`                  | Calls the AI provider  | Generate and validate several tests                |
+| `edgespec_prepare_pull_request` | Read-only              | Validate files and issue a one-time approval token |
+| `edgespec_open_pull_request`    | Writes a branch and PR | Commit the approved files                          |
 
 `edgespec_generate` and `edgespec_run` return the generated code and validation
 details. `edgespec_run` also returns the ready source paths and logs.
 
-`edgespec_open_pull_request` requires `confirm: true`; the tool returns an error
-without it. The agent should ask the user before opening a pull request.
+Opening a pull request is two-step. `edgespec_prepare_pull_request` returns an
+`approvalId`, an expiry and a readable summary; show that to the user. The
+client must then call `edgespec_open_pull_request` with only the token. Tokens
+expire after ten minutes and are consumed on first use.
+
+## Resources
+
+| URI                                  | Contents                                  |
+| ------------------------------------ | ----------------------------------------- |
+| `edgespec://gaps/{owner}/{name}`     | Missing tests, contract gaps and totals   |
+| `edgespec://specs/{owner}/{name}`    | Parsed OpenAPI specs and artifact paths   |
+| `edgespec://coverage/{owner}/{name}` | Coverage status and gaps from a scan      |
+| `edgespec://runs/{id}`               | Durable Workflow status for a webhook run |
+
+Resources are read-only and use the same environment credentials as the tools.
 
 ## Environment
 
@@ -80,7 +94,8 @@ Provider-specific keys such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
 - Secrets live in the MCP client's environment, not in tool arguments or the
   conversation.
 - The server is local; it does not expose a public HTTP endpoint.
-- Scanning is read-only. Generation costs an AI call. Opening a pull request
-  writes to GitHub and is gated by `confirm: true`.
+- Scanning and resources are read-only. Generation costs an AI call. Opening a
+  pull request writes to GitHub and is gated by a one-time approval token from
+  `edgespec_prepare_pull_request`.
 - Validation is honest: without a sandbox runner the result says **static check
   only**, not executed.

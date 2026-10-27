@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import {
   buildPrompt,
+  estimatePromptTokens,
   extractCode,
   generateTest,
   isPlausibleTest,
   probeRateLimit,
   type GenerateInput,
+  type TokenUsage,
 } from "../src/ai";
 import { providerById } from "../src/catalog";
 import type { RateLimitInfo } from "../src/types";
@@ -69,6 +71,65 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("Fix every failure");
     expect(prompt).toContain("lint failed");
     expect(prompt).toContain("bun test failed");
+  });
+
+  it("targets measured uncovered lines and branches, bounded", () => {
+    const prompt = buildPrompt(
+      input({
+        provider: "openai",
+        coverageHint: {
+          path: "src/math.ts",
+          uncoveredLines: [42, 43, 44, 58, 71, 80],
+          uncoveredBranches: [12, 30, 44, 55, 66, 77],
+        },
+      }),
+    );
+    expect(prompt).toContain("Uncovered lines: 42-44, 58, 71, 80");
+    expect(prompt).toContain("Uncovered branches on lines: 12, 30, 44, 55, 66");
+    expect(prompt).not.toContain("77");
+  });
+
+  it("adds no targeting note without a measured hint", () => {
+    expect(buildPrompt(input({ provider: "openai" }))).not.toContain("Uncovered lines");
+  });
+
+  it("feeds approved repository memory into the prompt", () => {
+    const prompt = buildPrompt(
+      input({
+        provider: "openai",
+        memory: {
+          naming: "sibling .test.ts",
+          conventions: ["use the repository helper"],
+          helpers: ["src/test-utils.ts"],
+          fixtures: ["tests/fixtures/users.json"],
+        },
+      }),
+    );
+    expect(prompt).toContain("Approved repository memory");
+    expect(prompt).toContain("sibling .test.ts");
+    expect(prompt).toContain("src/test-utils.ts");
+    expect(prompt).toContain("tests/fixtures/users.json");
+  });
+
+  it("uses the detected runner's imports instead of bun:test", () => {
+    const vitest = buildPrompt(input({ provider: "openai", runner: "vitest" }));
+    expect(vitest).toContain("Vitest");
+    expect(vitest).toContain('from "vitest"');
+    expect(vitest).not.toContain('from "bun:test"');
+
+    const playwright = buildPrompt(input({ provider: "openai", runner: "playwright" }));
+    expect(playwright).toContain('from "@playwright/test"');
+    expect(playwright).toContain("test(...)");
+  });
+
+  it("asks for labelled, seeded, bounded fast-check properties when opted in", () => {
+    const prompt = buildPrompt(
+      input({ provider: "openai", propertyTests: { runs: 50, seed: 42 } }),
+    );
+    expect(prompt).toContain("fast-check");
+    expect(prompt).toContain("numRuns: 50");
+    expect(prompt).toContain("seed: 42");
+    expect(prompt).toContain("[property]");
   });
 });
 
@@ -269,5 +330,74 @@ describe("generateTest", () => {
     await expect(
       generateTest({ ...input({ provider: "openai" }), fetchImpl: fakeFetch }),
     ).rejects.toThrow(/did not return a test file/);
+  });
+
+  it("reports the usage the provider states", async () => {
+    const seen: TokenUsage[] = [];
+    const fakeFetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }],
+          usage: { prompt_tokens: 120, completion_tokens: 80 },
+        }),
+      )) as unknown as typeof fetch;
+
+    await generateTest({
+      ...input({ provider: "openai" }),
+      fetchImpl: fakeFetch,
+      onUsage: (usage) => seen.push(usage),
+    });
+
+    expect(seen).toEqual([{ input: 120, output: 80 }]);
+  });
+
+  it("falls back to the next model once on a retryable failure and says so", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const notices: string[] = [];
+    let calls = 0;
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      calls += 1;
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (calls === 1) return new Response("busy", { status: 429 });
+      return openAiReply(TEST_CODE);
+    }) as unknown as typeof fetch;
+
+    const base = input({ provider: "openai" });
+    const code = await generateTest({
+      ...base,
+      config: { ...base.config, fallbackModel: "gpt-6.1-sol" },
+      fetchImpl: fakeFetch,
+      onNotice: (text) => notices.push(text),
+    });
+
+    expect(code).toBe(TEST_CODE);
+    expect(bodies[1]?.model).toBe("gpt-6.1-sol");
+    expect(notices[0]).toContain("falling back to gpt-6.1-sol");
+  });
+
+  it("does not fall back on a non-retryable refusal", async () => {
+    let calls = 0;
+    const fakeFetch = (async () => {
+      calls += 1;
+      return new Response("bad request", { status: 400 });
+    }) as unknown as typeof fetch;
+
+    const base = input({ provider: "openai" });
+    await expect(
+      generateTest({
+        ...base,
+        config: { ...base.config, fallbackModel: "gpt-6.1-sol" },
+        fetchImpl: fakeFetch,
+      }),
+    ).rejects.toThrow(/returned 400/);
+    expect(calls).toBe(1);
+  });
+});
+
+describe("estimatePromptTokens", () => {
+  it("returns a bounded range from the prompt size", () => {
+    const estimate = estimatePromptTokens(input({ provider: "openai" }));
+    expect(estimate.low).toBeGreaterThan(0);
+    expect(estimate.high).toBeGreaterThan(estimate.low);
   });
 });

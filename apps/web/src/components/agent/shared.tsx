@@ -2,12 +2,16 @@
 import { Check, CheckCircle2, TriangleAlert, Wrench, X } from "lucide-react";
 import { Badge, Hint, cn } from "@edge-spec/ui";
 import type {
+  ApiHealthRow,
   ApiTestResult,
   CheckResult,
+  CoverageDelta,
   Generation,
+  MutationResult,
   StepId,
   Validation,
 } from "@edge-spec/core/types";
+import type { ProvenanceFile, SkippedContractOperation } from "@edge-spec/core/provenance";
 
 export interface AgentTest {
   generation: Generation;
@@ -117,8 +121,26 @@ export function MethodChip({ method }: { method: string }) {
   );
 }
 
-export function EndpointStatus({ result }: { result?: ApiTestResult }) {
+export function EndpointStatus({
+  result,
+  health,
+}: {
+  result?: ApiTestResult;
+  health?: ApiHealthRow;
+}) {
   if (!result) {
+    if (health?.status === "missing-test") {
+      return (
+        <Badge
+          variant="warning"
+          className="gap-1"
+          title="No contract test is named for this operation"
+        >
+          <TriangleAlert className="size-3" />
+          needs test
+        </Badge>
+      );
+    }
     return (
       <Badge variant="neutral" className="gap-1">
         Not run
@@ -134,10 +156,12 @@ export function EndpointStatus({ result }: { result?: ApiTestResult }) {
     );
   }
   if (result.status === "failed") {
+    const diagnosis =
+      result.diagnosis === "missing-fixture" ? "fixture" : (result.diagnosis ?? "failed");
     return (
       <Badge variant="danger" className="gap-1">
         <X className="size-3" />
-        {result.httpStatus ?? "failed"}
+        {result.httpStatus ? `${result.httpStatus} · ${diagnosis}` : diagnosis}
       </Badge>
     );
   }
@@ -159,6 +183,13 @@ function checkStatus(check: CheckResult): "passed" | "failed" | "warning" {
 
 /** One dot per real repository check, or one for the suite result. */
 export function CheckSummary({ validation }: { validation: Validation }) {
+  if (validation.flaky) {
+    return (
+      <Hint label="Flaky — quarantined, not verified">
+        <span className="inline-block size-2 rounded-full bg-amber-400" aria-label="Flaky suite" />
+      </Hint>
+    );
+  }
   const checks = validation.checks ?? [];
   if (checks.length === 0) {
     const status = validation.ok ? (validation.verified ? "passed" : "warning") : "failed";
@@ -271,13 +302,61 @@ export function coverageLabel(status?: "not-run" | "unavailable" | "measured"): 
 }
 
 export function verificationLabel(validation: Validation): string {
+  if (validation.flaky) return "Flaky · quarantined";
   if (!validation.ok) return "Validation failed";
   return validation.verified ? "Executed on the runner" : "Static check only";
 }
 
 export function verificationVariant(validation: Validation): "success" | "warning" | "danger" {
+  if (validation.flaky) return "warning";
   if (!validation.ok) return "danger";
   return validation.verified ? "success" : "warning";
+}
+
+/** A compact delta for the review row; absence means it was not measured. */
+export function coverageDeltaLabel(delta?: CoverageDelta): string {
+  if (!delta || delta.status !== "measured") return "coverage not measured";
+  const lines = delta.lines.delta;
+  return `coverage ${lines >= 0 ? "+" : ""}${lines} lines`;
+}
+
+/** A measured mutation score, or an explicit reason it is unmeasured. */
+export function mutationSummary(mutation?: MutationResult): string {
+  if (!mutation) return "not measured";
+  if (mutation.status === "not-measured") {
+    return `not measured${mutation.reason ? ` · ${mutation.reason}` : ""}`;
+  }
+  return `${mutation.score}% · ${mutation.killed} killed / ${mutation.survived} survived${
+    mutation.budgetStopped ? " · budget stop" : ""
+  }`;
+}
+
+/** The facts a pull request body needs, from the tests the reviewer accepted. */
+export function provenanceFiles(items: readonly AgentTest[]): ProvenanceFile[] {
+  return items.map(({ generation, validation }) => ({
+    sourcePath: generation.sourcePath,
+    testPath: generation.testPath,
+    provider: generation.provider,
+    model: generation.model,
+    ...(generation.promptVersion ? { promptVersion: generation.promptVersion } : {}),
+    corrected: generation.corrected,
+    ...(validation.flaky ? { flaky: true } : {}),
+    verified: validation.verified,
+    ...(validation.checks ? { checks: validation.checks } : {}),
+    ...(validation.coverage ? { coverage: validation.coverage } : {}),
+    ...(validation.mutation ? { mutation: validation.mutation } : {}),
+  }));
+}
+
+/** Skipped contract operations with the reason the runner or planner gave. */
+export function skippedOperationsOf(results: readonly ApiTestResult[]): SkippedContractOperation[] {
+  return results
+    .filter((result) => result.status === "skipped")
+    .map((result) => ({
+      method: result.method,
+      path: result.path,
+      reason: result.error ?? "skipped",
+    }));
 }
 
 export function skippedChecks(validation: Validation): number {

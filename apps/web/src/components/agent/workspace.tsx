@@ -18,10 +18,13 @@ import {
   FileSearch,
   Folder,
   FolderGit2,
+  Gauge,
   GitBranch,
   GitPullRequest,
+  History,
   Info,
   KeyRound,
+  ListTodo,
   Loader2,
   Lock,
   Moon,
@@ -29,6 +32,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  ScrollText,
   Server,
   Settings,
   ShieldCheck,
@@ -37,6 +41,7 @@ import {
   Sun,
   Terminal,
   TriangleAlert,
+  User,
   Wrench,
   X,
   Zap,
@@ -44,6 +49,7 @@ import {
 import { folderFirst } from "@edge-spec/core/scanner";
 import { providerById } from "@edge-spec/core/catalog";
 import { parseRepoInput } from "@edge-spec/core/catalog";
+import { pullRequestBody } from "@edge-spec/core/provenance";
 import type {
   ApiTestResult,
   CoverageStatus,
@@ -52,6 +58,7 @@ import type {
   OpenApiEndpoint,
   RateLimitInfo,
   RepositoryOverview,
+  RetestOperation,
   ScanTotals,
   ScanTruncation,
   StepId,
@@ -109,15 +116,18 @@ import {
   TooltipProvider,
   cn,
 } from "@edge-spec/ui";
-import { fetchBranches, type PullMeta } from "@/api";
+import { fetchBranches, recordRunDecision, type PullMeta } from "@/api";
 import { isLocalPathInput } from "@/lib/local-path";
 import { setProject, type Project, type Settings as SettingsValue } from "@/lib/settings";
 import { toggleMode, useAppearance } from "@/lib/theme";
 import {
   CheckSummary,
   EndpointStatus,
+  coverageDeltaLabel,
   coverageLabel,
   ICON_GRADIENT,
+  provenanceFiles,
+  skippedOperationsOf,
   IconGradientDefs,
   INITIAL_STEPS,
   MethodChip,
@@ -130,9 +140,11 @@ import {
   type Tone,
 } from "./shared";
 import {
+  BacklogDialog,
   DiffDialog,
   EndpointDialog,
   FactsDialog,
+  HistoryDialog,
   LogDialog,
   PrDialog,
   SourceDialog,
@@ -140,6 +152,7 @@ import {
   type PrDraft,
   type ReviewEntry,
 } from "./dialogs";
+import { AuditDialog } from "./deployment";
 import type { SettingsSection } from "./settings-sheet";
 
 type Mode = "review" | "auto";
@@ -188,10 +201,15 @@ export interface AgentWorkspaceProps {
   overview?: RepositoryOverview;
   generated: AgentTest[];
   pullUrls: Record<string, string>;
+  /** The history id of the current run, when the deployment stores history. */
+  runId?: string;
   apiResults: ApiTestResult[];
+  /** The last API result came from a retest, not a fresh run. */
+  retest?: boolean;
   toast?: { title: string; description?: string; variant: "default" | "success" | "warning" };
   onRun: () => void;
   onScan: () => void;
+  onRetest: (operations: RetestOperation[]) => void;
   onStop: () => void;
   onStopGenerating: () => void;
   onReset: () => void;
@@ -221,10 +239,13 @@ export function AgentWorkspace({
   overview,
   generated,
   pullUrls,
+  runId,
   apiResults,
+  retest,
   toast,
   onRun,
   onScan,
+  onRetest,
   onStop,
   onStopGenerating,
   onReset,
@@ -266,6 +287,9 @@ export function AgentWorkspace({
   >(undefined);
   const [specOpen, setSpecOpen] = useState(false);
   const [factsOpen, setFactsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [backlogOpen, setBacklogOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
   const [prOpen, setPrOpen] = useState(false);
   const [prDraft, setPrDraft] = useState<PrDraft>({
     title: "",
@@ -278,6 +302,9 @@ export function AgentWorkspace({
   const [prError, setPrError] = useState<string | undefined>(undefined);
   const [openedUrl, setOpenedUrl] = useState<string | undefined>(undefined);
   const autoHandled = useRef(false);
+
+  /** Open a portalled overlay after the menu closes; opening it inside onSelect can get dismissed. */
+  const openFromMenu = (action: () => void) => window.setTimeout(action, 0);
 
   const parsedInput = parseRepoInput(repoInput);
   const inputLocal = isLocalPathInput(repoInput);
@@ -362,15 +389,25 @@ export function AgentWorkspace({
       }
       return next;
     });
+    if (runId) {
+      for (const item of generated) {
+        void recordRunDecision(
+          runId,
+          item.generation.sourcePath,
+          item.validation.ok ? "accepted" : "rejected",
+        ).catch(() => undefined);
+      }
+    }
     openPullDialog(verified);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, mode, generated]);
+  }, [running, mode, generated, runId]);
 
   const counts: ScanTotals = totals ?? {
     missing: gaps.filter((gap) => (gap.kind ?? "missing") === "missing").length,
     coverage: gaps.filter((gap) => gap.kind === "coverage").length,
     api: gaps.filter((gap) => gap.kind === "api").length,
     unsupported: gaps.filter((gap) => gap.kind === "unsupported").length,
+    skipped: 0,
   };
   const orderedGaps = folderFirst(gaps, project.folder);
   const query = (value: string) => value.trim().toLowerCase();
@@ -415,6 +452,13 @@ export function AgentWorkspace({
         result.specPath === spec &&
         result.method.toUpperCase() === endpoint.method.toUpperCase() &&
         result.path === endpoint.path,
+    );
+  const endpointHealth = (spec: string, endpoint: OpenApiEndpoint) =>
+    overview?.apiHealth?.find(
+      (row) =>
+        row.specPath === spec &&
+        row.method.toUpperCase() === endpoint.method.toUpperCase() &&
+        row.path === endpoint.path,
     );
 
   const entries: ReviewEntry[] = generated.map((item) => ({
@@ -629,30 +673,14 @@ export function AgentWorkspace({
     setEndpointKey({ specPath: spec, method: item.method, path: item.path });
   };
 
-  const buildDescription = (items: AgentTest[]) => {
-    const verified = items.filter((item) => item.validation.verified).length;
-    const staticOnly = items.filter(
-      (item) => item.validation.ok && !item.validation.verified,
-    ).length;
-    return [
-      "## Summary",
-      "",
-      `Generated with ${provider?.name ?? settings.provider} · ${settings.model}.`,
-      "",
-      ...items.map((item) => `- ${item.generation.testPath}`),
-      "",
-      "## Verification",
-      "",
-      verified
-        ? `- ${verified} suite(s) executed on the runner.`
-        : "- No runner executed these tests.",
-      staticOnly ? `- ${staticOnly} suite(s) passed static checks only.` : "",
-      apiSkipped ? `- ${apiSkipped} contract operation(s) skipped.` : "",
-      "- Application source was not modified.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  };
+  const buildDescription = (items: AgentTest[]) =>
+    pullRequestBody({
+      provider: provider?.name ?? settings.provider,
+      model: settings.model,
+      files: provenanceFiles(items),
+      skipped: skippedOperationsOf(apiResults),
+      testOnly: true,
+    });
 
   function openPullDialog(items: AgentTest[]) {
     if (items.length === 0) return;
@@ -698,12 +726,17 @@ export function AgentWorkspace({
 
   const setReview = (path: string, state: ReviewState) => {
     setReviews((current) => ({ ...current, [path]: state }));
+    if (runId) void recordRunDecision(runId, path, state).catch(() => undefined);
   };
 
   const restoreRejected = () => {
     setReviews((current) => {
       const next = { ...current };
-      for (const key of Object.keys(next)) if (next[key] === "rejected") next[key] = "pending";
+      for (const key of Object.keys(next)) {
+        if (next[key] !== "rejected") continue;
+        next[key] = "pending";
+        if (runId) void recordRunDecision(runId, key, "pending").catch(() => undefined);
+      }
       return next;
     });
   };
@@ -794,16 +827,18 @@ export function AgentWorkspace({
                     </Badge>
                   </button>
                 </Hint>
-                <Hint label="Settings">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => onOpenSettings()}
-                    aria-label="Open settings"
-                  >
-                    <Settings className="text-indigo-300" />
-                  </Button>
-                </Hint>
+                {project.repo && !project.localPath && (
+                  <Hint label="Test-debt backlog">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setBacklogOpen(true)}
+                      aria-label="Test-debt backlog"
+                    >
+                      <ListTodo className="text-amber-300" />
+                    </Button>
+                  </Hint>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -812,22 +847,78 @@ export function AgentWorkspace({
                       className="rounded-full transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:outline-none"
                     >
                       <Avatar>
-                        <AvatarFallback>ES</AvatarFallback>
+                        <AvatarFallback>
+                          <User className="size-4" />
+                        </AvatarFallback>
                       </Avatar>
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuContent align="end" className="w-64">
                     <DropdownMenuLabel>
-                      {project.repo || project.localPath || "no project"}
-                      {project.ref ? ` · ${project.ref}` : ""}
+                      <span className="block truncate text-[11px] font-semibold text-zinc-200">
+                        {project.repo || project.localPath || "No project"}
+                      </span>
+                      <span className="block text-[9px] font-normal text-zinc-500">
+                        {project.ref || "no branch"} · {appearance.mode} mode
+                      </span>
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={toggleMode}>
                       {appearance.mode === "dark" ? <Sun /> : <Moon />}
-                      {appearance.mode === "dark" ? "Light" : "Dark"} mode
+                      Switch to {appearance.mode === "dark" ? "light" : "dark"}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => onOpenSettings("provider")}>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[9px] tracking-wide text-zinc-500 uppercase">
+                      Settings
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => onOpenSettings())}>
+                      <Settings />
+                      All settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("provider"))}
+                    >
                       <KeyRound />
-                      Provider & keys
+                      AI provider & keys
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("sandbox"))}
+                    >
+                      <Boxes />
+                      Sandbox
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("pipeline"))}
+                    >
+                      <Gauge />
+                      Pipeline
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => onOpenSettings("policy"))}>
+                      <ShieldCheck />
+                      Policy
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("deployment"))}
+                    >
+                      <Server />
+                      Deployment
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("appearance"))}
+                    >
+                      <Sparkles />
+                      Appearance
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[9px] tracking-wide text-zinc-500 uppercase">
+                      Activity
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => setHistoryOpen(true))}>
+                      <History />
+                      Run history
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => setAuditOpen(true))}>
+                      <ScrollText />
+                      Audit log
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={onReset}>
@@ -858,7 +949,6 @@ export function AgentWorkspace({
                 title="Repository"
                 icon={FolderGit2}
                 tone="clone"
-                iconClass="text-zinc-400"
                 hint="pick a repo, a branch and how much control you keep"
                 aside={
                   <Badge
@@ -932,26 +1022,26 @@ export function AgentWorkspace({
                     </SelectContent>
                   </Select>
                 )}
-                <Button
-                  onClick={busy ? stopOrReset : start}
-                  disabled={!busy && (!repoInput.trim() || invalid)}
-                  className={cn(
-                    "sm:w-36",
-                    busy && "from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500",
-                  )}
-                >
-                  {busy ? (
-                    <>
+                <Hint label={busy ? "Stop this run" : startLabel}>
+                  <Button
+                    onClick={busy ? stopOrReset : start}
+                    disabled={!busy && (!repoInput.trim() || invalid)}
+                    aria-label={busy ? "Stop this run" : startLabel}
+                    className={cn(
+                      busy ? "px-0 sm:w-9" : "sm:w-36",
+                      busy && "from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500",
+                    )}
+                  >
+                    {busy ? (
                       <Square className="size-3.5 fill-current" />
-                      Stop
-                    </>
-                  ) : (
-                    <>
-                      <Play className="size-3.5 fill-current" />
-                      {startLabel}
-                    </>
-                  )}
-                </Button>
+                    ) : (
+                      <>
+                        <Play className="size-3.5 fill-current" />
+                        {startLabel}
+                      </>
+                    )}
+                  </Button>
+                </Hint>
               </div>
 
               {invalid ? (
@@ -1142,6 +1232,9 @@ export function AgentWorkspace({
                     </Badge>
                     {counts.unsupported > 0 && (
                       <Badge variant="neutral">{counts.unsupported} unsupported</Badge>
+                    )}
+                    {counts.skipped > 0 && (
+                      <Badge variant="neutral">{counts.skipped} skipped</Badge>
                     )}
                   </>
                 }
@@ -1375,6 +1468,15 @@ export function AgentWorkspace({
                           {currentSpec?.path ?? "No spec"}
                         </Badge>
                       )}
+                      {currentSpec?.inferred && (
+                        <Badge
+                          variant="warning"
+                          className="px-1.5 py-0 text-[9px]"
+                          title="Inferred from source because no OpenAPI document was found"
+                        >
+                          inferred
+                        </Badge>
+                      )}
                     </span>
                     <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
                       {apiResults.length ? (
@@ -1475,7 +1577,10 @@ export function AgentWorkspace({
                                   {steps.validate.status === "running" && !result ? (
                                     <Skeleton className="h-4 w-20" />
                                   ) : (
-                                    <EndpointStatus result={result} />
+                                    <EndpointStatus
+                                      result={result}
+                                      health={endpointHealth(currentSpec.path, item)}
+                                    />
                                   )}
                                 </TableCell>
                                 <TableCell className="hidden pr-3 text-right font-mono text-[10px] text-zinc-500 sm:table-cell">
@@ -1509,11 +1614,35 @@ export function AgentWorkspace({
                   <div className="flex items-center gap-1.5 border-t border-zinc-800/60 px-3 py-1.5 text-[10px] text-zinc-500">
                     <Server className="size-3 text-sky-400" />
                     {apiResults.length
-                      ? "contract suite executed"
+                      ? retest
+                        ? "contract retest executed"
+                        : "contract suite executed"
                       : settings.sandboxUrl.trim()
                         ? "Runner configured · contract suite not run yet"
                         : "No runner · static checks only"}
-                    <span className="ml-auto font-mono">
+                    {apiFailed > 0 && (
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        className="ml-auto"
+                        disabled={running}
+                        onClick={() =>
+                          onRetest(
+                            apiResults
+                              .filter((result) => result.status === "failed")
+                              .map((result) => ({
+                                specPath: result.specPath,
+                                method: result.method,
+                                path: result.path,
+                              })),
+                          )
+                        }
+                      >
+                        <RefreshCw className="size-3" />
+                        Retest {apiFailed} failed
+                      </Button>
+                    )}
+                    <span className={cn("font-mono", apiFailed === 0 && "ml-auto")}>
                       {apiPassed}/{apiResults.length || 0} · {apiFailed} failed · {apiSkipped}{" "}
                       skipped
                     </span>
@@ -1531,7 +1660,6 @@ export function AgentWorkspace({
                 title="Review Queue"
                 icon={FileDiff}
                 tone="review"
-                iconClass="text-stage-analyze"
                 hint="accept or reject each file; preview the diff or the source"
                 aside={
                   <>
@@ -1660,6 +1788,19 @@ export function AgentWorkspace({
                         <span className="hidden sm:block">
                           <CheckSummary validation={item.validation} />
                         </span>
+                        {item.validation.flaky && (
+                          <Badge variant="warning">flaky · quarantined</Badge>
+                        )}
+                        {item.validation.mutation?.status === "measured" && (
+                          <Badge variant="neutral">
+                            mutation {item.validation.mutation.score}%
+                          </Badge>
+                        )}
+                        {item.validation.coverage && (
+                          <Badge variant="neutral">
+                            {coverageDeltaLabel(item.validation.coverage)}
+                          </Badge>
+                        )}
                         <Hint label="Preview diff">
                           <Button
                             variant="ghost"
@@ -2020,6 +2161,17 @@ export function AgentWorkspace({
           coverageStatus={coverageStatus}
           coverageReason={coverageReason}
         />
+        <HistoryDialog
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          repo={project.repo}
+        />
+        <BacklogDialog
+          open={backlogOpen}
+          onClose={() => setBacklogOpen(false)}
+          repo={project.repo}
+        />
+        <AuditDialog open={auditOpen} onClose={() => setAuditOpen(false)} repo={project.repo} />
         <PrDialog
           open={prOpen}
           onClose={() => setPrOpen(false)}
@@ -2160,7 +2312,6 @@ function StepHead({
   hint,
   icon: Icon,
   tone,
-  iconClass,
   aside,
 }: {
   n: string;
@@ -2168,7 +2319,6 @@ function StepHead({
   hint: string;
   icon: typeof FolderGit2;
   tone: Tone;
-  iconClass?: string;
   aside?: ReactNode;
 }) {
   const palette = TONES[tone];
@@ -2186,7 +2336,7 @@ function StepHead({
       </span>
       <div className="min-w-0">
         <h2 className="flex items-center gap-1.5 text-xs font-semibold text-zinc-100">
-          <Icon className={cn("size-3.5", iconClass ?? palette.text)} />
+          <Icon className={cn("size-3.5", palette.text)} />
           {title}
         </h2>
         <p className="text-[10px] text-zinc-500">{hint}</p>

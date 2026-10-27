@@ -64,6 +64,7 @@ describe("EdgeSpecClient", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe("https://edge.test/api/generate");
     const headers = calls[0]!.init.headers as Record<string, string>;
+
     expect(headers["x-github-token"]).toBe("gh-token");
     expect(headers["x-ai-key"]).toBe("ai-key");
     expect(headers["x-ai-base-url"]).toBe("https://ai.test");
@@ -79,6 +80,20 @@ describe("EdgeSpecClient", () => {
       strictTypes: false,
       maxRetries: 2,
     });
+  });
+
+  it("sends inline source for watch mode without a repository", async () => {
+    const { fetchImpl, calls } = fakeFetch(() =>
+      Response.json({ generation, validation, attempts: 1 }),
+    );
+    const client = new EdgeSpecClient({ baseUrl: "https://edge.test", fetchImpl });
+
+    await client.generate({ source: "export const a = 1;", path: "src/a.ts" });
+
+    const body = JSON.parse(String(calls[0]!.init.body)) as Record<string, unknown>;
+    expect(body.source).toBe("export const a = 1;");
+    expect(body.path).toBe("src/a.ts");
+    expect(body.repo).toBeUndefined();
   });
 
   it("surfaces API error messages", async () => {

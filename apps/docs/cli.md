@@ -48,6 +48,22 @@ OPENAI_API_KEY=sk-... bun --silent run cli -- generate owner/repo src/auth.ts \
 
 `--pr` opens a pull request only when validation passes.
 
+### Watch a local workspace
+
+```bash
+OPENAI_API_KEY=sk-... bun --silent run cli -- watch . --provider openai --model gpt-6-astra
+```
+
+`watch` needs a **local** EdgeSpec Worker (`http://127.0.0.1:8787`) because it
+sends inline source; a deployed Worker rejects it. On each saved source file it
+generates one test, prints a compact diff, and asks `[a]pply/[r]eject`. Use
+`--write` to apply passing tests without prompting. Test files and build output
+are ignored; validation uses the local Worker's configured sandbox (or static
+checks only). Ctrl+C stops it; an in-flight generation is not cancelled.
+
+There is no VS Code extension in this repository yet; the watch command is the
+local editor-adjacent surface.
+
 ### Run the pipeline
 
 ```bash
@@ -84,6 +100,7 @@ Lists providers, models, defaults, and whether a sandbox runner is configured.
 | `--folder <path>`       | Prioritize a folder when scanning         |
 | `--limit <n>`           | Limit scan results, 1-100                 |
 | `--out <file>`          | Write generated code to a file            |
+| `--write`               | Watch mode: apply without prompting       |
 | `--pr`                  | Open a pull request for passing tests     |
 | `--json`                | Print machine-readable JSON               |
 

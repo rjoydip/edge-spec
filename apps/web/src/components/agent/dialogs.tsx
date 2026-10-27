@@ -23,12 +23,15 @@ import {
   ShieldCheck,
   Sparkles,
   Timer,
+  Trash2,
   TriangleAlert,
   Type,
   Wrench,
   X,
 } from "lucide-react";
 import { providerById } from "@edge-spec/core/catalog";
+import { compareRuns, type RunComparison, type RunSummary } from "@edge-spec/core/history";
+import { pullRequestBody } from "@edge-spec/core/provenance";
 import type {
   ApiTestResult,
   OpenApiEndpoint,
@@ -62,12 +65,25 @@ import {
   Textarea,
   cn,
 } from "@edge-spec/ui";
+import type { BacklogItem, BacklogState } from "@edge-spec/core/backlog";
+import {
+  deleteRuns,
+  fetchBacklog,
+  fetchRunArtifacts,
+  fetchRunDetail,
+  fetchRuns,
+  updateBacklog,
+} from "@/api";
 import type { Project, Settings } from "@/lib/settings";
 import { HighlightedCode } from "./highlight";
 import {
   CheckSummary,
   EndpointStatus,
+  coverageDeltaLabel,
   coverageLabel,
+  mutationSummary,
+  provenanceFiles,
+  skippedOperationsOf,
   ICON_GRADIENT,
   MethodChip,
   downloadFile,
@@ -339,6 +355,10 @@ export function SourceDialog({
             {providerById(generation.provider)?.name ?? generation.provider} · {generation.model}
           </Badge>
           <CheckSummary validation={validation} />
+          {validation.flaky && <Badge variant="warning">flaky · quarantined</Badge>}
+          {validation.coverage && (
+            <Badge variant="neutral">{coverageDeltaLabel(validation.coverage)}</Badge>
+          )}
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -396,6 +416,22 @@ export function SourceDialog({
         </div>
 
         <CheckGrid validation={validation} />
+
+        <div className="rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
+              Mutation
+            </span>
+            <span className="ml-auto font-mono text-[10px] text-zinc-300">
+              {mutationSummary(validation.mutation)}
+            </span>
+          </div>
+          {validation.mutation?.status === "measured" && (
+            <p className="mt-1 truncate font-mono text-[9px] text-zinc-500">
+              {validation.mutation.command}
+            </p>
+          )}
+        </div>
 
         <div className="grid gap-2 lg:grid-cols-2">
           <div className="min-w-0 space-y-1.5">
@@ -545,10 +581,29 @@ export function EndpointDialog({
           <Alert variant="danger">
             <TriangleAlert />
             <div>
-              <AlertTitle>Contract test failed</AlertTitle>
+              <AlertTitle>
+                Contract test failed{result.diagnosis ? ` · ${result.diagnosis}` : ""}
+              </AlertTitle>
               <AlertDescription>{result.error}</AlertDescription>
             </div>
           </Alert>
+        )}
+
+        {(result?.expected || result?.actual) && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-2">
+              <p className="text-[10px] text-zinc-500">Expected</p>
+              <p className="mt-0.5 font-mono text-[10px] break-words text-emerald-300">
+                {result.expected ?? "not reported"}
+              </p>
+            </div>
+            <div className="rounded-lg border border-zinc-800/70 bg-zinc-950/40 px-2.5 py-2">
+              <p className="text-[10px] text-zinc-500">Actual</p>
+              <p className="mt-0.5 font-mono text-[10px] break-words text-rose-300">
+                {result.actual ?? "not reported"}
+              </p>
+            </div>
+          </div>
         )}
 
         <div className="grid gap-2 sm:grid-cols-2">
@@ -619,7 +674,7 @@ export function SpecDialog({
       title={spec?.path ?? "OpenAPI spec"}
       description={
         spec
-          ? `${spec.endpoints.length} operations${spec.servers?.length ? ` · ${spec.servers[0]}` : ""}`
+          ? `${spec.endpoints.length} operations${spec.servers?.length ? ` · ${spec.servers[0]}` : ""}${spec.inferred ? " · inferred from source; review before use" : ""}`
           : "No OpenAPI document was found in this scan."
       }
       className="max-w-3xl"
@@ -656,11 +711,14 @@ export function SpecDialog({
             <Sparkles className="mt-0.5 size-4 shrink-0 text-indigo-300" />
             <div className="min-w-0">
               <p className="text-[11px] font-semibold text-zinc-200">
-                Built from the spec — no model call
+                {spec.inferred
+                  ? "Inferred from source — review before use"
+                  : "Built from the spec — no model call"}
               </p>
               <p className="mt-0.5 text-[10px] leading-relaxed text-zinc-500">
-                EdgeSpec reads the document and writes the contract test itself. Only test files are
-                added; your application code is never modified.
+                {spec.inferred
+                  ? "No OpenAPI document was found, so EdgeSpec read route calls and marked the result inferred. Confirm each operation before treating it as a contract."
+                  : "EdgeSpec reads the document and writes the contract test itself. Only test files are added; your application code is never modified."}
               </p>
             </div>
           </div>
@@ -871,6 +929,7 @@ export function FactsDialog({
             {overview.formatter && (
               <Badge variant="neutral">formatter · {overview.formatter}</Badge>
             )}
+            {overview.testRunner && <Badge variant="neutral">runner · {overview.testRunner}</Badge>}
             <Badge variant={coverageStatus === "measured" ? "success" : "warning"}>
               Coverage · {coverageLabel(coverageStatus)}
               {coverageReason ? ` · ${coverageReason}` : ""}
@@ -968,24 +1027,13 @@ export function PrDialog({
       ...value,
       title: `test: cover ${files.length || "the"} untested path${files.length === 1 ? "" : "s"}`,
       commit: `test: add ${files.length} generated test file${files.length === 1 ? "" : "s"}`,
-      description: [
-        "## Summary",
-        "",
-        `Generated with ${providerName} · ${settings.model}.`,
-        "",
-        ...files.map((file) => `- ${file}`),
-        "",
-        "## Verification",
-        "",
-        verified
-          ? `- ${verified} suite(s) executed on the runner.`
-          : "- No runner executed these tests.",
-        staticOnly ? `- ${staticOnly} suite(s) passed static checks only.` : "",
-        skipped.length ? `- ${skipped.length} contract operation(s) skipped.` : "",
-        "- Application source was not modified.",
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      description: pullRequestBody({
+        provider: providerName,
+        model: settings.model,
+        files: provenanceFiles(accepted.map((entry) => entry.item)),
+        skipped: skippedOperationsOf(skipped),
+        testOnly: true,
+      }),
     });
   };
 
@@ -1437,6 +1485,594 @@ function Section({
         {title}
       </p>
       {children}
+    </div>
+  );
+}
+
+function signed(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function when(ms: number): string {
+  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** Stored runs for one repository, with a two-run compare. */
+type RunTone = {
+  badge: "success" | "danger" | "accent" | "neutral";
+  bar: string;
+  tint: string;
+  dot: string;
+};
+
+const RUN_TONE: Record<string, RunTone> = {
+  ready: {
+    badge: "success",
+    bar: "border-l-emerald-400/70",
+    tint: "bg-emerald-500/[0.04]",
+    dot: "bg-emerald-400",
+  },
+  failed: {
+    badge: "danger",
+    bar: "border-l-rose-400/70",
+    tint: "bg-rose-500/[0.05]",
+    dot: "bg-rose-400",
+  },
+  running: {
+    badge: "accent",
+    bar: "border-l-sky-400/70",
+    tint: "bg-sky-500/[0.04]",
+    dot: "bg-sky-400",
+  },
+};
+
+const runTone = (status: string): RunTone =>
+  RUN_TONE[status] ?? {
+    badge: "neutral",
+    bar: "border-l-zinc-500/70",
+    tint: "bg-zinc-900/40",
+    dot: "bg-zinc-500",
+  };
+
+export function HistoryDialog({
+  open,
+  onClose,
+  repo,
+}: {
+  open: boolean;
+  onClose: () => void;
+  repo: string;
+}) {
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [selected, setSelected] = useState<string[]>([]);
+  const [comparison, setComparison] = useState<RunComparison>();
+  const [deleting, setDeleting] = useState(false);
+  const [artifactBusy, setArtifactBusy] = useState<string>();
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    if (!open || !repo) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+    fetchRuns(repo)
+      .then((result) => {
+        if (cancelled) return;
+        setEnabled(result.enabled);
+        setRuns(result.runs);
+        setSelected([]);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, repo, reload]);
+
+  useEffect(() => {
+    if (selected.length !== 2) {
+      setComparison(undefined);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(selected.map((id) => fetchRunDetail(id)))
+      .then(([before, after]) => {
+        if (cancelled || !before || !after || !before.enabled || !after.enabled) return;
+        setComparison(compareRuns(before, after));
+      })
+      .catch(() => {
+        if (!cancelled) setComparison(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const toggle = (id: string) => {
+    setSelected((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id].slice(-2),
+    );
+  };
+
+  const remove = async () => {
+    if (!repo || !window.confirm(`Delete all run history for ${repo}?`)) return;
+    setDeleting(true);
+    try {
+      await deleteRuns(repo);
+      setReload((value) => value + 1);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  /** The bundle is written for interactive runs only; a 404 is a normal miss. */
+  const downloadArtifact = async (run: RunSummary) => {
+    setArtifactBusy(run.id);
+    setError(undefined);
+    try {
+      const result = await fetchRunArtifacts(run.id);
+      if (!result.enabled) {
+        setError("Run artifacts are not enabled: this deployment has no R2 ARTIFACTS binding.");
+        return;
+      }
+      if (!result.artifact) {
+        setError(`No artifact bundle was stored for this run (${when(run.startedAt)}).`);
+        return;
+      }
+      downloadFile(
+        `edge-spec-${run.id}.json`,
+        JSON.stringify(result.artifact, null, 2),
+        "application/json",
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setArtifactBusy(undefined);
+    }
+  };
+
+  const readyCount = runs.filter((run) => run.status === "ready").length;
+  const failedCount = runs.filter((run) => run.status === "failed").length;
+  const runningCount = runs.filter((run) => run.status === "running").length;
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Run history"
+      description={`${repo} · select two runs to compare`}
+      className="max-w-4xl"
+      footer={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mr-auto"
+          onClick={remove}
+          disabled={!enabled || deleting || runs.length === 0}
+        >
+          {deleting ? <Loader2 className="animate-spin" /> : <Trash2 className="size-3.5" />}
+          Delete history
+        </Button>
+      }
+    >
+      {!enabled ? (
+        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
+          Run history is not enabled on this deployment. Add the optional D1 binding in
+          wrangler.toml and apply migrations/0001_runs.sql.
+        </p>
+      ) : loading ? (
+        <p className="flex items-center justify-center gap-2 py-8 text-[11px] text-zinc-500">
+          <Loader2 className="size-3.5 animate-spin" /> Loading runs…
+        </p>
+      ) : runs.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
+          No stored runs yet. Complete a run to record one.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-500/20 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-emerald-500/10 px-3 py-2">
+            <span className="text-[10px] font-semibold tracking-wide text-zinc-400 uppercase">
+              Runs
+            </span>
+            <span className="flex items-center gap-1.5 text-[10px] text-zinc-300">
+              <span className="size-1.5 rounded-full bg-emerald-400" />
+              {readyCount} ready
+            </span>
+            <span className="flex items-center gap-1.5 text-[10px] text-zinc-300">
+              <span className="size-1.5 rounded-full bg-rose-400" />
+              {failedCount} failed
+            </span>
+            {runningCount > 0 && (
+              <span className="flex items-center gap-1.5 text-[10px] text-zinc-300">
+                <span className="size-1.5 rounded-full bg-sky-400" />
+                {runningCount} running
+              </span>
+            )}
+            <span className="ml-auto text-[10px] text-zinc-500">{runs.length} total</span>
+          </div>
+          <div className="no-scrollbar max-h-[34vh] space-y-1.5 overflow-auto">
+            {runs.map((run) => {
+              const index = selected.indexOf(run.id);
+              const tone = runTone(run.status);
+              return (
+                <div key={run.id} className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => toggle(run.id)}
+                    className={cn(
+                      "min-w-0 flex-1 rounded-xl border-y border-r border-l-2 px-3 py-2 text-left transition",
+                      tone.bar,
+                      index >= 0
+                        ? "border-indigo-500/40 bg-indigo-500/10"
+                        : cn(tone.tint, "border-zinc-800/70 hover:border-zinc-700"),
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={tone.badge}>{run.status}</Badge>
+                      {index >= 0 && (
+                        <Badge variant="accent">{index === 0 ? "before" : "after"}</Badge>
+                      )}
+                      <span className="text-[11px] text-zinc-300">{when(run.startedAt)}</span>
+                      <span className="ml-auto font-mono text-[10px] text-zinc-500">
+                        {run.provider} · {run.model}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-500">
+                      <span>{run.totals.missing} missing</span>
+                      <span>{run.totals.coverage} coverage</span>
+                      <span>{run.totals.api} api</span>
+                      <span>{run.totals.skipped} skipped by policy</span>
+                    </div>
+                  </button>
+                  <Hint label="Download the stored artifact bundle">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Download artifacts for the run at ${when(run.startedAt)}`}
+                      onClick={() => downloadArtifact(run)}
+                      disabled={artifactBusy === run.id}
+                    >
+                      {artifactBusy === run.id ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <HardDriveDownload className="size-3.5 text-zinc-400" />
+                      )}
+                    </Button>
+                  </Hint>
+                </div>
+              );
+            })}
+          </div>
+          {comparison ? (
+            <ComparePanel comparison={comparison} />
+          ) : (
+            <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-4 text-center text-[11px] text-zinc-500">
+              Select two runs to compare files, verification, decisions and coverage.
+            </p>
+          )}
+        </div>
+      )}
+      {error && <p className="mt-3 text-[11px] text-rose-300">{error}</p>}
+    </Dialog>
+  );
+}
+
+const BACKLOG_TONE: Record<
+  BacklogState,
+  {
+    label: string;
+    badge: "accent" | "success" | "danger" | "neutral";
+    tint: string;
+    dot: string;
+  }
+> = {
+  open: {
+    label: "Open",
+    badge: "accent",
+    tint: "bg-sky-500/[0.04]",
+    dot: "bg-sky-400",
+  },
+  accepted: {
+    label: "Accepted",
+    badge: "success",
+    tint: "bg-emerald-500/[0.05]",
+    dot: "bg-emerald-400",
+  },
+  rejected: {
+    label: "Rejected",
+    badge: "danger",
+    tint: "bg-rose-500/[0.05]",
+    dot: "bg-rose-400",
+  },
+  ignored: {
+    label: "Ignored",
+    badge: "neutral",
+    tint: "bg-zinc-900/40",
+    dot: "bg-zinc-500",
+  },
+  closed: {
+    label: "Closed",
+    badge: "neutral",
+    tint: "bg-violet-500/[0.04]",
+    dot: "bg-violet-400",
+  },
+};
+
+/** Durable test-debt items for one repository. */
+export function BacklogDialog({
+  open,
+  onClose,
+  repo,
+}: {
+  open: boolean;
+  onClose: () => void;
+  repo: string;
+}) {
+  const [items, setItems] = useState<BacklogItem[]>([]);
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [filter, setFilter] = useState<"all" | BacklogState>("open");
+  const [busy, setBusy] = useState<string>();
+
+  useEffect(() => {
+    if (!open || !repo) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(undefined);
+    fetchBacklog(repo)
+      .then((result) => {
+        if (cancelled) return;
+        setEnabled(result.enabled);
+        setItems(result.items);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, repo]);
+
+  const act = async (item: BacklogItem, state: BacklogState) => {
+    setBusy(item.path);
+    try {
+      await updateBacklog(repo, item.path, state);
+      setItems((current) =>
+        current.map((entry) => (entry.path === item.path ? { ...entry, state } : entry)),
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const visible = filter === "all" ? items : items.filter((item) => item.state === filter);
+  const counts: Record<BacklogState, number> = {
+    open: 0,
+    accepted: 0,
+    rejected: 0,
+    ignored: 0,
+    closed: 0,
+  };
+  for (const item of items) counts[item.state] += 1;
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Test-debt backlog"
+      description={`${repo} · scans keep this current`}
+      className="max-w-4xl"
+    >
+      {!enabled ? (
+        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
+          The backlog needs the optional D1 binding (`RUNS_DB`).
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] transition",
+                filter === "all"
+                  ? "border-indigo-400/60 bg-indigo-500/15 text-indigo-200"
+                  : "border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+              )}
+            >
+              All <span className="font-mono text-zinc-500">{items.length}</span>
+            </button>
+            {(Object.keys(BACKLOG_TONE) as BacklogState[]).map((state) => {
+              const tone = BACKLOG_TONE[state];
+              return (
+                <button
+                  key={state}
+                  type="button"
+                  onClick={() => setFilter(state)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] transition",
+                    filter === state
+                      ? "border-indigo-400/60 bg-indigo-500/15 text-indigo-200"
+                      : "border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+                  )}
+                >
+                  <span className={cn("size-1.5 rounded-full", tone.dot)} />
+                  {tone.label}
+                  <span className="font-mono text-zinc-500">{counts[state]}</span>
+                </button>
+              );
+            })}
+            <span className="ml-auto text-[10px] text-zinc-500">{visible.length} shown</span>
+          </div>
+          {loading ? (
+            <p className="flex items-center justify-center gap-2 py-8 text-[11px] text-zinc-500">
+              <Loader2 className="size-3.5 animate-spin" /> Loading backlog…
+            </p>
+          ) : visible.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
+              No backlog items in this state.
+            </p>
+          ) : (
+            <div className="no-scrollbar max-h-[50vh] space-y-1.5 overflow-auto">
+              {visible.map((item) => {
+                const tone = BACKLOG_TONE[item.state];
+                return (
+                  <div
+                    key={item.path}
+                    className={cn(
+                      "flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800/70 px-3 py-2 transition hover:border-zinc-700",
+                      tone.tint,
+                    )}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-mono text-[11px] text-zinc-200">
+                        {item.path}
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-500">
+                        <Badge variant={tone.badge}>{tone.label}</Badge>
+                        <Badge variant="neutral">{item.kind}</Badge>
+                        {item.risk && (
+                          <Badge
+                            variant={
+                              item.risk === "high"
+                                ? "danger"
+                                : item.risk === "medium"
+                                  ? "warning"
+                                  : "neutral"
+                            }
+                          >
+                            {item.risk} risk
+                          </Badge>
+                        )}
+                        <span>{item.owner ?? "unowned"}</span>
+                        <span>· last seen {when(item.lastSeen)}</span>
+                      </span>
+                    </span>
+                    <Select
+                      value={item.state}
+                      onValueChange={(value) => void act(item, value as BacklogState)}
+                      disabled={busy === item.path}
+                    >
+                      <SelectTrigger className="h-8 w-28 text-[11px]" aria-label="Backlog state">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="open">Open</SelectItem>
+                        <SelectItem value="accepted">Accepted</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                        <SelectItem value="ignored">Ignored</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {error && <p className="text-[11px] text-rose-300">{error}</p>}
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
+function ComparePanel({ comparison }: { comparison: RunComparison }) {
+  const rows: Array<[string, string, number, 1 | -1]> = [
+    [
+      "Missing tests",
+      `${comparison.missing.before} → ${comparison.missing.after}`,
+      comparison.missing.delta,
+      -1,
+    ],
+    [
+      "Files covered",
+      `${comparison.files.before} → ${comparison.files.after}`,
+      comparison.files.after - comparison.files.before,
+      1,
+    ],
+    [
+      "Verified",
+      `${comparison.verified.before} → ${comparison.verified.after}`,
+      comparison.verified.after - comparison.verified.before,
+      1,
+    ],
+    [
+      "Accepted",
+      `${comparison.accepted.before} → ${comparison.accepted.after}`,
+      comparison.accepted.after - comparison.accepted.before,
+      1,
+    ],
+    [
+      "Rejected",
+      `${comparison.rejected.before} → ${comparison.rejected.after}`,
+      comparison.rejected.after - comparison.rejected.before,
+      -1,
+    ],
+    [
+      "Coverage lines",
+      `${signed(comparison.coverageLines.before)} → ${signed(comparison.coverageLines.after)}`,
+      comparison.coverageLines.delta,
+      1,
+    ],
+  ];
+
+  return (
+    <div className="rounded-xl border border-zinc-800/70 bg-zinc-950/40 p-3">
+      <p className="text-[10px] font-semibold tracking-wide text-zinc-400 uppercase">
+        Compare · {comparison.newFiles.length} new, {comparison.closedFiles.length} closed
+      </p>
+      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+        {rows.map(([label, values, delta, direction]) => {
+          const good = delta * direction;
+          return (
+            <div
+              key={label}
+              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800/60 px-2.5 py-1.5"
+            >
+              <span className="text-[10px] text-zinc-500">{label}</span>
+              <span className="font-mono text-[10px] text-zinc-300">{values}</span>
+              <Badge variant={good > 0 ? "success" : good < 0 ? "danger" : "neutral"}>
+                {signed(delta)}
+              </Badge>
+            </div>
+          );
+        })}
+      </div>
+      {comparison.newFiles.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <p className="text-[10px] font-semibold text-emerald-400">New files</p>
+          {comparison.newFiles.slice(0, 10).map((path) => (
+            <p key={path} className="truncate font-mono text-[10px] text-zinc-400">
+              {path}
+            </p>
+          ))}
+        </div>
+      )}
+      {comparison.closedFiles.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <p className="text-[10px] font-semibold text-zinc-400">No longer covered</p>
+          {comparison.closedFiles.slice(0, 10).map((path) => (
+            <p key={path} className="truncate font-mono text-[10px] text-zinc-500">
+              {path}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

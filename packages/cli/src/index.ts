@@ -16,6 +16,7 @@ import {
   type Validation,
 } from "@edge-spec/client";
 import { helpText, parseCliArgs, UsageError, type ParsedArgs } from "./args";
+import { runWatch } from "./watch";
 
 const VERSION = "0.1.0";
 
@@ -174,7 +175,7 @@ async function execute(parsed: ParsedArgs, env: Env): Promise<void> {
 
   const { client, defaults } = makeClient(env, {
     ...(parsed.url ? { url: parsed.url } : {}),
-    ...(parsed.command === "run" || parsed.command === "generate"
+    ...(parsed.command === "run" || parsed.command === "generate" || parsed.command === "watch"
       ? { provider: parsed.provider, sandboxUrl: parsed.sandboxUrl }
       : {}),
   });
@@ -183,6 +184,18 @@ async function execute(parsed: ParsedArgs, env: Env): Promise<void> {
     const catalog = await client.catalog();
     if (parsed.json) json(catalog);
     else printCatalog(catalog);
+    return;
+  }
+
+  if (parsed.command === "watch") {
+    const apiUrl = parsed.url ?? env.EDGESPEC_URL ?? "http://127.0.0.1:8787";
+    await runWatch({
+      root: parsed.path,
+      apiUrl,
+      client,
+      ai: aiOptions(parsed, defaults),
+      write: parsed.write,
+    });
     return;
   }
 

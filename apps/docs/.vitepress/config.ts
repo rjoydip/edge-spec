@@ -29,6 +29,7 @@ export default defineConfig({
       { text: "CLI", link: "/cli" },
       { text: "MCP", link: "/mcp" },
       { text: "Configuration", link: "/configuration" },
+      { text: "Deployment", link: "/deployment" },
       { text: "UI", link: "/ui" },
     ],
     sidebar: [
@@ -43,6 +44,7 @@ export default defineConfig({
           { text: "CLI", link: "/cli" },
           { text: "MCP server", link: "/mcp" },
           { text: "Configuration", link: "/configuration" },
+          { text: "Deployment", link: "/deployment" },
           { text: "UI guide", link: "/ui" },
         ],
       },

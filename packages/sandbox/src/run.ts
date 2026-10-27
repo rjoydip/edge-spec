@@ -19,7 +19,7 @@ import {
 import { relativePath } from "./workspace";
 
 const FILE_TOTAL_CAP = 10_000_000;
-const ARTIFACTS = ["coverage/lcov.info", "junit.xml"];
+const ARTIFACTS = ["coverage/lcov.info", "junit.xml", "recorded-fixtures.json"];
 const BASE_PATH = "/usr/local/bin:/usr/bin:/bin";
 
 export interface WorkspaceResult extends SandboxReply {

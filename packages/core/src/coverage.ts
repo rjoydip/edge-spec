@@ -1,6 +1,6 @@
 /** LCOV parsing. Coverage is a fact from a runner, never a guess. */
 import { testFilesFor } from "./scanner";
-import type { Gap } from "./types";
+import type { CoverageDelta, Gap } from "./types";
 
 export interface CoverageFile {
   path: string;
@@ -8,6 +8,8 @@ export interface CoverageFile {
   branches?: { covered: number; total: number };
   /** Lines with a zero hit count, in file order. */
   uncoveredLines: number[];
+  /** Lines with at least one branch the suite never took. */
+  uncoveredBranches?: number[];
 }
 
 export interface CoverageReport {
@@ -38,6 +40,15 @@ export function parseLcov(text: string): CoverageReport | undefined {
     const coveredLines = lineEntries.filter(([, hits]) => hits > 0).length;
     const branches = [...current.branches.values()];
     const coveredBranches = branches.filter(Boolean).length;
+    const uncoveredBranches = [
+      ...new Set(
+        [...current.branches.entries()]
+          .filter(([, taken]) => !taken)
+          .map(([key]) => Number(key.split(":")[0])),
+      ),
+    ]
+      .filter(Number.isInteger)
+      .sort((a, b) => a - b);
     files.push({
       path: normalizePath(current.path),
       lines: { covered: coveredLines, total: lineEntries.length },
@@ -48,6 +59,7 @@ export function parseLcov(text: string): CoverageReport | undefined {
         .filter(([, hits]) => hits === 0)
         .map(([line]) => line)
         .sort((a, b) => a - b),
+      ...(uncoveredBranches.length > 0 ? { uncoveredBranches } : {}),
     });
     current = undefined;
   };
@@ -88,6 +100,88 @@ export function parseLcov(text: string): CoverageReport | undefined {
     ...(branchTotal > 0 ? { branches: { covered: branchCovered, total: branchTotal } } : {}),
     files,
   };
+}
+
+/** The report record for one repository path, absolute or relative. */
+function fileCoverage(report: CoverageReport | undefined, path: string): CoverageFile | undefined {
+  const target = normalizePath(path).replace(/^\/+/, "");
+  return report?.files.find((file) => {
+    const candidate = normalizePath(file.path).replace(/^\/+/, "");
+    return candidate === target || candidate.endsWith(`/${target}`);
+  });
+}
+
+/** The measured record for one file, or `undefined` when absent. */
+export function coverageForFile(
+  report: CoverageReport | undefined,
+  path: string,
+): CoverageFile | undefined {
+  return fileCoverage(report, path);
+}
+
+/**
+ * The per-file change between two executed reports. A delta exists only when
+ * both reports measured the file; missing data is "not measured", never zero.
+ */
+export function coverageDelta(
+  before: CoverageReport | undefined,
+  after: CoverageReport | undefined,
+  path: string,
+): CoverageDelta {
+  const first = fileCoverage(before, path);
+  const second = fileCoverage(after, path);
+  if (!first || !second) return { status: "not-measured" };
+
+  const branches =
+    first.branches && second.branches
+      ? {
+          before: first.branches.covered,
+          after: second.branches.covered,
+          delta: second.branches.covered - first.branches.covered,
+          total: second.branches.total,
+        }
+      : undefined;
+
+  return {
+    status: "measured",
+    path: normalizePath(path).replace(/^\/+/, ""),
+    lines: {
+      before: first.lines.covered,
+      after: second.lines.covered,
+      delta: second.lines.covered - first.lines.covered,
+      total: second.lines.total,
+    },
+    ...(branches ? { branches } : {}),
+  };
+}
+
+/** The gaps a prompt should target, read from a measured report. */
+export interface CoverageTarget {
+  path: string;
+  uncoveredLines: number[];
+  /** Lines with at least one branch the suite never took. */
+  uncoveredBranches: number[];
+}
+
+/** The uncovered facts for one source file, or `undefined` when none exist. */
+export function coverageTargetFor(
+  report: CoverageReport | undefined,
+  path: string,
+): CoverageTarget | undefined {
+  const file = fileCoverage(report, path);
+  if (!file) return undefined;
+  const uncoveredBranches = file.uncoveredBranches ?? [];
+  if (file.uncoveredLines.length === 0 && uncoveredBranches.length === 0) return undefined;
+  return {
+    path: normalizePath(path).replace(/^\/+/, ""),
+    uncoveredLines: file.uncoveredLines,
+    uncoveredBranches,
+  };
+}
+
+/** A bounded range list for a prompt or a reason. */
+export function lineRanges(lines: readonly number[], max = 5): string {
+  return rangesOf(lines, max);
 }
 
 /** `[12,13,14,31]` -> `"12-14, 31"`, capped so a reason stays readable. */
@@ -169,6 +263,9 @@ export function coverageGaps(
         lineRate: Math.round(lineRate * 10) / 10,
         ...(branchRate !== undefined ? { branchRate: Math.round(branchRate * 10) / 10 } : {}),
         uncoveredLines: file.uncoveredLines.slice(0, 200),
+        ...(file.uncoveredBranches?.length
+          ? { uncoveredBranches: file.uncoveredBranches.slice(0, 200) }
+          : {}),
       },
     });
   }

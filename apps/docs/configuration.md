@@ -170,23 +170,253 @@ custom path is simpler.
 
 ## Pipeline knobs
 
-| Knob                 | Default | Bounds  | Notes                                                                 |
-| -------------------- | ------- | ------- | --------------------------------------------------------------------- |
-| `coverageTarget`     | 90      | 0–100   | Coverage threshold; with a runner, files below it are `coverage` gaps |
-| `maxRetries`         | 2       | 0–5     | Extra generations after a failed validation                           |
-| `parallelGeneration` | true    | boolean | Generate the picked tests in parallel instead of one by one           |
-| `maxFiles`           | 10      | 1–50    | How many gap files one pipeline run generates a test for              |
-| `concurrency`        | 3       | 1–6     | Files generated and validated at once; a lower sandbox cap wins       |
-| `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments         |
+| Knob                 | Default | Bounds  | Notes                                                                  |
+| -------------------- | ------- | ------- | ---------------------------------------------------------------------- |
+| `coverageTarget`     | 90      | 0–100   | Coverage threshold; with a runner, files below it are `coverage` gaps  |
+| `maxRetries`         | 2       | 0–5     | Extra generations after a failed validation                            |
+| `parallelGeneration` | true    | boolean | Generate the picked tests in parallel instead of one by one            |
+| `maxFiles`           | 10      | 1–50    | How many gap files one pipeline run generates a test for               |
+| `maxTokens`          | 0       | 0–2M    | Provider-reported token cap for one run; `0` means no cap              |
+| `flakyRuns`          | 2       | 0–5     | Extra repeats after a passing suite; `0` disables flaky detection      |
+| `mutationCommand`    | empty   | ≤500    | Stryker-compatible command; empty means mutation is not measured       |
+| `propertyTests`      | false   | boolean | Opt-in fast-check properties with 50 runs and seed 42                  |
+| `autoRouteModels`    | false   | boolean | Cheap models for small first attempts, strong for failures/large files |
+| `concurrency`        | 3       | 1–6     | Files generated and validated at once; a lower sandbox cap wins        |
+| `strictTypes`        | true    | boolean | Rejects explicit `any`, `as any`, and TS suppression comments          |
 
 Bad values are clamped, not rejected. `strictTypes` and `parallelGeneration`
 default to true
 unless the request explicitly sends `false`.
 
+Before generation the run logs an estimated **input-token range** for the loaded
+files. That estimate is not a bill. When `maxTokens` is set, the run counts only
+the token usage the provider reports; once the cap is reached it finishes the
+current file, starts no new files, and returns the tests that are ready with
+`result.ok: false`. If a provider reports no usage, the log says the cap could
+not be enforced. On a quota or 5xx response the Worker retries once with the
+next model of the same provider and logs the fallback; a failed call never
+contributes a cost.
+
+A passing suite is repeated `flakyRuns` times. If any repeat fails on the same
+input, the result is `flaky: true`, `ok: false`, `verified: false`; it is
+quarantined in Review and labelled in the PR body instead of being counted as a
+pass. This can multiply runner time, so `0` turns it off. The same command and
+environment are reused; there is no per-run seed control yet.
+
+Property tests are opt-in and only run when `fast-check` is already a dependency
+in `package.json`. The prompt asks for a `[property]`-labelled test with
+`fc.assert(..., { numRuns: 50, seed: 42 })`; static validation rejects a missing
+import, label, bound or seed, so the correction loop can fix it. fast-check’s own
+failure output carries the seed and counterexample. Off by default because the
+extra runs cost real runner time and can expose real flakiness.
+
+Mutation is opt-in through `mutationCommand`. `{file}` and `{test}` are
+shell-quoted and substituted. The command runs only after a stable pass, in the
+same runner and with the same files. It reads a Stryker JSON report from
+`mutation.json` or `reports/mutation/mutation.json`; killed/survived counts and
+the command are kept. A missing tool, missing report or non-JSON output is
+**not measured** — never a score. A runner timeout is labelled `budget stop`.
+The command and the report path are visible in the review dialog and PR body.
+
 A run covers the first `maxFiles` gaps, highest risk first, and every test it
 writes waits in **Review** for a pull request. Files run through a bounded pool:
 `ready` stays in scan order even though events interleave, and each event names
 its `sourcePath`. One file that exhausts its retries fails alone.
+
+## Model routing and eval
+
+`autoRouteModels` is opt-in. Small first attempts go to the cheapest tier,
+retries and sources over 8,000 characters go to the strongest, and the middle
+tier handles the rest. Tiers are catalog hints, not a measured quality score,
+and the user’s single-model choice is kept when routing is off.
+
+`bun run eval` compares the local golden cases in `evals/golden.json` with the
+scanner’s gaps. If `evals/outcomes.json` exists, it also prints verified,
+acceptance and flake rates plus measured average tokens per provider/model. The
+harness never invents cost: token averages appear only for outcomes that
+reported tokens.
+
+## Test runners
+
+The runner is detected per repository, in this order: Playwright
+(`@playwright/test` or `playwright.config.*`), Vitest (`vitest` or
+`vitest.config.*`), Jest (`jest`/`ts-jest` or `jest.config.*`), then Bun
+(`bun:test`) as the fallback. The prompt imports from that runner, and validation
+runs the matching command with the repository's package manager
+(`bunx vitest run …`, `npx jest … --runInBand`, `npx playwright test …`, or
+`bun test …`). The dashboard's Facts dialog shows the detected runner. The
+runner must be installed in the sandbox; static validation still works without a
+runner but cannot claim an execution.
+
+## Contract auth fixtures
+
+Settings holds two optional JSON objects per environment: auth headers and auth
+query values. They travel with the run, are injected into the sandbox as
+`EDGESPEC_AUTH_HEADERS` and `EDGESPEC_AUTH_QUERY`, and are never embedded in
+generated code, events, run history, logs or the PR. A secured operation is
+skipped with “no auth fixture was configured” until a fixture exists, then it
+runs normally.
+
+Generated contract tests also send an unauthenticated request where security is
+declared (expecting 401/403) and, with a JSON body example and required schema
+fields, a missing-field and wrong-type request (expecting a documented 4xx or
+400/422). These are deterministic extras, not AI output.
+
+## API fixtures (record/replay)
+
+`POST /api/record` runs the contract suite against a booted app once and returns
+a versioned fixture file. Passing that file as `fixtures` to `/api/run` makes the
+generated contract tests start a tiny in-test mock server from
+`EDGESPEC_FIXTURES`; no live app is required. The mock serves the recorded
+status, headers and body, and the normal status assertion still runs, so a
+deliberate spec status change fails replay. Recorded bodies may contain real
+data: keep them outside the PR, preferably in R2, and apply retention there.
+
+## Run history, backlog and D1 (optional)
+
+Run history, the test-debt backlog, policies, repository memory, schedules,
+workspace settings and audit live in one optional D1 database (`RUNS_DB`). This
+repository's `wrangler.toml` binds a database named `edge-spec-runs`; create
+and migrate it before deploying to another account:
+
+```bash
+bunx wrangler d1 create edge-spec-runs
+bunx wrangler d1 migrations apply edge-spec-runs --remote
+# For local development:
+bunx wrangler d1 migrations apply edge-spec-runs --local
+```
+
+Without the binding the Worker still scans, generates and opens pull requests,
+but `/api/runs`, `/api/backlog`, `/api/workspace` and `/api/audit` answer
+`enabled: false` and the cron does nothing. The tables store summaries, not
+source text, prompts or keys.
+
+`wrangler dev` uses its own local database under `.wrangler/state`, so remote
+migrations do not create tables there. A `D1_ERROR: no such table: runs` (or
+`backlog_items`) on localhost means the local copy is empty: run
+`bun run db:migrate:local`. It is harmless to repeat — applied migrations are
+skipped. `bun run dev:worker` runs it automatically; `bun run db:migrate`
+applies the same migrations to production.
+
+## Run artifacts (R2)
+
+The `ARTIFACTS` binding stores what D1 deliberately does not: the raw validation
+output and coverage facts of an interactive run, as one JSON bundle per run
+(`runs/<id>.json`), plus drift summaries (`drift/<repo>/<time>.json`). D1 keeps
+the summaries; R2 keeps the detail. Generated test source, prompts and keys are
+never written to either.
+
+```bash
+bunx wrangler r2 bucket create edge-spec-artifacts
+```
+
+`bun run db:migrate` does not create the bucket. Without it, runs still work and
+`GET /api/runs/:id/artifacts` answers `enabled: false`. The daily retention job
+deletes expired run bundles along with their D1 rows and audit events.
+
+## Repository memory (optional)
+
+With `RUNS_DB`, a repository can opt into a small memory of approved
+conventions, helper paths, fixture paths and test naming. Only short strings are
+stored; source text is never retained by this feature. The memory is loaded into
+dashboard generation, single-file generation, and webhook prompts, and every
+generation is stamped with `PROMPT_VERSION` so results can be attributed. Manage
+it at `GET/PUT/DELETE /api/memory?repo=owner/name`.
+
+## Pull request policy (optional)
+
+Dashboard policy lives in `localStorage` (Settings → Policy) and travels with
+the pull request request. CI policy is opt-in server data in the same D1
+database as run history (`PUT /api/policies?repo=owner/name`). No policy entry
+means no extra gates.
+
+| Gate               | Behaviour                                                        |
+| ------------------ | ---------------------------------------------------------------- |
+| Kill switch        | Blocks every pull request                                        |
+| Draft only         | Requires a draft pull request for human approval                 |
+| Max files          | Blocks a batch larger than the limit                             |
+| Allowed test paths | Glob allowlist; every test path must match                       |
+| Min coverage delta | Requires measured, non-negative covered lines to reach the floor |
+| Labels / reviewers | Applied after opening; never fails the pull request              |
+
+A violation blocks before any branch or commit exists, and the API returns the
+gate name and reason. The dashboard shows that error in the pull request
+dialog. The webhook workflow enforces the server policy and returns
+`status: "blocked"` without opening a pull request.
+
+## Test impact graph
+
+PR checks and `/edgespec retest|coverage` fetch test files and their relative
+imports (up to 200 files, six at a time) and walk reverse edges to find direct
+and transitive test dependents of the changed files. The selected tests and
+their import chains appear under **Impact** in the check summary, and the same
+answer is at `POST /api/impact`. The graph is cached per `repo@ref` in the
+isolate; a bounded or unreadable fetch is labelled `partial`, never “no
+dependents”. Regex parsing covers static/export/require/dynamic imports and
+relative paths only. Package aliases and tsconfig path mappings are not
+resolved yet.
+
+## Test-debt backlog (optional)
+
+With `RUNS_DB`, scans maintain a durable backlog instead of a transient list.
+Each gap stores its kind, risk reason, first/last seen, linked run (when the
+pipeline supplied one), state, and owner. `CODEOWNERS` is read from the root,
+`.github/` or `docs/` and the last matching rule owns the item. If the gap
+disappears in a later full scan, the item is `closed`; if it returns, it reopens
+as `open`. Human decisions (`accepted`, `rejected`, `ignored`) are preserved.
+
+The dashboard has a **Test-debt backlog** button beside History. The same data
+is available at `GET/PATCH /api/backlog?repo=owner/name`. Without `RUNS_DB`,
+scans keep working and the backlog is simply unavailable.
+
+## Scheduled drift scans (optional)
+
+`wrangler.toml` registers a daily cron (`0 8 * * *`). Per-repository schedules
+live in D1 (`PUT /api/schedules?repo=owner/name`), with a 1–30 day interval and
+an optional App installation id. A scan compares untested paths and OpenAPI
+operation names with the stored snapshot:
+
+- first run: baseline only;
+- no change: no notification, no pull request;
+- change: one summary to `DRIFT_WEBHOOK_URL` (Slack incoming webhooks accept
+  `text`) and optionally `drift/<repo>/<timestamp>.json` in R2.
+
+```bash
+bunx wrangler secret put DRIFT_WEBHOOK_URL
+bunx wrangler secret put DRIFT_WEBHOOK_SECRET   # sent as x-edgespec-secret
+```
+
+There is no email adapter yet. Without `RUNS_DB` the cron does nothing, and
+without `DRIFT_WEBHOOK_URL` drift is still recorded but not announced. The scan
+never opens a pull request; PR creation remains the explicit next step.
+
+## Workspace, audit and retention (optional)
+
+A deployment has one workspace record (`GET | PUT /api/workspace`), created
+lazily as `default` on first use. This is deliberately not multi-user auth:
+shared policies, backlog and history live in the same D1 database, and every
+client still supplies its own GitHub and AI credentials per request. The
+workspace stores only a display name and a retention window; it never stores a
+key.
+
+Actions that change shared state or act autonomously write an audit event:
+pull requests opened or blocked, PR checks and commands, policy/memory/schedule/
+backlog updates, workspace updates, drift scans and retention purges. Read them
+with `GET /api/audit?repo=owner/name`. Detail is redacted recursively for
+token/key/secret/password/authorization/cookie keys before storage, so audit
+rows are safe to share with the team.
+
+The daily cron applies retention before scanning:
+
+- runs and their `run_files` rows older than `retentionDays` are deleted;
+- the matching `runs/<id>.json` R2 bundles are deleted;
+- audit events older than `retentionDays` are deleted;
+- `pr_commands` rate-limit rows older than `retentionDays` are deleted.
+
+Retention is clamped to 1–365 days (default 30). A purge writes one
+`retention_purge` event with the deleted run, audit and artifact counts. There is
+no per-repository retention override and no export or archive step. Drift
+summaries (`drift/…`) have no D1 row to age out, so they are not pruned yet.
 
 ## Sandbox runner (optional)
 
@@ -385,23 +615,33 @@ not the TypeScript sources.
 
 ### Secrets
 
-| Secret                  | Required               | Used by                              |
-| ----------------------- | ---------------------- | ------------------------------------ |
-| `GITHUB_TOKEN`          | For webhook automation | Workflow: scan, commit, PR           |
-| `GITHUB_WEBHOOK_SECRET` | Recommended            | `POST /webhook` HMAC verification    |
-| `SANDBOX_RUNNER_URL`    | No                     | Validation, interactive and workflow |
-| `SANDBOX_API_KEY`       | No                     | Bearer token for the sandbox         |
+| Secret                   | Required              | Used by                              |
+| ------------------------ | --------------------- | ------------------------------------ |
+| `GITHUB_APP_ID`          | For App auth          | Mint installation tokens             |
+| `GITHUB_APP_PRIVATE_KEY` | For App auth          | PKCS#8 PEM used to sign the app JWT  |
+| `GITHUB_TOKEN`           | Fallback for webhooks | Workflow: scan, commit, PR           |
+| `GITHUB_WEBHOOK_SECRET`  | Recommended           | `POST /webhook` HMAC verification    |
+| `SANDBOX_RUNNER_URL`     | No                    | Validation, interactive and workflow |
+| `SANDBOX_API_KEY`        | No                    | Bearer token for the sandbox         |
 
 ```bash
-bunx wrangler secret put GITHUB_TOKEN
+bunx wrangler secret put GITHUB_APP_ID
+bunx wrangler secret put GITHUB_APP_PRIVATE_KEY
 bunx wrangler secret put GITHUB_WEBHOOK_SECRET
+bunx wrangler secret put GITHUB_TOKEN
 bunx wrangler secret put SANDBOX_RUNNER_URL
 bunx wrangler secret put SANDBOX_API_KEY
 ```
 
-The interactive dashboard does **not** use `GITHUB_TOKEN`; it uses the token
-from the browser. The deployment token exists for webhook runs and must never be
-sent to a workflow as a parameter (Workflow parameters are persisted).
+With both App secrets set, a webhook run mints a short-lived installation token
+scoped to the repository. Tokens are cached in the isolate only until a minute
+before GitHub expires them; a restart costs one mint request. Without the App
+secrets, the workflow falls back to `GITHUB_TOKEN`.
+
+The interactive dashboard does **not** use either deployment credential; it
+uses the token from the browser. The deployment credentials exist for webhook
+runs and must never be sent to a workflow as parameters (Workflow parameters are
+persisted). The installation id is not a secret and is passed instead.
 
 ### GitHub token permissions
 
@@ -417,8 +657,19 @@ sent to a workflow as a parameter (Workflow parameters are persisted).
 2. Payload URL: `https://<worker>/webhook`.
 3. Content type: `application/json`.
 4. Secret: the same value as `GITHUB_WEBHOOK_SECRET`.
-5. Events: **push** (the handler does not filter event types).
-6. Ensure `GITHUB_TOKEN` can write to the repository and Workers AI is bound.
+5. Events: **push**, **pull request** (`opened`, `synchronize`, `reopened`), and
+   **issue comments** (for `/edgespec retest|coverage|explain`).
+6. Use the GitHub App installation, or ensure `GITHUB_TOKEN` can write to the
+   repository, and keep Workers AI bound.
+
+For App auth, install the app on the repository, subscribe the app to pushes
+and pull requests, and set the app's webhook secret to
+`GITHUB_WEBHOOK_SECRET`. The app needs **Contents: read and write**,
+**Pull requests: read and write**, **Checks: read and write**, and
+**Issues: read and write** (for policy labels).
+
+A pull request run is a read-only advisory check: changed-file gaps, affected
+tests if a runner exists, one check and one comment. Re-runs update both.
 
 Runs are durable and can be polled at `GET /api/runs/:id` with the `workflowId`
 returned by the webhook.

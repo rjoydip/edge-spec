@@ -4,6 +4,7 @@ import {
   Bot,
   Boxes,
   CheckCircle2,
+  Database,
   Gauge,
   KeyRound,
   Loader2,
@@ -43,6 +44,7 @@ import {
 } from "@edge-spec/ui";
 import { checkSandbox } from "@/api";
 import { isLocalDashboard } from "@/lib/env";
+import { DeploymentSettings } from "./deployment";
 import {
   DEFAULT_SETTINGS,
   clearSecrets,
@@ -53,13 +55,16 @@ import {
 } from "@/lib/settings";
 import { ACCENTS, setAccent, toggleMode, useAppearance } from "@/lib/theme";
 
-export type SettingsSection = "provider" | "sandbox" | "keys" | "pipeline" | "appearance";
+export type SettingsSection =
+  "provider" | "sandbox" | "keys" | "pipeline" | "policy" | "deployment" | "appearance";
 
 const SECTION_TONE: Record<string, string> = {
   provider: "text-violet-300",
   sandbox: "text-sky-300",
   keys: "text-amber-300",
   pipeline: "text-indigo-300",
+  policy: "text-rose-300",
+  deployment: "text-emerald-300",
   appearance: "text-fuchsia-300",
 };
 
@@ -67,21 +72,24 @@ export function SettingsSheet({
   open,
   onOpenChange,
   section,
+  repo,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   section?: SettingsSection;
+  /** Repository used by the server-side Deployment section. */
+  repo: string;
 }) {
   const settings = useSettings();
   const secrets = useSecrets();
   const appearance = useAppearance();
-  const [openSections, setOpenSections] = useState<string[]>(["provider", "sandbox"]);
+  const [openSection, setOpenSection] = useState<string | undefined>("provider");
   const [health, setHealth] = useState<"idle" | "checking" | "ok" | "error">("idle");
   const [healthText, setHealthText] = useState("");
 
   useEffect(() => {
     if (!open || !section) return;
-    setOpenSections((current) => (current.includes(section) ? current : [...current, section]));
+    setOpenSection(section);
     const timer = window.setTimeout(() => {
       document
         .getElementById(`settings-${section}`)
@@ -94,6 +102,8 @@ export function SettingsSheet({
   const needsKey = provider?.needsKey ?? false;
   const sandboxProviders = sandboxProvidersFor(isLocalDashboard() ? "local" : "deployed");
   const update = (patch: Parameters<typeof setSettings>[0]) => setSettings(patch);
+  const setPolicy = (patch: Partial<typeof settings.policy>) =>
+    update({ policy: { ...settings.policy, ...patch } });
   const updateSecrets = (patch: Parameters<typeof setSecrets>[0]) => setSecrets(patch);
 
   const checkHealth = async () => {
@@ -133,9 +143,10 @@ export function SettingsSheet({
 
         <SheetBody className="space-y-3">
           <Accordion
-            type="multiple"
-            value={openSections}
-            onValueChange={setOpenSections}
+            type="single"
+            collapsible
+            value={openSection}
+            onValueChange={setOpenSection}
             className="space-y-2"
           >
             <Section
@@ -478,6 +489,30 @@ export function SettingsSheet({
                     onChange={(event) => update({ maxAiRetries: Number(event.target.value) || 0 })}
                   />
                 </Field>
+                <Field label="Flaky repeats" hint="Extra runs after a pass; 0 = off.">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={5}
+                    value={settings.flakyRuns}
+                    onChange={(event) =>
+                      update({
+                        flakyRuns: Math.min(5, Math.max(0, Number(event.target.value) || 0)),
+                      })
+                    }
+                  />
+                </Field>
+                <Field label="Token budget" hint="Provider-reported tokens per run; 0 = no cap.">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={settings.maxTokens}
+                    onChange={(event) =>
+                      update({ maxTokens: Math.max(0, Number(event.target.value) || 0) })
+                    }
+                  />
+                </Field>
                 <Field label="Coverage target (%)" hint="Used for coverage gaps.">
                   <Input
                     type="number"
@@ -488,6 +523,76 @@ export function SettingsSheet({
                     onChange={(event) =>
                       update({ coverageTarget: Number(event.target.value) || 0 })
                     }
+                  />
+                </Field>
+                <Field
+                  label="Mutation command"
+                  hint="Stryker-compatible; {file}/{test} optional. Empty = not measured."
+                >
+                  <Input
+                    value={settings.mutationCommand}
+                    onChange={(event) =>
+                      update({ mutationCommand: event.target.value.slice(0, 500) })
+                    }
+                    placeholder="npx stryker run --mutate {file}"
+                  />
+                </Field>
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
+                  <span>
+                    <span className="block text-[11px] font-medium text-zinc-300">
+                      Property-based tests
+                    </span>
+                    <span className="block text-[10px] text-zinc-500">
+                      Opt-in fast-check, 50 runs, seed 42. Skipped when fast-check is absent.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={settings.propertyTests}
+                    onCheckedChange={(propertyTests) => update({ propertyTests })}
+                    size="sm"
+                    aria-label="Property-based tests"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
+                  <span>
+                    <span className="block text-[11px] font-medium text-zinc-300">
+                      Auto-route models
+                    </span>
+                    <span className="block text-[10px] text-zinc-500">
+                      Cheap models for small first attempts, strong for failures and large files.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={settings.autoRouteModels}
+                    onCheckedChange={(autoRouteModels) => update({ autoRouteModels })}
+                    size="sm"
+                    aria-label="Auto-route models"
+                  />
+                </label>
+                <Field
+                  label="Contract auth headers (JSON)"
+                  hint="Sandbox env only; never in generated code, logs or the PR."
+                >
+                  <Textarea
+                    rows={2}
+                    value={settings.contractAuthHeaders}
+                    onChange={(event) =>
+                      update({ contractAuthHeaders: event.target.value.slice(0, 4000) })
+                    }
+                    placeholder='{"Authorization": "Bearer …"}'
+                  />
+                </Field>
+                <Field
+                  label="Contract auth query (JSON)"
+                  hint="Sandbox env only; never in generated code, logs or the PR."
+                >
+                  <Textarea
+                    rows={2}
+                    value={settings.contractAuthQuery}
+                    onChange={(event) =>
+                      update({ contractAuthQuery: event.target.value.slice(0, 4000) })
+                    }
+                    placeholder='{"api_key": "…"}'
                   />
                 </Field>
                 <Field label="Verification" hint="Runner or static only.">
@@ -532,6 +637,137 @@ export function SettingsSheet({
                   aria-label="Strict TypeScript"
                 />
               </label>
+            </Section>
+
+            <Section
+              id="policy"
+              icon={ShieldCheck}
+              title="Policy"
+              summary={`${
+                settings.policy.killSwitch
+                  ? "kill switch on"
+                  : settings.policy.draftOnly
+                    ? "draft only"
+                    : "advisory"
+              } · ${settings.policy.maxFiles ? `${settings.policy.maxFiles} files` : "no file cap"}`}
+            >
+              <div className="space-y-2">
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-rose-500/20 bg-rose-500/[0.035] px-3 py-2">
+                  <span>
+                    <span className="block text-[11px] font-medium text-rose-200">Kill switch</span>
+                    <span className="block text-[10px] text-zinc-500">
+                      Blocks every pull request until this is turned off.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={settings.policy.killSwitch === true}
+                    onCheckedChange={(killSwitch) => setPolicy({ killSwitch })}
+                    size="sm"
+                    aria-label="Kill switch"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
+                  <span>
+                    <span className="block text-[11px] font-medium text-zinc-300">Draft only</span>
+                    <span className="block text-[10px] text-zinc-500">
+                      Requires a draft pull request for human approval.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={settings.policy.draftOnly === true}
+                    onCheckedChange={(draftOnly) => setPolicy({ draftOnly })}
+                    size="sm"
+                    aria-label="Draft only"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Max files" hint="0 = no gate.">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={settings.policy.maxFiles ?? 0}
+                      onChange={(event) =>
+                        setPolicy({ maxFiles: Math.max(0, Number(event.target.value) || 0) })
+                      }
+                    />
+                  </Field>
+                  <Field label="Min coverage delta" hint="Covered lines; 0 = no gate.">
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={settings.policy.minCoverageDelta ?? 0}
+                      onChange={(event) =>
+                        setPolicy({
+                          minCoverageDelta: Math.max(0, Number(event.target.value) || 0),
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+                <Field
+                  label="Allowed test paths"
+                  hint="One glob per line (tests/**, src/*.test.ts). Empty allows all test paths."
+                >
+                  <Textarea
+                    rows={3}
+                    value={(settings.policy.allowedPaths ?? []).join("\n")}
+                    onChange={(event) =>
+                      setPolicy({
+                        allowedPaths: event.target.value
+                          .split(/[\n,]+/)
+                          .map((item) => item.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                    placeholder={"tests/**\npackages/**/__tests__/**"}
+                  />
+                </Field>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Labels" hint="Comma-separated, applied after opening.">
+                    <Input
+                      value={(settings.policy.labels ?? []).join(", ")}
+                      onChange={(event) =>
+                        setPolicy({
+                          labels: event.target.value
+                            .split(",")
+                            .map((item) => item.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                      placeholder="tests, edge-spec"
+                    />
+                  </Field>
+                  <Field label="Reviewers" hint="Comma-separated GitHub logins.">
+                    <Input
+                      value={(settings.policy.reviewers ?? []).join(", ")}
+                      onChange={(event) =>
+                        setPolicy({
+                          reviewers: event.target.value
+                            .split(",")
+                            .map((item) => item.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                      placeholder="octocat"
+                    />
+                  </Field>
+                </div>
+                <p className="text-[10px] text-zinc-500">
+                  Gates run in the Worker before any branch is created. The pull request dialog
+                  shows which gate blocked it.
+                </p>
+              </div>
+            </Section>
+
+            <Section
+              id="deployment"
+              icon={Database}
+              title="Deployment"
+              summary={repo || "deployment-wide"}
+            >
+              <DeploymentSettings repo={repo} />
             </Section>
 
             <Section

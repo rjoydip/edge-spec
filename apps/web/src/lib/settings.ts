@@ -9,6 +9,7 @@ import {
   normalizeModel,
   providerById,
 } from "@edge-spec/core/catalog";
+import { parsePullPolicy, type PullPolicy } from "@edge-spec/core/policy";
 import { sandboxProvidersFor, type SandboxProviderId } from "@edge-spec/core/sandbox";
 import { isLocalDashboard, isLocalHost } from "./env";
 
@@ -30,6 +31,22 @@ export interface Settings {
   maxFiles: number;
   /** Per-file tasks in flight. Clamped 1–6, default 3. */
   concurrency: number;
+  /** Provider-reported tokens one run may spend. 0 means no cap. */
+  maxTokens: number;
+  /** Extra repeats after a passing suite; 0 disables flaky detection. */
+  flakyRuns: number;
+  /** Stryker-compatible command; empty means mutation is not measured. */
+  mutationCommand: string;
+  /** Opt-in fast-check properties, only when the repository has fast-check. */
+  propertyTests: boolean;
+  /** Opt-in cheap-first model routing. */
+  autoRouteModels: boolean;
+  /** JSON object of contract auth headers; sandbox env only. */
+  contractAuthHeaders: string;
+  /** JSON object of contract auth query values; sandbox env only. */
+  contractAuthQuery: string;
+  /** Pull-request gates. Stored locally; sent with the PR request, never a secret. */
+  policy: PullPolicy;
   /** A runner the visitor owns; it executes the suite. */
   sandboxUrl: string;
   /** Which driver the runner must use; `auto` asserts nothing. */
@@ -64,6 +81,14 @@ export const DEFAULT_SETTINGS: Settings = {
   parallelGeneration: DEFAULT_PIPELINE.parallelGeneration,
   maxFiles: DEFAULT_PIPELINE.maxFiles,
   concurrency: DEFAULT_PIPELINE.concurrency,
+  maxTokens: DEFAULT_PIPELINE.maxTokens,
+  flakyRuns: DEFAULT_PIPELINE.flakyRuns,
+  mutationCommand: DEFAULT_PIPELINE.mutationCommand,
+  propertyTests: DEFAULT_PIPELINE.propertyTests,
+  autoRouteModels: DEFAULT_PIPELINE.autoRouteModels,
+  contractAuthHeaders: "",
+  contractAuthQuery: "",
+  policy: {},
   sandboxUrl: "",
   sandboxProvider: "auto",
   sandboxSetup: "",
@@ -163,6 +188,25 @@ function load(): Settings {
         6,
         Math.max(1, Math.round(pickNumber(parsed.concurrency, DEFAULT_PIPELINE.concurrency))),
       ),
+      maxTokens: Math.min(
+        2_000_000,
+        Math.max(0, Math.round(pickNumber(parsed.maxTokens, DEFAULT_PIPELINE.maxTokens))),
+      ),
+      flakyRuns: Math.min(
+        5,
+        Math.max(0, Math.round(pickNumber(parsed.flakyRuns, DEFAULT_PIPELINE.flakyRuns))),
+      ),
+      mutationCommand:
+        typeof parsed.mutationCommand === "string" ? parsed.mutationCommand.slice(0, 500) : "",
+      propertyTests: parsed.propertyTests === true,
+      autoRouteModels: parsed.autoRouteModels === true,
+      contractAuthHeaders:
+        typeof parsed.contractAuthHeaders === "string"
+          ? parsed.contractAuthHeaders.slice(0, 4000)
+          : "",
+      contractAuthQuery:
+        typeof parsed.contractAuthQuery === "string" ? parsed.contractAuthQuery.slice(0, 4000) : "",
+      policy: parsePullPolicy(parsed.policy),
       sandboxUrl: typeof parsed.sandboxUrl === "string" ? parsed.sandboxUrl : "",
       sandboxProvider: sandboxProvidersFor(isLocalDashboard() ? "local" : "deployed").some(
         (entry) => entry.id === parsed.sandboxProvider,

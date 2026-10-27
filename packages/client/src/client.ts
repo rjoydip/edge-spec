@@ -36,7 +36,10 @@ export interface ClientConfig {
 }
 
 export interface GenerateRequest {
-  repo: string;
+  /** Omitted when `source` is inline (local watch mode). */
+  repo?: string;
+  /** Inline local source; only a local Worker accepts it. */
+  source?: string;
   ref?: string;
   path: string;
   provider?: string;
@@ -65,6 +68,11 @@ export interface RunRequest {
   maxRetries?: number;
   maxAiRetries?: number;
   maxFiles?: number;
+  maxTokens?: number;
+  flakyRuns?: number;
+  mutationCommand?: string;
+  propertyTests?: boolean;
+  autoRouteModels?: boolean;
   strictTypes?: boolean;
   coverageTarget?: number;
   retryGaps?: string[];
@@ -167,6 +175,11 @@ export class EdgeSpecClient {
     return this.request("/api/catalog");
   }
 
+  /** Workflow status for a webhook run. */
+  runStatus(id: string): Promise<unknown> {
+    return this.request(`/api/runs/${encodeURIComponent(id)}`);
+  }
+
   scan(input: { repo: string; ref?: string }): Promise<ScanResult> {
     return this.request("/api/scan", {
       method: "POST",
@@ -177,6 +190,7 @@ export class EdgeSpecClient {
   generate(input: GenerateRequest): Promise<GenerateResponse> {
     const {
       repo,
+      source,
       ref,
       path,
       provider,
@@ -191,7 +205,8 @@ export class EdgeSpecClient {
     return this.request("/api/generate", {
       method: "POST",
       body: {
-        repo,
+        ...(repo ? { repo } : {}),
+        ...(source !== undefined ? { source } : {}),
         ref: ref ?? "main",
         path,
         ...(provider ? { provider } : {}),
@@ -226,6 +241,13 @@ export class EdgeSpecClient {
           ...(input.maxRetries !== undefined ? { maxRetries: input.maxRetries } : {}),
           ...(input.maxAiRetries !== undefined ? { maxAiRetries: input.maxAiRetries } : {}),
           ...(input.maxFiles !== undefined ? { maxFiles: input.maxFiles } : {}),
+          ...(input.maxTokens !== undefined ? { maxTokens: input.maxTokens } : {}),
+          ...(input.flakyRuns !== undefined ? { flakyRuns: input.flakyRuns } : {}),
+          ...(input.mutationCommand ? { mutationCommand: input.mutationCommand } : {}),
+          ...(input.propertyTests !== undefined ? { propertyTests: input.propertyTests } : {}),
+          ...(input.autoRouteModels !== undefined
+            ? { autoRouteModels: input.autoRouteModels }
+            : {}),
           ...(input.strictTypes !== undefined ? { strictTypes: input.strictTypes } : {}),
           ...(input.coverageTarget !== undefined ? { coverageTarget: input.coverageTarget } : {}),
           ...(input.retryGaps?.length ? { retryGaps: input.retryGaps } : {}),

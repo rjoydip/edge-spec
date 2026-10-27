@@ -13,6 +13,9 @@ export class HttpError extends Error {
 
 export type Risk = "high" | "medium" | "low";
 
+/** The test runner EdgeSpec detected for the repository. */
+export type TestRunner = "bun" | "vitest" | "jest" | "playwright";
+
 /** Why a source file is a gap. Absent on old callers means "missing". */
 export type GapKind = "missing" | "coverage" | "api" | "unsupported";
 
@@ -22,6 +25,8 @@ export interface GapEvidence {
   lineRate?: number;
   branchRate?: number;
   uncoveredLines?: number[];
+  /** Lines with an untaken branch, from the same measured report. */
+  uncoveredBranches?: number[];
   /** For kind === "api". */
   specPath?: string;
   operation?: { method: string; path: string; operationId?: string };
@@ -45,6 +50,8 @@ export interface ScanTotals {
   coverage: number;
   api: number;
   unsupported: number;
+  /** Sources excluded by the path policy, shown rather than silently dropped. */
+  skipped: number;
 }
 
 export interface ScanTruncation {
@@ -121,7 +128,26 @@ export interface OpenApiSpec {
   servers?: string[];
   /** Raw source of the spec, for the raw view and download. */
   content?: string;
+  /** True when EdgeSpec inferred the document from source, not a published spec. */
+  inferred?: boolean;
 }
+
+/** One endpoint row in the static OpenAPI health matrix. */
+export interface ApiHealthRow {
+  method: string;
+  path: string;
+  specPath: string;
+  inferred?: boolean;
+  status: "covered" | "missing-test";
+  /** Security scheme names only, never a secret. */
+  auth: string[];
+  requestBody: boolean;
+  parameters: number;
+}
+
+/** The kind of failure a contract test reported. */
+export type ApiDiagnosis =
+  "assertion" | "timeout" | "boot" | "missing-fixture" | "network" | "unknown";
 
 /** One contract test result, parsed from JUnit. */
 export interface ApiTestResult {
@@ -132,6 +158,17 @@ export interface ApiTestResult {
   httpStatus?: number;
   durationMs?: number;
   error?: string;
+  /** Only set for a failed case; derived from the failure text. */
+  diagnosis?: ApiDiagnosis;
+  expected?: string;
+  actual?: string;
+}
+
+/** One operation a retest should execute, and the spec it belongs to. */
+export interface RetestOperation {
+  specPath: string;
+  method: string;
+  path: string;
 }
 
 /** Facts read from the repository tree, not invented. */
@@ -155,6 +192,8 @@ export interface RepositoryOverview {
   checks?: Array<{ name: string; kind: CheckKind; command: string }>;
   /** The formatter the repository uses. */
   formatter?: string;
+  /** The test runner the repository's dependencies and config imply. */
+  testRunner?: TestRunner;
   /** OpenAPI specs and Postman/Bruno collections found in the tree. */
   apiArtifacts?: ApiArtifact[];
   /** Parsed OpenAPI documents found in the tree. */
@@ -163,6 +202,10 @@ export interface RepositoryOverview {
   openApiSpec?: OpenApiSpec;
   openApi?: OpenApiSpec;
   openapi?: OpenApiSpec;
+  /** The HTTP framework detected when the repository is API-based. */
+  apiFramework?: string;
+  /** Static endpoint-by-status matrix; never live HTTP results. */
+  apiHealth?: ApiHealthRow[];
 }
 
 export interface Generation {
@@ -172,9 +215,38 @@ export interface Generation {
   provider: string;
   model: string;
   corrected: boolean;
+  /** The prompt version that produced this code, for attribution. */
+  promptVersion?: string;
   /** The original file, so the review can show it beside the generated test. */
   source?: string;
 }
+
+/** A per-file coverage change, from two executed LCOV reports. */
+export type CoverageDelta =
+  | { status: "not-measured" }
+  | {
+      status: "measured";
+      path: string;
+      lines: { before: number; after: number; delta: number; total: number };
+      branches?: { before: number; after: number; delta: number; total: number };
+    };
+
+/** Mutation facts from a tool that actually ran; never estimated. */
+export type MutationResult =
+  | { status: "not-measured"; reason?: string; tool?: string; command?: string }
+  | {
+      status: "measured";
+      tool: string;
+      command: string;
+      killed: number;
+      survived: number;
+      total: number;
+      /** Killed / total, rounded to one decimal. */
+      score: number;
+      /** The tool stopped at the time/mutant budget. */
+      budgetStopped?: boolean;
+      durationMs: number;
+    };
 
 export interface Validation {
   ok: boolean;
@@ -184,6 +256,14 @@ export interface Validation {
   durationMs: number;
   /** The repository checks that ran against the test. */
   checks?: CheckResult[];
+  /** Present only when the run asked the runner for coverage. */
+  coverage?: CoverageDelta;
+  /** True when repeated runs disagreed; a flaky suite is never verified. */
+  flaky?: boolean;
+  /** How many times the suite ran, including the first. */
+  runs?: number;
+  /** Only present when a mutation command was configured and attempted. */
+  mutation?: MutationResult;
   /** Set when the sandbox could not prepare or run the suite at all. */
   environmentError?: "setup" | "server" | "unreachable" | "timeout";
 }
@@ -244,6 +324,8 @@ export type StepId = "scan" | "generate" | "validate" | "correct" | "pull-reques
 
 export type RunEvent =
   | { type: "log"; level: "info" | "ai" | "warn" | "success" | "error"; text: string }
+  /** Emitted first by the SSE route so the dashboard can record decisions. */
+  | { type: "run"; id: string; persisted: boolean }
   | {
       type: "step";
       step: StepId;
@@ -263,7 +345,11 @@ export type RunEvent =
   | { type: "quota"; rateLimit: RateLimitInfo }
   | { type: "generation"; generation: Generation }
   | { type: "validation"; validation: Validation; sourcePath?: string }
-  | { type: "api"; results: ApiTestResult[] }
+  | {
+      type: "api";
+      results: ApiTestResult[];
+      /** This was a retest, not a fresh run. */ retest?: boolean;
+    }
   | {
       type: "result";
       ok: boolean;
@@ -272,5 +358,7 @@ export type RunEvent =
       generation?: Generation;
       /** Source paths whose tests are ready for a pull request. */
       ready?: string[];
+      /** This was a retest of failed endpoints, not a fresh run. */
+      retest?: boolean;
     }
   | { type: "error"; message: string };

@@ -3,7 +3,7 @@
  * EdgeSpec reads them out of the repository so a generated test is measured
  * against the same commands the pipeline will run.
  */
-import type { CheckKind } from "./types";
+import type { CheckKind, TestRunner } from "./types";
 
 export interface RepositoryCheck {
   kind: CheckKind;
@@ -21,6 +21,8 @@ export interface RepositoryChecks {
   /** The style rules the model should write to. */
   style: string[];
   packageManager: string;
+  /** The runner the generated test must target. */
+  runner: TestRunner;
 }
 
 /** Script names that map to a kind. The order matters: the first match wins. */
@@ -80,6 +82,61 @@ export function detectPackageManager(paths: readonly string[]): string {
   if (names.has("package-lock.json")) return "npm";
   if (names.has("deno.lock")) return "deno";
   return "npm";
+}
+
+/** The test runner a repository's dependencies and config files imply. */
+export function detectRunner(input: {
+  paths: readonly string[];
+  packageJson?: string;
+}): TestRunner {
+  const names = new Set(input.paths.map((path) => path.slice(path.lastIndexOf("/") + 1)));
+  const dependencies = new Set<string>();
+  if (input.packageJson) {
+    try {
+      const manifest = asRecord(JSON.parse(input.packageJson));
+      for (const group of [
+        manifest.dependencies,
+        manifest.devDependencies,
+        manifest.peerDependencies,
+      ]) {
+        for (const name of Object.keys(asRecord(group))) dependencies.add(name);
+      }
+    } catch {
+      // An unreadable manifest falls back to config filenames.
+    }
+  }
+  const hasConfig = (prefix: string) => [...names].some((name) => name.startsWith(prefix));
+  if (dependencies.has("@playwright/test") || hasConfig("playwright.config.")) {
+    return "playwright";
+  }
+  if (dependencies.has("vitest") || hasConfig("vitest.config.")) {
+    return "vitest";
+  }
+  if (dependencies.has("jest") || dependencies.has("ts-jest") || hasConfig("jest.config.")) {
+    return "jest";
+  }
+  return "bun";
+}
+
+/** The command that runs one file, using the repository's package manager. */
+export function testCommandFor(
+  runner: TestRunner,
+  quotedPath: string,
+  packageManager = "npm",
+): string {
+  const bin =
+    packageManager === "bun"
+      ? "bunx"
+      : packageManager === "pnpm"
+        ? "pnpm exec"
+        : packageManager === "yarn"
+          ? "yarn"
+          : "npx";
+  const file = quotedPath ? ` ${quotedPath}` : "";
+  if (runner === "vitest") return `${bin} vitest run${file}`;
+  if (runner === "jest") return `${bin} jest${file} --runInBand`;
+  if (runner === "playwright") return `${bin} playwright test${file}`;
+  return `bun test${file}`;
 }
 
 /** The `run` steps of a workflow file. */
@@ -258,5 +315,9 @@ export function detectChecks(input: {
     ...(formatter ? { formatter } : {}),
     style: detectStyle(files),
     packageManager,
+    runner: detectRunner({
+      paths: input.paths,
+      ...(input.packageJson ? { packageJson: input.packageJson } : {}),
+    }),
   };
 }

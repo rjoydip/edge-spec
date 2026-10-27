@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   EdgeSpecClient,
@@ -40,11 +40,23 @@ function fail(error: unknown): CallToolResult {
   return { isError: true, content: [{ type: "text", text: message }] };
 }
 
-export function createServer(env: Env): McpServer {
+interface PendingPull {
+  repo: string;
+  files: Array<{ path: string; code: string; sourcePath?: string }>;
+  strictTypes?: boolean;
+  expiresAt: number;
+}
+
+export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {}): McpServer {
   const server = new McpServer({ name: "edgespec", version: "0.1.0" });
+  /** Prepared requests await an explicit one-time approval token. */
+  const approvals = new Map<string, PendingPull>();
 
   const clientFor = (selectedProvider?: string): EdgeSpecClient => {
-    return new EdgeSpecClient(clientConfigFromEnv(env, selectedProvider));
+    return new EdgeSpecClient({
+      ...clientConfigFromEnv(env, selectedProvider),
+      ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+    });
   };
 
   const defaultsFor = (selectedProvider?: string): EnvDefaults =>
@@ -251,16 +263,13 @@ export function createServer(env: Env): McpServer {
   );
 
   server.registerTool(
-    "edgespec_open_pull_request",
+    "edgespec_prepare_pull_request",
     {
-      title: "Open a pull request with generated tests",
+      title: "Prepare a pull request for approval",
       description:
-        "Creates a branch and opens a pull request containing the supplied test files. This writes to GitHub. Ask the user first and pass confirm: true.",
+        "Validates the supplied test files and returns a one-time approval token and a readable summary. This does not write to GitHub. Show the summary to the user, then call edgespec_open_pull_request with the token only after they approve.",
       inputSchema: {
         repo,
-        confirm: z
-          .boolean()
-          .describe("Must be true. Confirms that the user wants to open a pull request."),
         strictTypes,
         files: z
           .array(
@@ -276,6 +285,47 @@ export function createServer(env: Env): McpServer {
           .min(1)
           .describe("Test files to commit."),
       },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    },
+    async (args) => {
+      try {
+        const approvalId = crypto.randomUUID();
+        const expiresAt = Date.now() + 10 * 60_000;
+        approvals.set(approvalId, {
+          repo: args.repo,
+          files: args.files,
+          ...(args.strictTypes !== undefined ? { strictTypes: args.strictTypes } : {}),
+          expiresAt,
+        });
+        // Old approvals must not accumulate in a long-lived stdio session.
+        for (const [id, pending] of approvals) {
+          if (pending.expiresAt <= Date.now()) approvals.delete(id);
+        }
+        return ok({
+          approvalId,
+          expiresAt: new Date(expiresAt).toISOString(),
+          repo: args.repo,
+          files: args.files.map((file) => file.path),
+          summary: `Open a pull request in ${args.repo} with ${args.files.length} test file(s).`,
+        });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "edgespec_open_pull_request",
+    {
+      title: "Open an approved pull request",
+      description:
+        "Creates a branch and opens the prepared pull request. Requires a one-time approvalId from edgespec_prepare_pull_request; the token is consumed on use.",
+      inputSchema: {
+        approvalId: z
+          .string()
+          .min(1)
+          .describe("The approval id returned by edgespec_prepare_pull_request."),
+      },
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -285,20 +335,112 @@ export function createServer(env: Env): McpServer {
     },
     async (args) => {
       try {
-        if (args.confirm !== true) {
-          return fail("Ask the user first, then call this tool with confirm: true.");
+        const pending = approvals.get(args.approvalId);
+        if (!pending || pending.expiresAt <= Date.now()) {
+          approvals.delete(args.approvalId);
+          return fail(
+            "The approval is missing or expired. Call edgespec_prepare_pull_request again and ask the user to approve.",
+          );
         }
+        approvals.delete(args.approvalId);
         return ok(
           await clientFor().openPullRequest({
-            repo: args.repo,
-            files: args.files,
-            ...(args.strictTypes !== undefined ? { strictTypes: args.strictTypes } : {}),
+            repo: pending.repo,
+            files: pending.files,
+            ...(pending.strictTypes !== undefined ? { strictTypes: pending.strictTypes } : {}),
           }),
         );
       } catch (error) {
         return fail(error);
       }
     },
+  );
+
+  const resource = async (uri: URL, value: unknown) => ({
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "application/json",
+        text: JSON.stringify(value, null, 2),
+      },
+    ],
+  });
+
+  server.registerResource(
+    "edgespec_gaps",
+    new ResourceTemplate("edgespec://gaps/{owner}/{name}", { list: undefined }),
+    {
+      title: "Repository gaps",
+      description: "Missing tests and contract gaps for a GitHub repository.",
+      mimeType: "application/json",
+    },
+    async (uri, variables) => {
+      const result = await clientFor().scan({
+        repo: `${String(variables.owner)}/${String(variables.name)}`,
+      });
+      return resource(uri, {
+        repo: result.repo,
+        ref: result.ref,
+        gaps: result.gaps,
+        apiGaps: result.apiGaps ?? [],
+        unsupported: result.unsupported ?? [],
+        totals: result.totals,
+      });
+    },
+  );
+
+  server.registerResource(
+    "edgespec_specs",
+    new ResourceTemplate("edgespec://specs/{owner}/{name}", { list: undefined }),
+    {
+      title: "OpenAPI specs",
+      description: "Parsed OpenAPI documents found by a scan, or an empty list.",
+      mimeType: "application/json",
+    },
+    async (uri, variables) => {
+      const result = await clientFor().scan({
+        repo: `${String(variables.owner)}/${String(variables.name)}`,
+      });
+      return resource(uri, {
+        repo: result.repo,
+        ref: result.ref,
+        specs: result.overview?.openApiSpecs ?? [],
+        artifacts: result.overview?.apiArtifacts ?? [],
+      });
+    },
+  );
+
+  server.registerResource(
+    "edgespec_coverage",
+    new ResourceTemplate("edgespec://coverage/{owner}/{name}", { list: undefined }),
+    {
+      title: "Coverage status",
+      description: "Coverage gaps and status from a scan; not-run when no runner report exists.",
+      mimeType: "application/json",
+    },
+    async (uri, variables) => {
+      const result = await clientFor().scan({
+        repo: `${String(variables.owner)}/${String(variables.name)}`,
+      });
+      return resource(uri, {
+        repo: result.repo,
+        ref: result.ref,
+        status: result.coverageStatus ?? "not-run",
+        reason: result.coverageReason,
+        gaps: result.coverageGaps ?? [],
+      });
+    },
+  );
+
+  server.registerResource(
+    "edgespec_run_status",
+    new ResourceTemplate("edgespec://runs/{id}", { list: undefined }),
+    {
+      title: "Workflow run status",
+      description: "Durable workflow status for a webhook run id.",
+      mimeType: "application/json",
+    },
+    async (uri, variables) => resource(uri, await clientFor().runStatus(String(variables.id))),
   );
 
   return server;
