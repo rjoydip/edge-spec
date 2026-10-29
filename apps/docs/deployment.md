@@ -29,8 +29,18 @@ bun run alchemy profile edit --profile default --add Cloudflare --method stored 
   --set accountId=env:CLOUDFLARE_ACCOUNT_ID
 ```
 
-The token needs Workers Scripts, D1, R2 and Workers AI permissions. Check with
+The token needs Workers Scripts, D1, R2 and Workers AI permissions. The Alchemy
+state store additionally needs the account-scope **Workers Secrets Store**
+permission (Cloudflare's API names it _Secrets Store Read/Write_) and Workers
+subdomain read access — a token that lists the four resource permissions but
+omits Secrets Store passes a plain Workers/D1/R2 check yet still fails the
+state-store refresh with `Authentication error`. Check with
 `bun run alchemy profile show`.
+
+A deploy that worked before and then fails during "Refreshing Cloudflare State
+Store credentials" with `Unauthorized: Authentication error` means the token
+was revoked, expired, or trimmed of a permission it needs — rotate it and
+confirm `CLOUDFLARE_ACCOUNT_ID` still points at the right account.
 
 Windows can deploy the Worker natively. Containerised sandbox runs
 (`bun run sandbox`) need Docker on a Linux host (or WSL2).
@@ -49,6 +59,35 @@ as part of `alchemy deploy` and `alchemy dev`; there is no separate
 The Worker still deploys without the binding (for example in a local bundle
 test), but every history/backlog/workspace route then answers `enabled: false`
 and the cron does nothing.
+
+### Repairing migration bookkeeping
+
+Alchemy records a `sha256` of each migration file in `__alchemy_migrations` and
+refuses to deploy when a recorded hash no longer matches the file
+(`RewrittenMigrationHistoryError`). Two things cause that without anyone
+editing a migration: rewriting an applied file, and **line endings**.
+
+The production cutover ran on Windows, where `core.autocrlf=true` rewrote the
+`.sql` files to CRLF, so the recorded hashes are CRLF-based. CI checks out LF,
+computes LF hashes, and every migration looks rewritten. `.gitattributes` pins
+`*.sql` to LF so the hashes stay stable across platforms.
+
+`bun run migrate:hashes` repairs the bookkeeping. It reads the recorded
+hashes, and rewrites one **only** when it equals the CRLF hash of the same
+file — proof that the file was not edited, only checked out with different
+line endings. A hash that matches neither the LF nor the CRLF hash means the
+migration was genuinely rewritten; the script leaves it alone and fails, so
+Alchemy still rejects the deploy. Only the bookkeeping hash changes: the
+schema is untouched and no migration is re-run.
+
+```bash
+bun run migrate:hashes                 # repair the live database
+bun run migrate:hashes -- --print      # print the statements instead
+```
+
+The deploy workflow runs the repair before deploying, so a checkout that
+drifted in line endings can never block a release. Edit an already-applied
+migration only by adding a new file.
 
 ## 2. R2 (run artifacts and drift summaries)
 

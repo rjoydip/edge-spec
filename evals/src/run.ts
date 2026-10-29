@@ -16,8 +16,8 @@ import {
   scoreRuns,
 } from "./harness";
 
-const root = join(import.meta.dir, "..");
-const cases = readGolden(join(import.meta.dir, "golden.json"));
+const root = join(import.meta.dir, "..", "..");
+const cases = readGolden(join(import.meta.dir, "..", "golden.json"));
 
 let failed = 0;
 for (const testCase of cases) {
@@ -28,7 +28,7 @@ for (const testCase of cases) {
   console.log(formatResult(result, gaps));
 }
 
-const outcomes = readOutcomes(join(import.meta.dir, "outcomes.json"));
+const outcomes = readOutcomes(join(import.meta.dir, "..", "outcomes.json"));
 if (outcomes) for (const score of scoreRuns(outcomes)) console.log(formatScore(score));
 
 if (failed > 0) process.exit(1);
