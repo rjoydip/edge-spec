@@ -31,7 +31,7 @@ bun run alchemy profile edit --profile default --add Cloudflare --method stored 
 
 The token needs Workers Scripts, D1, R2 and Workers AI permissions. The Alchemy
 state store additionally needs the account-scope **Workers Secrets Store**
-permission (Cloudflare's API names it *Secrets Store Read/Write*) and Workers
+permission (Cloudflare's API names it _Secrets Store Read/Write_) and Workers
 subdomain read access — a token that lists the four resource permissions but
 omits Secrets Store passes a plain Workers/D1/R2 check yet still fails the
 state-store refresh with `Authentication error`. Check with
