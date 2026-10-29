@@ -8,6 +8,7 @@
     "plan": "bunx alchemy plan docker.run.ts",
     "deploy": "bunx alchemy deploy docker.run.ts",
     "destroy": "bunx alchemy destroy docker.run.ts",
+    "test": "bun test ./test/stack.integration.ts",
     "typecheck": "bun check --no-script -p ."
   },
   "devDependencies": {

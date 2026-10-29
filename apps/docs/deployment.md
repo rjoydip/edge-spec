@@ -362,7 +362,18 @@ reachable from the Cloudflare entry.
 | Kubernetes | `infra/kubernetes` | `kubernetes.run.ts` | `bun run deploy:kubernetes` |
 
 `infra/shared/stage.ts` is the only shared file. Each provider folder owns its
-`.env.example` and Alchemy scripts.
+`.env.example`, Alchemy scripts and one stack test: `infra/<target>/test/
+stack.integration.ts`.
+
+`bun run test:stack` builds and runs every target's stack test, and
+`bun run test:<target>` runs one (`test:cloudflare`, `test:aws`, `test:vercel`,
+`test:fly`, `test:railway`, `test:docker`, `test:kubernetes`). Every test is
+deliberately not named `*.test.ts`, so plain `bun test` never provisions cloud
+resources; each deploys its real stack and probes what it returns (Cloudflare:
+health, catalog, assets and D1 parity; AWS: the artifact bucket; Vercel: the
+memoized `vercel deploy`; Fly/Railway/Docker/Kubernetes: the deployed URL's
+`/api/health`). Any test supports `SKIP_DEPLOY=1` to run its assertions
+against a live URL you supply through `STACK_URL`.
 
 The Fly, Railway, Docker and Kubernetes stacks all build the same root
 `Dockerfile` (`oven/bun` running `packages/runtime/src/server.ts`). Fly pushes

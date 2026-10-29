@@ -8,6 +8,7 @@
     "plan": "bunx alchemy plan railway.run.ts",
     "deploy": "bunx alchemy deploy railway.run.ts",
     "destroy": "bunx alchemy destroy railway.run.ts",
+    "test": "bun test ./test/stack.integration.ts",
     "typecheck": "bun check --no-script -p ."
   },
   "devDependencies": {

@@ -8,6 +8,7 @@
     "plan": "bunx alchemy plan fly.run.ts",
     "deploy": "bunx alchemy deploy fly.run.ts",
     "destroy": "bunx alchemy destroy fly.run.ts",
+    "test": "bun test ./test/stack.integration.ts",
     "typecheck": "bun check --no-script -p ."
   },
   "devDependencies": {

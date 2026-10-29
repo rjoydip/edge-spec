@@ -24,7 +24,7 @@ bun run sandbox        # self-hosted test runner on http://127.0.0.1:8788
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
 bun run docs:build     # static site in apps/docs/.vitepress/dist
 bun run docs:deploy    # build + upload the site to Cloudflare Pages
-bun run test:stack     # build + local Alchemy stack test (opt-in live with STACK_URL)
+bun run test:stack     # opt-in live stack test for every target (test:cloudflare|aws|vercel|fly|railway|docker|kubernetes individually)
 bun test               # discovers every workspace's test/ directory
 bun run typecheck      # bun check in every workspace
 bun run build

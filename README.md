@@ -84,8 +84,8 @@ Build, check and evaluate:
 bun run verify          # format, lint, types, tests
 bun run build          # dist/web + dist/worker
 bun run eval           # golden example scans (no AI, no network)
-bun run deploy         # build + alchemy deploy --stage prod
-bun run test:stack     # local Alchemy stack (opt-in live with STACK_URL)
+bun run deploy          # build + deploy Cloudflare (deploy:aws|vercel|fly|railway|docker|kubernetes for the rest)
+bun run test:stack      # opt-in live stack test for each target, individually test:cloudflare|aws|vercel|fly|railway|docker|kubernetes
 ```
 
 Alchemy applies `migrations/` during deploy and `bun run dev:worker`; there is no
