@@ -4,8 +4,8 @@ on:
   push:
   pull_request:
 
-# No Cloudflare credentials needed: this only checks formatting, lint, types,
-# tests, and that the workspace bundles and docs build.
+# No Cloudflare credentials needed: this checks formatting, lint, types, unit
+# tests, the golden-scan eval, and that the workspace bundles and docs build.
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -19,8 +19,20 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      - name: Format, lint, types, tests
-        run: bun run verify
+      - name: Format check
+        run: bun run format:check
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun check .
+
+      - name: Unit tests
+        run: bun run test
+
+      - name: Golden-scan eval
+        run: bun run eval
 
       - name: Build dashboard and Worker bundles
         run: bun run build
