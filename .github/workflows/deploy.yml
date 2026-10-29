@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/deploy-cloudflare-auth]
   workflow_dispatch:
     inputs:
       adopt:
@@ -30,6 +30,23 @@ jobs:
 
       - name: Build dashboard and Worker bundles
         run: bun run build
+
+      # Alchemy surfaces an invalid/blank token as an opaque
+      # "Unauthorized: Authentication error" during the state-store credential
+      # refresh. Fail fast with an actionable message instead.
+      - name: Verify Cloudflare credentials
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is empty. Rotate the token and set it as a repository secret."
+            exit 1
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID is empty. Set it as a repository secret."
+            exit 1
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       # `adopt` is only for a new account or a lost Alchemy state store: it
       # imports a Worker, D1 database, R2 bucket and Workflow that already

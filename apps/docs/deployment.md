@@ -29,8 +29,15 @@ bun run alchemy profile edit --profile default --add Cloudflare --method stored 
   --set accountId=env:CLOUDFLARE_ACCOUNT_ID
 ```
 
-The token needs Workers Scripts, D1, R2 and Workers AI permissions. Check with
-`bun run alchemy profile show`.
+The token needs Workers Scripts, D1, R2 and Workers AI permissions. The Alchemy
+state store additionally needs account-level Workers access (Secrets Store and
+the workers.dev subdomain), so mint the token with the account-scope Workers
+resource included. Check with `bun run alchemy profile show`.
+
+A deploy that worked before and then fails during "Refreshing Cloudflare State
+Store credentials" with `Unauthorized: Authentication error` means the token
+was revoked, expired, or trimmed of a permission it needs — rotate it and
+confirm `CLOUDFLARE_ACCOUNT_ID` still points at the right account.
 
 Windows can deploy the Worker natively. Containerised sandbox runs
 (`bun run sandbox`) need Docker on a Linux host (or WSL2).
