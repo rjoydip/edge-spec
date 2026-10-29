@@ -53,13 +53,19 @@ describe("EdgeSpec MCP server", () => {
     const calls: string[] = [];
     const fetchImpl = (async (url: string | URL | Request) => {
       calls.push(String(url));
-      return Response.json({ url: "https://github.com/owner/repo/pull/1", files: 1 });
+      return Response.json({
+        url: "https://github.com/owner/repo/pull/1",
+        files: 1,
+      });
     }) as unknown as typeof fetch;
     const { client, server } = await connect({}, { fetchImpl });
     try {
       const prepared = await client.callTool({
         name: "edgespec_prepare_pull_request",
-        arguments: { repo: "owner/repo", files: [{ path: "src/a.test.ts", code: "test" }] },
+        arguments: {
+          repo: "owner/repo",
+          files: [{ path: "src/a.test.ts", code: "test" }],
+        },
       });
       const content = prepared.content as Array<{ text?: string }>;
       const approvalId = (JSON.parse(content[0]?.text ?? "{}") as { approvalId?: string })

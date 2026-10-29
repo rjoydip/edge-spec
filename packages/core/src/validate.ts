@@ -45,7 +45,9 @@ export function staticCheck(
     const opens = code.split(open).length - 1;
     const closes = code.split(close).length - 1;
     if (opens !== closes) {
-      problems.push({ problem: `Unbalanced ${label}: ${opens} ${open} vs ${closes} ${close}.` });
+      problems.push({
+        problem: `Unbalanced ${label}: ${opens} ${open} vs ${closes} ${close}.`,
+      });
     }
   }
 
@@ -53,13 +55,17 @@ export function staticCheck(
     if (/:\s*any\b/.test(code)) problems.push({ problem: "Strict mode: explicit `any` type." });
     if (/\bas\s+any\b/.test(code)) problems.push({ problem: "Strict mode: `as any` cast." });
     if (/@ts-(ignore|nocheck|expect-error)/.test(code)) {
-      problems.push({ problem: "Strict mode: TypeScript suppression comment." });
+      problems.push({
+        problem: "Strict mode: TypeScript suppression comment.",
+      });
     }
   }
 
   if (requireProperties) {
     if (!/from\s+["']fast-check["']/.test(code)) {
-      problems.push({ problem: "Property tests were requested but fast-check is not imported." });
+      problems.push({
+        problem: "Property tests were requested but fast-check is not imported.",
+      });
     }
     if (!/\[property\]/.test(code)) {
       problems.push({ problem: 'Property tests need a "[property]" label.' });

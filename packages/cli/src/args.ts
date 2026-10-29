@@ -123,8 +123,16 @@ function strictOf(values: Record<string, string | boolean | undefined>): boolean
 function parse(
   args: string[],
   options: ParseArgsConfig["options"],
-): { values: Record<string, string | boolean | undefined>; positionals: string[] } {
-  const parsed = parseArgs({ args, options, allowPositionals: true, strict: true });
+): {
+  values: Record<string, string | boolean | undefined>;
+  positionals: string[];
+} {
+  const parsed = parseArgs({
+    args,
+    options,
+    allowPositionals: true,
+    strict: true,
+  });
   return {
     values: parsed.values as Record<string, string | boolean | undefined>,
     positionals: parsed.positionals,
@@ -283,7 +291,7 @@ Options:
   -v, --version              Show the version
 
 Secrets are read from the environment, never from flags:
-  GITHUB_TOKEN                 GitHub token (or EDGESPEC_GITHUB_TOKEN)
+  GH_TOKEN                 GitHub token (GITHUB_TOKEN / EDGESPEC_GITHUB_TOKEN are aliases)
   EDGESPEC_AI_KEY              Provider key; provider-specific keys also work
   EDGESPEC_AI_BASE_URL         Base URL for the private provider
   EDGESPEC_SANDBOX_URL         Sandbox URL

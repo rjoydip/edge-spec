@@ -257,7 +257,11 @@ describe("runInWorkspace", () => {
   it("lets an isolated driver upload before setup and download after the command", async () => {
     const log: string[] = [];
     await runInWorkspace(
-      { setup: ["bun install"], command: "bun test", files: { "a.test.ts": "1" } },
+      {
+        setup: ["bun install"],
+        command: "bun test",
+        files: { "a.test.ts": "1" },
+      },
       {
         createDriver: () =>
           fakeDriver(log, {
@@ -306,7 +310,12 @@ describe("runInWorkspace", () => {
           fakeDriver(log, {
             async exec(command) {
               log.push(`exec:${command}`);
-              return { exitCode: 1, stdout: "", stderr: "no lockfile", timedOut: false };
+              return {
+                exitCode: 1,
+                stdout: "",
+                stderr: "no lockfile",
+                timedOut: false,
+              };
             },
           }),
       },

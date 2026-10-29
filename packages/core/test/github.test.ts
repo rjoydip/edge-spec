@@ -84,7 +84,9 @@ describe("GitHub", () => {
         ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}),
       });
       if (method === "GET") {
-        return new Response(JSON.stringify({ check_runs: existing }), { status: 200 });
+        return new Response(JSON.stringify({ check_runs: existing }), {
+          status: 200,
+        });
       }
       if (method === "POST") {
         existing = [{ id: 7 }];

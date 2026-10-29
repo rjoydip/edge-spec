@@ -168,7 +168,11 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
           .optional()
           .describe("A previous attempt and its runner output, for self-correction."),
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async (args) => {
       try {
@@ -219,7 +223,11 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
           .optional()
           .describe("Source paths to process instead of a fresh scan."),
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
     },
     async (args, extra) => {
       try {
@@ -285,7 +293,11 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
           .min(1)
           .describe("Test files to commit."),
       },
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
     },
     async (args) => {
       try {
@@ -391,7 +403,9 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
 
   server.registerResource(
     "edgespec_specs",
-    new ResourceTemplate("edgespec://specs/{owner}/{name}", { list: undefined }),
+    new ResourceTemplate("edgespec://specs/{owner}/{name}", {
+      list: undefined,
+    }),
     {
       title: "OpenAPI specs",
       description: "Parsed OpenAPI documents found by a scan, or an empty list.",
@@ -412,7 +426,9 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
 
   server.registerResource(
     "edgespec_coverage",
-    new ResourceTemplate("edgespec://coverage/{owner}/{name}", { list: undefined }),
+    new ResourceTemplate("edgespec://coverage/{owner}/{name}", {
+      list: undefined,
+    }),
     {
       title: "Coverage status",
       description: "Coverage gaps and status from a scan; not-run when no runner report exists.",

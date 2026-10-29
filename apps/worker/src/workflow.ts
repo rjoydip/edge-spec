@@ -1,7 +1,7 @@
 /**
  * The durable path for GitHub webhooks: it scans a repository, writes the
  * missing test, checks it and opens the pull request. It runs with
- * deployment-owned credentials (Workers AI + GITHUB_TOKEN) because Workflow
+ * deployment-owned credentials (Workers AI + GH_TOKEN) because Workflow
  * params are persisted; a visitor's API key must never end up in that state.
  */
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
@@ -118,7 +118,11 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
         v2: true,
         ...(this.env.SANDBOX_API_KEY ? { apiKey: this.env.SANDBOX_API_KEY } : {}),
       };
-      const repoArg = sandboxRepo({ repo: input.repo, ref: input.ref, sandbox });
+      const repoArg = sandboxRepo({
+        repo: input.repo,
+        ref: input.ref,
+        sandbox,
+      });
       const run = await runInSandbox({
         sandbox,
         ...(repoArg ? { repo: repoArg } : {}),
@@ -379,7 +383,12 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
     ref: string;
     argument: string;
     scan: {
-      gaps: Array<{ path: string; testPath: string; risk: string; reason: string }>;
+      gaps: Array<{
+        path: string;
+        testPath: string;
+        risk: string;
+        reason: string;
+      }>;
       sources: string[];
     };
     step: WorkflowStep;
@@ -402,7 +411,11 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
             specPath: string;
             title?: string;
             responses?: string[];
-            parameters?: Array<{ name?: string; in?: string; required?: boolean }>;
+            parameters?: Array<{
+              name?: string;
+              in?: string;
+              required?: boolean;
+            }>;
           }
         | undefined;
       for (const specPath of specs.slice(0, 4)) {
@@ -496,10 +509,10 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
     const token =
       app && params.installationId && params.installationId > 0
         ? await installationTokens.get(app, params.installationId, repo)
-        : this.env.GITHUB_TOKEN;
+        : this.env.GH_TOKEN;
     if (!token) {
       throw new Error(
-        "The webhook has no GitHub credential. Configure the GitHub App secrets or GITHUB_TOKEN.",
+        "The webhook has no GitHub credential. Configure the GitHub App secrets or GH_TOKEN.",
       );
     }
     const github = new GitHub(token);
@@ -617,7 +630,10 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
       const previous = { code: generation.code, output: validation.output };
       generation = await step.do(`correct-test-${attempt + 1}`, async (): Promise<Generation> => {
         const routed = config.autoRouteModels
-          ? (routeModel(provider, { sourceLength: scanned.source.length, retry: true }) ?? model)
+          ? (routeModel(provider, {
+              sourceLength: scanned.source.length,
+              retry: true,
+            }) ?? model)
           : model;
         const fallback = nextModel(provider, routed);
         const code = await generateTest({
@@ -662,10 +678,18 @@ export class TestGenerationWorkflow extends WorkflowEntrypoint<Env, WorkflowPara
     }
 
     if (!validation.ok) {
-      return { status: "failed", reason: validation.output, path: scanned.path };
+      return {
+        status: "failed",
+        reason: validation.output,
+        path: scanned.path,
+      };
     }
     if (!config.autoPr) {
-      return { status: "ready", path: scanned.path, testPath: scanned.testPath };
+      return {
+        status: "ready",
+        path: scanned.path,
+        testPath: scanned.testPath,
+      };
     }
 
     // Server-side policy is opt-in: no D1 row means no extra gates.

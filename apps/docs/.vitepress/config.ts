@@ -45,6 +45,7 @@ export default defineConfig({
           { text: "MCP server", link: "/mcp" },
           { text: "Configuration", link: "/configuration" },
           { text: "Deployment", link: "/deployment" },
+          { text: "GitHub App", link: "/github-app" },
           { text: "UI guide", link: "/ui" },
         ],
       },

@@ -29,7 +29,9 @@ const config = (id: string) => {
 
 function openAiReply(code: string): Response {
   return new Response(
-    JSON.stringify({ choices: [{ message: { content: "```ts\n" + code + "\n```" } }] }),
+    JSON.stringify({
+      choices: [{ message: { content: "```ts\n" + code + "\n```" } }],
+    }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
 }
@@ -40,7 +42,11 @@ function input(overrides: Partial<GenerateInput> & { provider: string }): Genera
   return {
     filePath: "src/math.ts",
     source: "export const add = (a: number, b: number) => a + b;",
-    config: { provider, model: provider.models[0]?.id ?? "custom-model", apiKey: "sk-secret" },
+    config: {
+      provider,
+      model: provider.models[0]?.id ?? "custom-model",
+      apiKey: "sk-secret",
+    },
     ...rest,
   };
 }
@@ -141,7 +147,10 @@ describe("generateTest", () => {
       return openAiReply(TEST_CODE);
     }) as unknown as typeof fetch;
 
-    const code = await generateTest({ ...input({ provider: "openai" }), fetchImpl: fakeFetch });
+    const code = await generateTest({
+      ...input({ provider: "openai" }),
+      fetchImpl: fakeFetch,
+    });
     expect(code).toBe(TEST_CODE);
 
     const call = calls[0];
@@ -154,7 +163,9 @@ describe("generateTest", () => {
   it("reports the calls the provider says are left", async () => {
     const fakeFetch = (async () =>
       new Response(
-        JSON.stringify({ choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }] }),
+        JSON.stringify({
+          choices: [{ message: { content: "```ts\n" + TEST_CODE + "\n```" } }],
+        }),
         {
           status: 200,
           headers: {
@@ -227,7 +238,10 @@ describe("generateTest", () => {
               finishReason: "STOP",
               content: {
                 parts: [
-                  { text: "Let me think about the edge cases first.", thought: true },
+                  {
+                    text: "Let me think about the edge cases first.",
+                    thought: true,
+                  },
                   { text: "```ts\n" + TEST_CODE + "\n```" },
                 ],
               },
@@ -283,7 +297,12 @@ describe("generateTest", () => {
     const { config: base } = input({ provider: "private" });
     const code = await generateTest({
       ...input({ provider: "private" }),
-      config: { ...base, model: "qwen2.5-coder", apiKey: undefined, baseUrl: "http://box:8080/v1" },
+      config: {
+        ...base,
+        model: "qwen2.5-coder",
+        apiKey: undefined,
+        baseUrl: "http://box:8080/v1",
+      },
       fetchImpl: fakeFetch,
     });
 

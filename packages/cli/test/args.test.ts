@@ -82,7 +82,10 @@ describe("parseCliArgs", () => {
 
   it("returns help for no arguments and for --help", () => {
     expect(parseCliArgs([])).toEqual({ command: "help" });
-    expect(parseCliArgs(["scan", "--help"])).toEqual({ command: "help", topic: "scan" });
+    expect(parseCliArgs(["scan", "--help"])).toEqual({
+      command: "help",
+      topic: "scan",
+    });
   });
 
   it("rejects missing positionals and invalid numbers", () => {

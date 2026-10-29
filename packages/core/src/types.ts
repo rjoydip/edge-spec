@@ -228,7 +228,12 @@ export type CoverageDelta =
       status: "measured";
       path: string;
       lines: { before: number; after: number; delta: number; total: number };
-      branches?: { before: number; after: number; delta: number; total: number };
+      branches?: {
+        before: number;
+        after: number;
+        delta: number;
+        total: number;
+      };
     };
 
 /** Mutation facts from a tool that actually ran; never estimated. */
@@ -323,7 +328,11 @@ export interface RunInput {
 export type StepId = "scan" | "generate" | "validate" | "correct" | "pull-request";
 
 export type RunEvent =
-  | { type: "log"; level: "info" | "ai" | "warn" | "success" | "error"; text: string }
+  | {
+      type: "log";
+      level: "info" | "ai" | "warn" | "success" | "error";
+      text: string;
+    }
   /** Emitted first by the SSE route so the dashboard can record decisions. */
   | { type: "run"; id: string; persisted: boolean }
   | {

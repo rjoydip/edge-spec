@@ -75,7 +75,10 @@ function emit(next: Appearance): void {
   for (const listener of listeners) listener();
 }
 
-const THEME_COLORS: Record<ThemeMode, string> = { dark: "#09090b", light: "#fafafa" };
+const THEME_COLORS: Record<ThemeMode, string> = {
+  dark: "#09090b",
+  light: "#fafafa",
+};
 
 function applyAppearance(appearance: Appearance = state): void {
   const root = document.documentElement;

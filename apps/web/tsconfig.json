@@ -1,5 +1,8 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "types": ["bun", "node", "vite/client"], "paths": { "@/*": ["./src/*"] } },
+  "extends": "../../config/tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["bun", "node", "vite/client"],
+    "paths": { "@/*": ["./src/*"] }
+  },
   "include": ["src", "test", "vite.config.ts"]
 }

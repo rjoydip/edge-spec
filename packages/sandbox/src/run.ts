@@ -123,7 +123,9 @@ async function waitForReady(input: {
   while (Date.now() < deadline) {
     if (!input.server.alive()) return false;
     try {
-      const response = await fetch(input.url, { signal: AbortSignal.timeout(2_000) });
+      const response = await fetch(input.url, {
+        signal: AbortSignal.timeout(2_000),
+      });
       if (response.status < 400) return true;
     } catch {
       // Not up yet.

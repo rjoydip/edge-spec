@@ -299,9 +299,18 @@ export function containerDriver(
       return readyUrl;
     },
     async start() {
-      await mkdir(path.join(context.root, ".edgespec-home"), { recursive: true });
+      await mkdir(path.join(context.root, ".edgespec-home"), {
+        recursive: true,
+      });
       const started = await cli(
-        containerStartArgs({ kind, image, root: context.root, name, readyUrl, user }),
+        containerStartArgs({
+          kind,
+          image,
+          root: context.root,
+          name,
+          readyUrl,
+          user,
+        }),
         300_000,
       );
       if (started.timedOut || started.exitCode !== 0) {
@@ -400,7 +409,10 @@ export async function driverHealth(
     timedOut: false,
   }));
   if (result.exitCode === 0) {
-    return { ok: true, ...(result.stdout.trim() ? { version: result.stdout.trim() } : {}) };
+    return {
+      ok: true,
+      ...(result.stdout.trim() ? { version: result.stdout.trim() } : {}),
+    };
   }
   return {
     ok: false,

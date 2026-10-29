@@ -1,0 +1,23 @@
+{
+  "name": "@edge-spec/infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "alchemy": "bunx alchemy",
+    "plan": "bunx alchemy plan",
+    "deploy": "bunx alchemy deploy",
+    "dev": "ALCHEMY_DEV=1 bunx alchemy dev",
+    "destroy": "bunx alchemy destroy",
+    "test": "bun test ./test/stack.integration.ts",
+    "typecheck": "bun check --no-script -p ."
+  },
+  "devDependencies": {
+    "@alchemy.run/cloudflare": "2.0.0-beta.84",
+    "@effect/platform-bun": "4.0.6",
+    "@effect/platform-node": "4.0.6",
+    "@types/bun": "^1.3.0",
+    "alchemy": "2.0.0-beta.84",
+    "effect": "4.0.6"
+  }
+}

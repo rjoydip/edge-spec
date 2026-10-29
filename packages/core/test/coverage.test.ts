@@ -61,8 +61,12 @@ describe("coverageDelta", () => {
   });
 
   it("is not measured when either report is missing or silent about the file", () => {
-    expect(coverageDelta(undefined, after, "src/math.ts")).toEqual({ status: "not-measured" });
-    expect(coverageDelta(before, after, "src/user.ts")).toEqual({ status: "not-measured" });
+    expect(coverageDelta(undefined, after, "src/math.ts")).toEqual({
+      status: "not-measured",
+    });
+    expect(coverageDelta(before, after, "src/user.ts")).toEqual({
+      status: "not-measured",
+    });
   });
 });
 

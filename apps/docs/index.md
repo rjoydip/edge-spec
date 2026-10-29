@@ -80,7 +80,7 @@ bun run mcp -- --help
 Checks:
 
 ```bash
-bun run check          # format, lint, types, tests
+bun run verify          # format, lint, types, tests
 bun run build          # dist/web + dist/worker
 bun run deploy -- --dry-run
 ```

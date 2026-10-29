@@ -88,9 +88,11 @@ import {
   putWorkspace,
   recordAudit,
   runsDb,
+  scheduledRepoView,
   setBacklogState,
   setRunDecisions,
   syncBacklog,
+  workspaceView,
 } from "./db";
 import type { BacklogState } from "@edge-spec/core/backlog";
 import { impactForChanges } from "./impact";
@@ -311,7 +313,11 @@ async function validSignature(secret: string, raw: string, header: string): Prom
 }
 
 app.get("/api/health", (c) =>
-  c.json({ status: "ok", app: "EdgeSpec", timestamp: new Date().toISOString() }),
+  c.json({
+    status: "ok",
+    app: "EdgeSpec",
+    timestamp: new Date().toISOString(),
+  }),
 );
 
 /**
@@ -337,8 +343,8 @@ app.get("/api/catalog", (c) =>
   c.json({
     providers: PROVIDERS,
     defaults: { ai: DEFAULT_AI, pipeline: DEFAULT_PIPELINE },
-    /** Tells the dashboard whether a sandbox runner exists before it promises one. */
-    sandbox: Boolean(c.env.SANDBOX_RUNNER_URL),
+    /** Tells the dashboard whether the request has a sandbox runner before it promises one. */
+    sandbox: Boolean(c.req.header(SANDBOX_URL_HEADER)?.trim() || c.env.SANDBOX_RUNNER_URL?.trim()),
   }),
 );
 
@@ -759,7 +765,10 @@ app.post("/api/run", async (c) => {
     aiConfig: AiConfig;
     sandbox?: SandboxConfig;
     repoToken?: string;
-    authFixture?: { headers?: Record<string, string>; query?: Record<string, string> };
+    authFixture?: {
+      headers?: Record<string, string>;
+      query?: Record<string, string>;
+    };
     fixtures?: FixtureFile;
     input: ReturnType<typeof pipelineConfig> & {
       repo: string;
@@ -879,7 +888,10 @@ app.post("/api/run", async (c) => {
           });
         }
         if (event.type === "result") status = event.ok ? "ready" : "failed";
-        await stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+        await stream.writeSSE({
+          event: event.type,
+          data: JSON.stringify(event),
+        });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1005,7 +1017,11 @@ app.post("/api/generate", async (c) => {
       return generateTest({
         filePath: path,
         source,
-        config: { ...aiConfig, model, ...(fallback ? { fallbackModel: fallback } : {}) },
+        config: {
+          ...aiConfig,
+          model,
+          ...(fallback ? { fallbackModel: fallback } : {}),
+        },
         runner,
         ...(memory ? { memory } : {}),
         coverageTarget: config.coverageTarget,
@@ -1015,7 +1031,12 @@ app.post("/api/generate", async (c) => {
         onNotice: (text) => notices.push(text),
         ...(checks && checks.style.length ? { style: checks.style } : {}),
         ...(checks && checks.checks.length
-          ? { checks: checks.checks.map((check) => ({ name: check.name, command: check.command })) }
+          ? {
+              checks: checks.checks.map((check) => ({
+                name: check.name,
+                command: check.command,
+              })),
+            }
           : {}),
         onRateLimit: (info) => {
           rateLimit = info;
@@ -1116,7 +1137,10 @@ app.post("/api/pull-request", async (c) => {
     const meta = pullMetaOf(body);
     const policy = parsePullPolicy(body.policy);
     const blocked = policyBlocked(
-      evaluatePullPolicy(policy, { files, ...(meta.draft ? { draft: true } : {}) }),
+      evaluatePullPolicy(policy, {
+        files,
+        ...(meta.draft ? { draft: true } : {}),
+      }),
     );
     const auditDb = runsDb(c.env);
     if (blocked) {
@@ -1212,7 +1236,10 @@ app.post("/api/pull-request", async (c) => {
       await setRunDecisions(
         history,
         runId,
-        files.map((file) => ({ sourcePath: file.sourcePath, decision: "accepted" as const })),
+        files.map((file) => ({
+          sourcePath: file.sourcePath,
+          decision: "accepted" as const,
+        })),
       ).catch(() => undefined);
     }
     return c.json({ url, files: files.length });
@@ -1232,10 +1259,83 @@ app.get("/api/pulls", async (c) => {
   }
 });
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
+}
+
+function authPage(title: string, message: string): string {
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)}</title></head>
+<body><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p><p><a href="/">Open EdgeSpec</a></p></main></body>
+</html>`;
+}
+
+/**
+ * GitHub App setup/authorization callback.
+ *
+ * EdgeSpec does not implement GitHub OAuth user sign-in: the dashboard sends a
+ * personal access token per request. This endpoint therefore confirms App
+ * installation redirects and explains the unsupported `code` callback instead
+ * of exchanging a code without a state/session flow.
+ */
+app.get("/auth", (c) => {
+  const error = c.req.query("error");
+  if (error) {
+    return c.html(
+      authPage(
+        "GitHub authorization failed",
+        `GitHub returned: ${error}. Return to EdgeSpec and add a personal access token in Settings.`,
+      ),
+      400,
+    );
+  }
+
+  const installationId = c.req.query("installation_id");
+  if (installationId && /^\d+$/.test(installationId)) {
+    return c.html(
+      authPage(
+        "GitHub App installed",
+        `Installation ${installationId} is ready. Webhooks will carry this installation id; no further action is needed.`,
+      ),
+    );
+  }
+
+  if (c.req.query("code")) {
+    return c.html(
+      authPage(
+        "OAuth sign-in is not enabled",
+        "EdgeSpec uses a personal access token from Settings. This callback does not exchange OAuth codes.",
+      ),
+      501,
+    );
+  }
+
+  return c.html(
+    authPage(
+      "GitHub App callback",
+      "This endpoint handles GitHub App setup redirects. Return to EdgeSpec to continue.",
+    ),
+  );
+});
+
 app.post("/webhook", async (c) => {
   try {
     const raw = await c.req.text();
-    const secret = c.env.GITHUB_WEBHOOK_SECRET;
+    const secret = c.env.GH_WEBHOOK_SECRET;
     if (secret && !(await validSignature(secret, raw, c.req.header("x-hub-signature-256") ?? ""))) {
       throw new HttpError(401, "Invalid webhook signature.");
     }
@@ -1249,7 +1349,9 @@ app.post("/webhook", async (c) => {
 
     const repository = asRecord(payload.repository);
     const repo = str(repository.full_name);
-    if (!repo) throw new HttpError(400, "Webhook payload has no repository.");
+    // App-level events (`ping`, `installation`, …) carry no repository. They
+    // are valid deliveries, so acknowledge them instead of failing the run.
+    if (!repo) return c.json({ ignored: "no repository" }, 202);
     const ref = str(payload.ref)?.replace(/^refs\/heads\//, "") ?? "main";
     // An App webhook names its installation; a PAT deployment sends none.
     const installationId = Number(asRecord(payload.installation).id);
@@ -1383,7 +1485,10 @@ app.get("/api/schedules", async (c) => {
   try {
     const db = runsDb(c.env);
     if (!db) return c.json({ enabled: false, schedules: [] });
-    return c.json({ enabled: true, schedules: await listScheduledRepos(db) });
+    return c.json({
+      enabled: true,
+      schedules: (await listScheduledRepos(db)).map(scheduledRepoView),
+    });
   } catch (err) {
     return fail(err);
   }
@@ -1404,14 +1509,26 @@ app.put("/api/schedules", async (c) => {
       intervalDays,
       enabled: body.enabled !== false,
       ...(Number.isInteger(installationId) && installationId > 0 ? { installationId } : {}),
+      ...(typeof body.driftWebhookUrl === "string"
+        ? { driftWebhookUrl: body.driftWebhookUrl }
+        : {}),
+      ...(typeof body.driftWebhookSecret === "string"
+        ? { driftWebhookSecret: body.driftWebhookSecret }
+        : {}),
     });
+    const schedules = (await listScheduledRepos(db)).map(scheduledRepoView);
+    const saved = schedules.find((entry) => entry.repo === `${parsed.owner}/${parsed.name}`);
     await recordAudit(db, {
       repo: `${parsed.owner}/${parsed.name}`,
       actor: "dashboard",
       action: "schedule_updated",
-      detail: { intervalDays, enabled: body.enabled !== false },
+      detail: {
+        intervalDays,
+        enabled: body.enabled !== false,
+        driftWebhookConfigured: Boolean(saved?.driftWebhookUrl),
+      },
     }).catch(() => undefined);
-    return c.json({ enabled: true, schedules: await listScheduledRepos(db) });
+    return c.json({ enabled: true, schedules });
   } catch (err) {
     return fail(err);
   }
@@ -1439,7 +1556,10 @@ app.get("/api/workspace", async (c) => {
   try {
     const db = runsDb(c.env);
     if (!db) return c.json({ enabled: false });
-    return c.json({ enabled: true, workspace: await getWorkspace(db) });
+    return c.json({
+      enabled: true,
+      workspace: workspaceView(await getWorkspace(db)),
+    });
   } catch (err) {
     return fail(err);
   }
@@ -1453,13 +1573,23 @@ app.put("/api/workspace", async (c) => {
     const workspace = await putWorkspace(db, {
       ...(typeof body.name === "string" ? { name: body.name } : {}),
       ...(body.retentionDays !== undefined ? { retentionDays: Number(body.retentionDays) } : {}),
+      ...(typeof body.driftWebhookUrl === "string"
+        ? { driftWebhookUrl: body.driftWebhookUrl }
+        : {}),
+      ...(typeof body.driftWebhookSecret === "string"
+        ? { driftWebhookSecret: body.driftWebhookSecret }
+        : {}),
     });
     await recordAudit(db, {
       actor: "dashboard",
       action: "workspace_updated",
-      detail: { retentionDays: workspace.retentionDays, name: workspace.name },
+      detail: {
+        retentionDays: workspace.retentionDays,
+        name: workspace.name,
+        driftWebhookConfigured: Boolean(workspace.driftWebhookUrl),
+      },
     }).catch(() => undefined);
-    return c.json({ enabled: true, workspace });
+    return c.json({ enabled: true, workspace: workspaceView(workspace) });
   } catch (err) {
     return fail(err);
   }
@@ -1689,7 +1819,12 @@ app.get("/api/runs/:id", async (c) => {
 app.get("/local-api/scan", (c) => {
   if (!isLocalRequest(c))
     return c.json({ error: "Local access is only available on localhost." }, 403);
-  return c.json({ error: "Local folder access requires the Vite dev server (bun run dev)." }, 400);
+  return c.json(
+    {
+      error: "Local folder access requires the Vite dev server (bun run dev).",
+    },
+    400,
+  );
 });
 
 app.get("/local-api/file", (c) => {
@@ -1701,7 +1836,7 @@ app.get("/local-api/file", (c) => {
 // Unknown API paths must return JSON, not the SPA's index.html.
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
-// Anything else is a static asset (assets-first routing in wrangler.toml).
+// Anything else is a static asset (assets-first routing in the Alchemy stack).
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default {

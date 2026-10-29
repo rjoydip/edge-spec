@@ -14,7 +14,7 @@ These corrections to the first mockup are part of the definition of done.
 | --- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Header items not in proper alignment                                                                      | One header row, `items-center`, every control a fixed 36 px (`h-9`) or icon button. Stats move out of the header into the Pipeline page's KPI strip.                                                                                                                                                                                         |
 | 2   | No visible vertical scrollbar, but the page still scrolls                                                 | `.no-scrollbar` utility (`scrollbar-width: none`, `::-webkit-scrollbar { display: none }`) on the page root and the terminal pane. Scroll behaviour is unchanged.                                                                                                                                                                            |
-| 3   | Application name is **EdgeSpec**                                                                          | `package.json`, `wrangler.toml`, `<title>`, brand mark, PR footer, docs. No "Testflare".                                                                                                                                                                                                                                                     |
+| 3   | Application name is **EdgeSpec**                                                                          | `package.json`, `infra/alchemy.run.ts`, `<title>`, brand mark, PR footer, docs. No "Testflare".                                                                                                                                                                                                                                              |
 | 4   | Repository must be user-supplied                                                                          | `owner/name` input in the header, persisted in local storage; every API call requires `repo`. No server-side default repository.                                                                                                                                                                                                             |
 | 5   | "Cloudflare Workflows v2" must not be in the header                                                       | Removed. Header shows product name, repo, provider badge, theme toggle, settings only. Engine detail belongs in docs, not chrome.                                                                                                                                                                                                            |
 | 6   | Theme toggle (dark/light) missing                                                                         | Sun/Moon icon button in the header, `html.dark` / `html.light`, applied before first paint, persisted.                                                                                                                                                                                                                                       |
@@ -35,12 +35,12 @@ These corrections to the first mockup are part of the definition of done.
 | Interactive path | `POST /api/run` (SSE)                                                                                                           | Live step logs; BYO keys never enter durable workflow state      |
 | LLM              | Workers AI binding, or any OpenAI-compatible / Anthropic / Gemini endpoint                                                      | User's choice; key stays client-side                             |
 | GitHub           | REST via `fetch`                                                                                                                | No SDK, no bundle weight; token per request                      |
-| Test validation  | Optional sandbox runner (`SANDBOX_RUNNER_URL`), else static check                                                               | Honest `verified` flag instead of pretending tests ran           |
+| Test validation  | Optional user-configured sandbox runner, else static check                                                                      | Honest `verified` flag instead of pretending tests ran           |
 | State            | Optional D1 for history, backlog, policies, memory, schedules, workspace and audit; browser local storage for per-user settings | Stateless by default; shared data is opt-in and never holds keys |
 | Dashboard        | React 19 + Tailwind v4 + Vite                                                                                                   | Same stack as the reference project                              |
 | Icons            | `lucide-react`                                                                                                                  | Matches the mockup                                               |
 | Tests            | `bun test` for the pure core                                                                                                    | One runnable check per non-trivial rule                          |
-| Deploy           | Wrangler (Worker + assets)                                                                                                      | One deployable unit                                              |
+| Deploy           | Alchemy (Worker + assets + D1 + R2 + Workflow)                                                                                  | One deployable unit                                              |
 
 **Design principle.** Pure functions (`scanner`, `ai` prompt/parse, `validate`)
 know nothing about HTTP. The Worker and the Workflow are thin adapters over the
@@ -74,9 +74,8 @@ GitHub              ──▶ /webhook ──▶ Workflow ─┘      └─▶ 
 edge-spec/
 ├── PLAN.md, TASKS.md, AGENTS.md, README.md
 ├── package.json              # Bun workspaces and root scripts
-├── bunfig.toml               # Bun formatter settings
-├── tsconfig.base.json
-├── wrangler.toml
+├── config/tsconfig.base.json # shared TypeScript settings
+├── infra/                  # Cloudflare stack, local/dev parity test
 ├── migrations/               # 0001–0007: runs, policies, commands, drift,
 │                             # backlog, repo memory, workspace/audit
 ├── evals/                    # golden cases and the eval runner
@@ -110,57 +109,46 @@ edge-spec/
 ```
 
 Both Vite builds write to the root `dist/` (`dist/web` and `dist/worker`), which
-Wrangler uploads.
+Alchemy uploads.
 
 ---
 
-## 5. Configuration (`wrangler.toml`)
+## 5. Configuration (`infra/alchemy.run.ts`)
 
-```toml
-name = "edge-spec"
-main = "dist/worker/index.js"
-compatibility_date = "2025-07-18"
-compatibility_flags = ["nodejs_compat"]
-
-# Daily cron: apply workspace retention, then run due drift scans.
-[triggers]
-crons = ["0 8 * * *"]
-
-[assets]
-directory = "dist/web"
-binding = "ASSETS"
-not_found_handling = "single-page-application"
-
-[ai]
-binding = "AI"
-remote = true
-
-[[workflows]]
-name = "test-generation-workflow"
-binding = "TEST_GENERATION_WORKFLOW"
-class_name = "TestGenerationWorkflow"
-
-# Run history, backlog, memory, policies, workspace and audit.
-# Create the database, apply the migrations in `migrations/`, then deploy.
-[[d1_databases]]
-binding = "RUNS_DB"
-database_name = "edge-spec-runs"
-database_id = "<paste-the-id-here>"
-
-# Run artifacts and drift summaries. Retention prunes run bundles; drift
-# summaries have no D1 row to age out yet (see TASKS.md).
-[[r2_buckets]]
-binding = "ARTIFACTS"
-bucket_name = "edge-spec-artifacts"
+```ts
+const worker = Cloudflare.Worker("edge-spec", {
+  script: readFileSync("dist/worker/index.js", "utf8"), // Vite builds it
+  name: isProd ? "edge-spec" : `edge-spec-${stage}`,
+  compatibility: { date: "2025-07-18", flags: ["nodejs_compat"] },
+  // Daily cron: retention, then due drift scans. Previews get none.
+  crons: isProd ? ["0 8 * * *"] : [],
+  assets: {
+    directory: "dist/web",
+    notFoundHandling: "single-page-application",
+  },
+  env: {
+    RUNS_DB: db, // edge-spec-runs
+    ARTIFACTS: artifacts, // edge-spec-artifacts
+    TEST_GENERATION_WORKFLOW: Cloudflare.Workflow("TestGenerationWorkflow", {
+      className: "TestGenerationWorkflow",
+    }),
+    AI: Cloudflare.Workers.AI(),
+  },
+});
 ```
+
+Vite stays the bundler; Alchemy owns infrastructure and upload. D1 and R2 are
+created per stage (`edge-spec-runs`, `edge-spec-artifacts` for `prod`) and the
+migrations in `migrations/` run on deploy and in `alchemy dev`. There is no
+`wrangler.toml`.
 
 - Without `RUNS_DB` the Worker still scans, generates and opens pull requests;
   history, backlog, policies, memory, workspace and audit answer disabled, and
   the cron does nothing.
-- Secrets are for the automation path only: `GITHUB_APP_ID` +
-  `GITHUB_APP_PRIVATE_KEY` (or `GITHUB_TOKEN`), `GITHUB_WEBHOOK_SECRET`,
-  `SANDBOX_RUNNER_URL`, `SANDBOX_API_KEY`, `DRIFT_WEBHOOK_URL`,
-  `DRIFT_WEBHOOK_SECRET`.
+- Secrets are for the automation path only: `GH_APP_ID` +
+  `GH_APP_PRIVATE_KEY` (or `GH_TOKEN`), `GH_WEBHOOK_SECRET`,
+  `DRIFT_ALERT_WEBHOOK_URL`, `DRIFT_ALERT_WEBHOOK_SECRET`. The sandbox runner is configured
+  per user in the dashboard.
 - The interactive path uses headers: `x-github-token`, `x-ai-key`,
   `x-ai-base-url`, `x-sandbox-url`, `x-sandbox-key`, `x-sandbox-config`.
 - No KV and no Queue binding. Workspace records hold a name, a retention
@@ -315,8 +303,8 @@ a dialog, not a stage (one configuration surface, not two).
    ones with risk and exported symbols.
 2. **Generate** — prompt contains path + source; output is parsed out of a code
    fence; the file must contain at least one `describe`/`it`/`test`.
-3. **Validate** — if `SANDBOX_RUNNER_URL` is configured, POST source + test and
-   run `bun test`; otherwise run the static check and report
+3. **Validate** — if the request supplies a sandbox runner, POST source + test
+   and run `bun test`; otherwise run the static check and report
    `verified: false` ("static check only").
 4. **Self-correct** — if validation is verified and fails, feed the output back
    to the model up to `maxRetries`.
@@ -369,8 +357,8 @@ their runner did not execute.
 
 The seven foundation phases and every planned feature (0.1 through 4.6) are
 implemented, plus the inferred-OpenAPI health matrix. Tests live in each workspace's `test/` directory (never beside the
-sources) and are included in `bun run check`. The dashboard was smoke-tested
-against `wrangler dev`: health, catalog, asset serving, input validation, a real
+sources) and are included in `bun run verify`. The dashboard was smoke-tested
+against `alchemy dev`: health, catalog, asset serving, input validation, a real
 repository scan, and the SSE error/result contract. Remaining and incomplete
 work is tracked in `TASKS.md`, not here.
 
@@ -394,7 +382,7 @@ bun install
 bun test                 # discovers /test
 bun run typecheck        # includes /test
 bun run build
-bun run check            # format + lint + types + tests
+bun run verify            # format + lint + types + tests
 bun run docs:build       # static docs site
 bun run docs:dev         # http://127.0.0.1:5174
 bun run dev:worker       # http://127.0.0.1:8787
@@ -406,7 +394,7 @@ bun run mcp -- --help
 
 GitHub Actions:
 
-- `ci.yml` — `bun install --frozen-lockfile`, `bun run check`, `bun run build`,
+- `ci.yml` — `bun install --frozen-lockfile`, `bun run verify`, `bun run build`,
   `bun run docs:build`.
 - `deploy.yml` — builds and deploys `main`; needs `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID` repository secrets.
@@ -414,30 +402,33 @@ GitHub Actions:
 Deploy manually:
 
 ```bash
-bunx wrangler login
-bun run deploy
+bun run alchemy profile edit --profile default --add Cloudflare   # once
+bun run deploy                                                    # build + deploy --stage prod
 ```
 
-Optional secrets for the webhook/automation path:
+Optional secrets for the webhook/automation path. Export them or put them in
+`infra/.env` (git-ignored); the stack binds them for `prod`:
 
 ```bash
-bunx wrangler secret put GITHUB_APP_ID
-bunx wrangler secret put GITHUB_APP_PRIVATE_KEY
-bunx wrangler secret put GITHUB_TOKEN             # fallback when no App
-bunx wrangler secret put GITHUB_WEBHOOK_SECRET
-bunx wrangler secret put SANDBOX_RUNNER_URL
-bunx wrangler secret put SANDBOX_API_KEY
-bunx wrangler secret put DRIFT_WEBHOOK_URL
-bunx wrangler secret put DRIFT_WEBHOOK_SECRET
+export GH_APP_ID=…
+export GH_APP_PRIVATE_KEY="$(cat app.pk8.pem)"
+export GH_TOKEN=…              # fallback when no App
+export GH_WEBHOOK_SECRET=…
+export DRIFT_ALERT_WEBHOOK_URL=…
+export DRIFT_ALERT_WEBHOOK_SECRET=…
 ```
 
-Point `SANDBOX_RUNNER_URL` at a self-hosted runner (`bun run sandbox`) or a
-hosted driver, with the same `SANDBOX_API_KEY` on both sides.
+Configure a self-hosted runner (`bun run sandbox`) or a hosted driver per user
+in **Settings → Sandbox**. The runner's own `SANDBOX_API_KEY` is separate from
+the Worker and travels as `x-sandbox-key`.
 
-Optional D1 setup:
+D1 and R2 are created by the stack, so there is no separate setup step. The
+production cutover already adopted the existing Worker, D1, R2 and Workflow;
+`bun run deploy` is enough after that. Use `--adopt` only for a new account or a
+lost Alchemy state store:
 
 ```bash
-bunx wrangler d1 create edge-spec-runs
-bunx wrangler d1 migrations apply edge-spec-runs --remote
-# Uncomment the RUNS_DB block in wrangler.toml, then deploy.
+bun run alchemy deploy --stage prod --yes --adopt
 ```
+
+See `apps/docs/deployment.md` and `apps/docs/configuration.md`.

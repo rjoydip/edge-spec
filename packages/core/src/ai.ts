@@ -478,7 +478,10 @@ async function callGoogle(input: GenerateInput): Promise<string> {
 }
 
 /** The prompt size as an order-of-magnitude token range. Never a billed number. */
-export function estimatePromptTokens(input: GenerateInput): { low: number; high: number } {
+export function estimatePromptTokens(input: GenerateInput): {
+  low: number;
+  high: number;
+} {
   const tokens = Math.ceil(buildPrompt(input).length / 4);
   return { low: Math.round(tokens * 0.75), high: Math.round(tokens * 1.25) };
 }

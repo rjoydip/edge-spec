@@ -21,7 +21,7 @@ Cloudflare Worker (Hono)
 Outbound from the Worker:
   api.github.com                  tree, files, branches, commits, PRs
   provider endpoint               OpenAI-compatible / Anthropic / Gemini
-  SANDBOX_RUNNER_URL (optional)   executes `bun test`
+  user sandbox runner (optional)  executes `bun test`
 ```
 
 The Worker holds no session and no user configuration. A request carries
@@ -104,7 +104,7 @@ validations per file; `ready` is assembled in scan order, not completion order.
 One file that exhausts its retries fails alone and the rest of the run continues.
 
 1. **Static checks** always run. Failure stops the run before any sandbox call.
-2. **Sandbox** runs only if `SANDBOX_RUNNER_URL` is set. The result is
+2. **Sandbox** runs only when the request supplies a runner URL. The result is
    `verified: true`.
 3. **No sandbox** returns `ok: true` only when static checks pass, with
    `verified: false` and an explicit message. The UI labels this _static check
@@ -121,7 +121,7 @@ not. The dashboard lets the user generate another gap individually via
 ## Webhook automation (`TestGenerationWorkflow`)
 
 ```text
-GitHub ── POST /webhook ──▶ verify HMAC (if GITHUB_WEBHOOK_SECRET is set)
+GitHub ── POST /webhook ──▶ verify HMAC (if GH_WEBHOOK_SECRET is set)
                             parse repository.full_name + ref + installation.id
                             push:          binding.create({ repo, ref, event:"push" })
                             pull_request:  binding.create({ repo, ref:headSha,
@@ -157,7 +157,7 @@ Workflow parameters are persisted by Cloudflare. Therefore the workflow:
 - never accepts a visitor's provider key,
 - uses the deployment's `AI` binding,
 - mints a repo-scoped GitHub App installation token when the App secrets are
-  configured, cached only until shortly before expiry; `GITHUB_TOKEN` is the
+  configured, cached only until shortly before expiry; `GH_TOKEN` is the
   fallback for deployments without an App,
 - rejects non-Workers-AI providers with a clear error.
 

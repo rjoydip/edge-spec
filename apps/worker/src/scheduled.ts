@@ -14,10 +14,12 @@ import {
   runsDb,
   syncBacklog,
   type ScheduledRepo,
+  type Workspace,
 } from "./db";
 import type { D1Database, Env } from "./env";
 import { deleteRunArtifacts } from "./artifacts";
 import { ownerLookup } from "./ownership";
+import { resolveDriftWebhook, type DriftWebhookTarget } from "./drift-webhook";
 
 export interface ScheduledController {
   scheduledTime: number;
@@ -52,15 +54,12 @@ async function operationsOf(
   return operations;
 }
 
-async function notify(env: Env, repo: string, summary: string): Promise<void> {
-  const url = env.DRIFT_WEBHOOK_URL?.trim();
-  if (!url) return;
-  const secret = env.DRIFT_WEBHOOK_SECRET?.trim();
-  const response = await fetch(url, {
+async function notify(target: DriftWebhookTarget, repo: string, summary: string): Promise<void> {
+  const response = await fetch(target.url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(secret ? { "x-edgespec-secret": secret } : {}),
+      ...(target.secret ? { "x-edgespec-secret": target.secret } : {}),
     },
     body: JSON.stringify({ text: summary, repo }),
   });
@@ -73,6 +72,7 @@ async function scanRepo(
   env: Env,
   db: D1Database,
   schedule: ScheduledRepo,
+  workspace: Workspace | undefined,
   now: number,
 ): Promise<void> {
   try {
@@ -80,7 +80,7 @@ async function scanRepo(
     const token =
       app && schedule.installationId
         ? await tokens.get(app, schedule.installationId, schedule.repo)
-        : env.GITHUB_TOKEN;
+        : env.GH_TOKEN;
     if (!token) throw new Error("No GitHub credential for the scheduled scan.");
     const github = new GitHub(token);
     const base = await github.defaultBranch(schedule.repo);
@@ -95,17 +95,24 @@ async function scanRepo(
     const previous = await getDriftSnapshot(db, schedule.repo);
     const drift = detectDrift(previous, current);
 
+    let delivered: DriftWebhookTarget | undefined;
     if (drift.changed) {
       const summary = driftSummary(schedule.repo, drift);
       if (env.ARTIFACTS) {
         await env.ARTIFACTS.put(
           `drift/${schedule.repo}/${now}.json`,
-          JSON.stringify({ repo: schedule.repo, scannedAt: now, drift, summary }),
+          JSON.stringify({
+            repo: schedule.repo,
+            scannedAt: now,
+            drift,
+            summary,
+          }),
           { httpMetadata: { contentType: "application/json" } },
         ).catch(() => undefined);
       }
       // Store only after the announcement succeeds; a failed webhook retries.
-      await notify(env, schedule.repo, summary);
+      delivered = resolveDriftWebhook(env, schedule, workspace);
+      if (delivered) await notify(delivered, schedule.repo, summary);
     }
     await syncBacklog(
       db,
@@ -132,7 +139,8 @@ async function scanRepo(
       action: "drift_scan",
       detail: {
         changed: drift.changed,
-        notified: drift.changed && Boolean(env.DRIFT_WEBHOOK_URL?.trim()),
+        notified: Boolean(delivered),
+        webhookSource: delivered?.source ?? "none",
         newFiles: drift.newFiles.length,
         closedFiles: drift.closedFiles.length,
         apiAdded: drift.apiAdded.length,
@@ -184,6 +192,6 @@ export async function runScheduled(
         now - schedule.lastRunAt >= schedule.intervalDays * 86_400_000),
   );
   for (const schedule of due.slice(0, 10)) {
-    ctx.waitUntil(scanRepo(env, db, schedule, now));
+    ctx.waitUntil(scanRepo(env, db, schedule, workspace, now));
   }
 }

@@ -4,7 +4,9 @@ import { authorizedCommenter, parsePrCommand } from "../src/pr-command";
 describe("parsePrCommand", () => {
   it("parses the three commands and their arguments", () => {
     expect(parsePrCommand("/edgespec retest")).toEqual({ name: "retest" });
-    expect(parsePrCommand("  /EdgeSpec COVERAGE ")).toEqual({ name: "coverage" });
+    expect(parsePrCommand("  /EdgeSpec COVERAGE ")).toEqual({
+      name: "coverage",
+    });
     expect(parsePrCommand("/edgespec explain GET /users/{id}")).toEqual({
       name: "explain",
       argument: "GET /users/{id}",

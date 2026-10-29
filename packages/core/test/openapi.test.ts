@@ -66,7 +66,11 @@ describe("parseOpenApiSpec", () => {
         },
         components: {
           parameters: {
-            Limit: { name: "limit", in: "query", schema: { type: "integer", default: 10 } },
+            Limit: {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", default: 10 },
+            },
           },
         },
       }),
@@ -126,7 +130,9 @@ describe("contract tests", () => {
       JSON.stringify({
         openapi: "3.0.0",
         info: { title: "No server", version: "1" },
-        paths: { "/ping": { get: { responses: { "200": { description: "ok" } } } } },
+        paths: {
+          "/ping": { get: { responses: { "200": { description: "ok" } } } },
+        },
       }),
       "openapi.json",
     );
@@ -145,7 +151,11 @@ describe("apiGaps", () => {
       testPath: "tests/api/openapi.contract.test.ts",
       evidence: {
         specPath: "openapi.yaml",
-        operation: { method: "GET", path: "/users/{id}", operationId: "getUser" },
+        operation: {
+          method: "GET",
+          path: "/users/{id}",
+          operationId: "getUser",
+        },
       },
     });
     expect(apiGaps([spec], ["GET /users/{id}"])).toHaveLength(0);
@@ -164,7 +174,11 @@ describe("parseJUnit", () => {
     ].join("");
     const results = parseJUnit(xml, "openapi.yaml");
     expect(results).toHaveLength(3);
-    expect(results[0]).toMatchObject({ method: "GET", path: "/users", status: "passed" });
+    expect(results[0]).toMatchObject({
+      method: "GET",
+      path: "/users",
+      status: "passed",
+    });
     expect(results[1]).toMatchObject({
       status: "failed",
       durationMs: 500,
@@ -216,7 +230,10 @@ describe("contractTestsFor", () => {
               },
             },
           },
-          responses: { "201": { description: "ok" }, "400": { description: "bad" } },
+          responses: {
+            "201": { description: "ok" },
+            "400": { description: "bad" },
+          },
         },
       },
     },
@@ -247,7 +264,10 @@ describe("contractTestsFor", () => {
   it("can disable negative cases", () => {
     const spec = parseOpenApiSpec(NEGATIVE_SPEC, "openapi.json");
     if (!spec) throw new Error("fixture did not parse");
-    const contract = contractTestsFor(spec, undefined, { auth: true, negative: false });
+    const contract = contractTestsFor(spec, undefined, {
+      auth: true,
+      negative: false,
+    });
     expect(contract.code).not.toContain("unauthorized");
     expect(contract.code).not.toContain("wrongType");
   });

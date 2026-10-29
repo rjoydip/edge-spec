@@ -582,7 +582,8 @@ export function EndpointDialog({
             <TriangleAlert />
             <div>
               <AlertTitle>
-                Contract test failed{result.diagnosis ? ` · ${result.diagnosis}` : ""}
+                Contract test failed
+                {result.diagnosis ? ` · ${result.diagnosis}` : ""}
               </AlertTitle>
               <AlertDescription>{result.error}</AlertDescription>
             </div>
@@ -856,8 +857,16 @@ export function FactsDialog({
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
-              { label: "Source files", value: overview.sourceFiles, icon: FileCode2 },
-              { label: "Test files", value: overview.testFiles, icon: FlaskConical },
+              {
+                label: "Source files",
+                value: overview.sourceFiles,
+                icon: FileCode2,
+              },
+              {
+                label: "Test files",
+                value: overview.testFiles,
+                icon: FlaskConical,
+              },
               {
                 label: "Runtime",
                 value: `${overview.runtime ?? "unknown"}${overview.runtimeVersion ? ` ${overview.runtimeVersion}` : ""}`,
@@ -908,7 +917,9 @@ export function FactsDialog({
                     <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
                       <span
                         className={cn("block h-full rounded-full", meta.bar)}
-                        style={{ width: `${total ? (language.count / total) * 100 : 0}%` }}
+                        style={{
+                          width: `${total ? (language.count / total) * 100 : 0}%`,
+                        }}
                       />
                     </span>
                     <span className="w-8 text-right font-mono text-[10px] text-zinc-500">
@@ -1410,7 +1421,11 @@ function specSection(spec: string, path: string): string {
 }
 
 const LANGUAGE_META: Record<string, { icon: typeof FileCode2; tone: string; bar: string }> = {
-  TypeScript: { icon: FileCode2, tone: "text-indigo-300", bar: "bg-indigo-400" },
+  TypeScript: {
+    icon: FileCode2,
+    tone: "text-indigo-300",
+    bar: "bg-indigo-400",
+  },
   JavaScript: { icon: FileJson, tone: "text-amber-300", bar: "bg-amber-400" },
   CSS: { icon: Palette, tone: "text-sky-300", bar: "bg-sky-400" },
 };
@@ -1494,7 +1509,10 @@ function signed(value: number): string {
 }
 
 function when(ms: number): string {
-  return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return new Date(ms).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 /** Stored runs for one repository, with a two-run compare. */
@@ -1666,8 +1684,8 @@ export function HistoryDialog({
     >
       {!enabled ? (
         <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
-          Run history is not enabled on this deployment. Add the optional D1 binding in
-          wrangler.toml and apply migrations/0001_runs.sql.
+          Run history is not enabled on this deployment. Add the optional D1 binding in the Alchemy
+          stack and apply migrations/0001_runs.sql.
         </p>
       ) : loading ? (
         <p className="flex items-center justify-center gap-2 py-8 text-[11px] text-zinc-500">

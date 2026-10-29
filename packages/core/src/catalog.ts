@@ -43,13 +43,21 @@ export const PROVIDERS: Provider[] = [
         name: "Llama 3.3 70B Instruct",
         tier: "strong",
       },
-      { id: "@cf/qwen/qwen2.5-coder-32b-instruct", name: "Qwen 2.5 Coder 32B", tier: "balanced" },
+      {
+        id: "@cf/qwen/qwen2.5-coder-32b-instruct",
+        name: "Qwen 2.5 Coder 32B",
+        tier: "balanced",
+      },
       {
         id: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
         name: "DeepSeek R1 Distill 32B",
         tier: "balanced",
       },
-      { id: "@cf/meta/llama-3.1-8b-instruct-fp8", name: "Llama 3.1 8B Instruct", tier: "cheap" },
+      {
+        id: "@cf/meta/llama-3.1-8b-instruct-fp8",
+        name: "Llama 3.1 8B Instruct",
+        tier: "cheap",
+      },
     ],
     hint: "Uses the deployment's Workers AI binding by default. Add a Cloudflare account ID and API token in Settings to use your own account.",
   },
@@ -86,7 +94,11 @@ export const PROVIDERS: Provider[] = [
     models: [
       { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", tier: "strong" },
       { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", tier: "balanced" },
-      { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite", tier: "cheap" },
+      {
+        id: "gemini-3.5-flash-lite",
+        name: "Gemini 3.5 Flash-Lite",
+        tier: "cheap",
+      },
       {
         id: "gemini-2.5-pro",
         name: "Gemini 2.5 Pro",
@@ -108,8 +120,16 @@ export const PROVIDERS: Provider[] = [
     baseUrl: "https://api.groq.com/openai/v1",
     needsKey: true,
     models: [
-      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile", tier: "balanced" },
-      { id: "qwen-2.5-coder-32b", name: "Qwen 2.5 Coder 32B", tier: "balanced" },
+      {
+        id: "llama-3.3-70b-versatile",
+        name: "Llama 3.3 70B Versatile",
+        tier: "balanced",
+      },
+      {
+        id: "qwen-2.5-coder-32b",
+        name: "Qwen 2.5 Coder 32B",
+        tier: "balanced",
+      },
     ],
   },
   {
@@ -141,7 +161,11 @@ export const PROVIDERS: Provider[] = [
     baseUrl: "https://openrouter.ai/api/v1",
     needsKey: true,
     models: [
-      { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", tier: "strong" },
+      {
+        id: "anthropic/claude-sonnet-4",
+        name: "Claude Sonnet 4",
+        tier: "strong",
+      },
       { id: "openai/gpt-4.1", name: "GPT-4.1", tier: "balanced" },
       { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", tier: "cheap" },
     ],
@@ -216,7 +240,13 @@ export function resolveAi(choice: {
   apiKey?: string;
   baseUrl?: string;
   accountId?: string;
-}): { provider: Provider; model: string; apiKey?: string; baseUrl?: string; accountId?: string } {
+}): {
+  provider: Provider;
+  model: string;
+  apiKey?: string;
+  baseUrl?: string;
+  accountId?: string;
+} {
   const provider = providerById((choice.provider ?? DEFAULT_AI.provider).trim());
   if (!provider) {
     throw new HttpError(400, `Unknown AI provider: "${choice.provider ?? ""}"`);

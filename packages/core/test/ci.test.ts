@@ -89,11 +89,17 @@ describe("detectChecks", () => {
       paths: ["package.json"],
       packageJson: manifest({ format: "biome format --write ." }),
     });
-    expect(checks.formatter).toEqual({ name: "format", command: "biome format --write ." });
+    expect(checks.formatter).toEqual({
+      name: "format",
+      command: "biome format --write .",
+    });
   });
 
   it("says nothing when the repository says nothing", () => {
-    const checks = detectChecks({ paths: ["src/a.ts"], packageJson: manifest({}) });
+    const checks = detectChecks({
+      paths: ["src/a.ts"],
+      packageJson: manifest({}),
+    });
     expect(checks.checks).toEqual([]);
     expect(checks.formatter).toBeUndefined();
   });
@@ -121,10 +127,16 @@ describe("classifyCommand", () => {
 describe("detectRunner", () => {
   it("reads the runner from dependencies or config files", () => {
     expect(
-      detectRunner({ paths: ["package.json"], packageJson: manifest({}, { vitest: "^2" }) }),
+      detectRunner({
+        paths: ["package.json"],
+        packageJson: manifest({}, { vitest: "^2" }),
+      }),
     ).toBe("vitest");
     expect(
-      detectRunner({ paths: ["jest.config.ts", "package.json"], packageJson: manifest({}) }),
+      detectRunner({
+        paths: ["jest.config.ts", "package.json"],
+        packageJson: manifest({}),
+      }),
     ).toBe("jest");
     expect(
       detectRunner({
@@ -172,7 +184,9 @@ describe("detectPackageManager", () => {
 
 describe("detectStyle", () => {
   it("reads the editor config", () => {
-    const rules = detectStyle({ ".editorconfig": "indent_style = tab\nindent_size = 4\n" });
+    const rules = detectStyle({
+      ".editorconfig": "indent_style = tab\nindent_size = 4\n",
+    });
     expect(rules.join(" ")).toContain("tab");
   });
 });

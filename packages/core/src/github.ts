@@ -177,7 +177,13 @@ export class GitHub {
 
   async openPull(
     repo: string,
-    input: { title: string; head: string; base: string; body: string; draft?: boolean },
+    input: {
+      title: string;
+      head: string;
+      base: string;
+      body: string;
+      draft?: boolean;
+    },
   ): Promise<string> {
     const data = await this.request<{ html_url?: string }>(`/repos/${repo}/pulls`, {
       method: "POST",
@@ -243,7 +249,10 @@ export class GitHub {
       output: check.output,
     };
     if (id !== undefined) {
-      await this.request(`/repos/${repo}/check-runs/${id}`, { method: "PATCH", body });
+      await this.request(`/repos/${repo}/check-runs/${id}`, {
+        method: "PATCH",
+        body,
+      });
       return id;
     }
     const created = await this.request<{ id?: number }>(`/repos/${repo}/check-runs`, {

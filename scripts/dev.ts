@@ -7,7 +7,11 @@ const commands: Array<[string, string[]]> = [
 ];
 
 const children = commands.map(([name, cmd]) => {
-  const child = Bun.spawn(cmd, { stdout: "inherit", stderr: "inherit", stdin: "inherit" });
+  const child = Bun.spawn(cmd, {
+    stdout: "inherit",
+    stderr: "inherit",
+    stdin: "inherit",
+  });
   return { name, child };
 });
 

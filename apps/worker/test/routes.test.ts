@@ -56,10 +56,16 @@ describe("public routes", () => {
   it("reports health and the provider catalog", async () => {
     const health = await fetchApp("/api/health");
     expect(health.status).toBe(200);
-    expect(await health.json()).toMatchObject({ status: "ok", app: "EdgeSpec" });
+    expect(await health.json()).toMatchObject({
+      status: "ok",
+      app: "EdgeSpec",
+    });
 
     const catalog = await fetchApp("/api/catalog");
-    const body = (await catalog.json()) as { providers: unknown[]; sandbox: boolean };
+    const body = (await catalog.json()) as {
+      providers: unknown[];
+      sandbox: boolean;
+    };
     expect(body.providers.length).toBeGreaterThan(3);
     expect(body.sandbox).toBe(false);
 
@@ -68,6 +74,29 @@ describe("public routes", () => {
       SANDBOX_RUNNER_URL: "https://runner.example",
     });
     expect(((await withRunner.json()) as { sandbox: boolean }).sandbox).toBe(true);
+
+    const withUserRunner = await fetchApp("/api/catalog", {
+      headers: { "x-sandbox-url": "https://user-runner.example" },
+    });
+    expect(((await withUserRunner.json()) as { sandbox: boolean }).sandbox).toBe(true);
+  });
+
+  it("handles GitHub App setup and unsupported OAuth callbacks", async () => {
+    const callback = await fetchApp("/auth");
+    expect(callback.status).toBe(200);
+    expect(await callback.text()).toContain("GitHub App callback");
+
+    const installed = await fetchApp("/auth?installation_id=123&setup_action=install");
+    expect(installed.status).toBe(200);
+    expect(await installed.text()).toContain("Installation 123 is ready");
+
+    const denied = await fetchApp("/auth?error=access_denied");
+    expect(denied.status).toBe(400);
+    expect(await denied.text()).toContain("access_denied");
+
+    const code = await fetchApp("/auth?code=abc");
+    expect(code.status).toBe(501);
+    expect(await code.text()).toContain("personal access token");
   });
 
   it("returns JSON 404 for unknown API paths and serves assets otherwise", async () => {
@@ -83,7 +112,9 @@ describe("public routes", () => {
     for (const path of ["/local-api/scan", "/local-api/file"]) {
       const remote = await fetchApp(path);
       expect(remote.status).toBe(403);
-      const local = await fetchApp(`http://localhost${path}`, { headers: { host: "localhost" } });
+      const local = await fetchApp(`http://localhost${path}`, {
+        headers: { host: "localhost" },
+      });
       expect(local.status).toBe(400);
       expect(((await local.json()) as { error: string }).error).toContain("bun run dev");
     }
@@ -238,7 +269,11 @@ describe("run history and artifacts", () => {
   });
 
   it("deletes a repository's history and its R2 bundle", async () => {
-    const env = { ...baseEnv(), RUNS_DB: fakeDb([ID]), ARTIFACTS: fakeBucket() };
+    const env = {
+      ...baseEnv(),
+      RUNS_DB: fakeDb([ID]),
+      ARTIFACTS: fakeBucket(),
+    };
     await env.ARTIFACTS?.put(`runs/${ID}.json`, "{}");
     const response = await fetchApp("/api/runs?repo=acme/api", { method: "DELETE" }, env);
     expect(response.status).toBe(200);
@@ -252,7 +287,7 @@ describe("webhooks", () => {
     fetchApp("/webhook", { method: "POST", body, headers }, env);
 
   it("rejects a bad signature before parsing the payload", async () => {
-    const env = { ...baseEnv(), GITHUB_WEBHOOK_SECRET: "secret" };
+    const env = { ...baseEnv(), GH_WEBHOOK_SECRET: "secret" };
     const response = await post("{}", { "x-hub-signature-256": "sha256=bad" }, env);
     expect(response.status).toBe(401);
     expect(((await response.json()) as { error: string }).error).toContain("signature");
@@ -260,9 +295,16 @@ describe("webhooks", () => {
 
   it("validates the payload, then the workflow binding", async () => {
     expect((await post("{")).status).toBe(400);
-    expect((await post("{}")).status).toBe(400);
 
-    const valid = JSON.stringify({ repository: { full_name: "acme/api" }, ref: "refs/heads/main" });
+    // App-level events (ping, installation) have no repository: acknowledged.
+    const ping = await post("{}");
+    expect(ping.status).toBe(202);
+    expect(((await ping.json()) as { ignored: string }).ignored).toBe("no repository");
+
+    const valid = JSON.stringify({
+      repository: { full_name: "acme/api" },
+      ref: "refs/heads/main",
+    });
     const response = await post(valid);
     expect(response.status).toBe(501);
     expect(((await response.json()) as { error: string }).error).toContain("Workflows");
@@ -286,7 +328,12 @@ describe("webhooks", () => {
       [{ "x-github-event": "issue_comment" }, { ...base, action: "edited" }, "edited"],
       [
         { "x-github-event": "issue_comment" },
-        { ...base, action: "created", issue: { number: 1 }, comment: { body: "/edgespec retest" } },
+        {
+          ...base,
+          action: "created",
+          issue: { number: 1 },
+          comment: { body: "/edgespec retest" },
+        },
         "not a pull request",
       ],
       [
@@ -295,7 +342,10 @@ describe("webhooks", () => {
           ...base,
           action: "created",
           issue: { number: 1, pull_request: {} },
-          comment: { body: "/edgespec retest", user: { login: "stranger", type: "User" } },
+          comment: {
+            body: "/edgespec retest",
+            user: { login: "stranger", type: "User" },
+          },
         },
         "unauthorized",
       ],

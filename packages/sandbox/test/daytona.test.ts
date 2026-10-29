@@ -101,7 +101,10 @@ describe("createDaytonaDriver", () => {
     );
 
     await driver.start();
-    expect(fake.created()).toMatchObject({ ephemeral: true, envVars: { TMPDIR: "/tmp" } });
+    expect(fake.created()).toMatchObject({
+      ephemeral: true,
+      envVars: { TMPDIR: "/tmp" },
+    });
     expect(fake.created()?.envVars).not.toMatchObject({ HOME: "/host/home" });
     expect(driver.readyUrl).toBe("https://3000-sbx.daytona.work/health?token=abc");
 

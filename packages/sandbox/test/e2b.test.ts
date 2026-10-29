@@ -25,13 +25,21 @@ function fakeE2b() {
     commands: {
       async run(
         command: string,
-        options?: { cwd?: string; envs?: Record<string, string>; background?: boolean },
+        options?: {
+          cwd?: string;
+          envs?: Record<string, string>;
+          background?: boolean;
+        },
       ) {
         calls.push(`${options?.background ? "bg" : "fg"}:${command}`);
         if (command === "bun test") {
           files["/home/user/workspace/coverage/lcov.info"] = "SF:remote.ts\n";
         }
-        return { exitCode: 0, stdout: `ran ${command} in ${options?.cwd}`, stderr: "" };
+        return {
+          exitCode: 0,
+          stdout: `ran ${command} in ${options?.cwd}`,
+          stderr: "",
+        };
       },
     },
     files: {

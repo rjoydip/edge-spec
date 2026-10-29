@@ -1,10 +1,13 @@
 node_modules/
 dist/
 .wrangler/
+.alchemy/
+infra/.alchemy/
 coverage/
 apps/docs/.vitepress/dist/
 apps/docs/.vitepress/cache/
 .dev.vars
+.env
 *.log
 .DS_Store
 design.sample.ts

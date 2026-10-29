@@ -7,7 +7,7 @@ import type { EdgeSpecClient, GenerateResponse } from "@edge-spec/client";
 
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs)$/i;
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/i;
-const IGNORED = /(^|\/)(node_modules|dist|build|coverage|\.git|\.wrangler)\//;
+const IGNORED = /(^|\/)(node_modules|dist|build|coverage|\.git|\.wrangler|\.alchemy)\//;
 
 /** A source file worth regenerating; tests and build output are not. */
 export function isWatchSource(path: string): boolean {

@@ -17,7 +17,10 @@ describe("parseSandboxConfig", () => {
     const config = parseSandboxConfig({
       setup: ["bun install"],
       env: { NODE_ENV: "test" },
-      server: { command: "bun run dev", readyUrl: "http://127.0.0.1:3000/health" },
+      server: {
+        command: "bun run dev",
+        readyUrl: "http://127.0.0.1:3000/health",
+      },
       timeoutMs: 5,
       concurrency: 99,
       coverage: true,
@@ -60,14 +63,20 @@ describe("sandboxRepo", () => {
       ref: "main",
       sandbox: { setup: ["bun install"] },
     });
-    expect(repo).toEqual({ url: "https://github.com/acme/api.git", ref: "main" });
+    expect(repo).toEqual({
+      url: "https://github.com/acme/api.git",
+      ref: "main",
+    });
   });
 
   it("sends the token only after an explicit opt-in", () => {
     const base = { repo: "acme/api", ref: "main", token: "ghp_secret" };
     expect(sandboxRepo({ ...base, sandbox: { setup: ["bun install"] } })?.token).toBeUndefined();
     expect(
-      sandboxRepo({ ...base, sandbox: { setup: ["bun install"], allowRepoToken: true } })?.token,
+      sandboxRepo({
+        ...base,
+        sandbox: { setup: ["bun install"], allowRepoToken: true },
+      })?.token,
     ).toBe("ghp_secret");
   });
 });
@@ -86,7 +95,10 @@ describe("runInSandbox", () => {
       command: "bun test",
       fetchImpl,
     });
-    expect(body).toEqual({ files: { "src/a.test.ts": "x" }, command: "bun test" });
+    expect(body).toEqual({
+      files: { "src/a.test.ts": "x" },
+      command: "bun test",
+    });
   });
 
   it("upgrades to v2 when a repo, setup or server is used", async () => {
@@ -111,7 +123,10 @@ describe("runInSandbox", () => {
     });
 
     expect(body.v).toBe(2);
-    expect(body.repo).toEqual({ url: "https://github.com/acme/api.git", ref: "main" });
+    expect(body.repo).toEqual({
+      url: "https://github.com/acme/api.git",
+      ref: "main",
+    });
     expect(body.setup).toEqual(["bun install"]);
     expect(body.server).toEqual({ command: "bun run dev" });
     expect(body.env).toEqual({ NODE_ENV: "test" });
@@ -151,7 +166,11 @@ describe("runInSandbox", () => {
     const run = await runInSandbox({
       sandbox: { url: "https://runner.example", setup: ["bun install"] },
       command: "bun test",
-      fetchImpl: fakeFetch({ exitCode: 1, stderr: "install failed", environmentError: "setup" }),
+      fetchImpl: fakeFetch({
+        exitCode: 1,
+        stderr: "install failed",
+        environmentError: "setup",
+      }),
     });
     expect(run.ok).toBe(false);
     expect(run.environmentError).toBe("setup");
@@ -199,9 +218,17 @@ describe("checkSandboxHealth", () => {
   it("reports the runner's health", async () => {
     const health = await checkSandboxHealth({
       sandbox: { url: "https://runner.example/" } as SandboxConfig,
-      fetchImpl: fakeFetch({ ok: true, version: "0.1.0", capabilities: ["v2"] }),
+      fetchImpl: fakeFetch({
+        ok: true,
+        version: "0.1.0",
+        capabilities: ["v2"],
+      }),
     });
-    expect(health).toEqual({ ok: true, version: "0.1.0", capabilities: ["v2"] });
+    expect(health).toEqual({
+      ok: true,
+      version: "0.1.0",
+      capabilities: ["v2"],
+    });
   });
 
   it("reports the driver, isolation and the runner's own error", async () => {

@@ -86,7 +86,10 @@ describe("EdgeSpecClient", () => {
     const { fetchImpl, calls } = fakeFetch(() =>
       Response.json({ generation, validation, attempts: 1 }),
     );
-    const client = new EdgeSpecClient({ baseUrl: "https://edge.test", fetchImpl });
+    const client = new EdgeSpecClient({
+      baseUrl: "https://edge.test",
+      fetchImpl,
+    });
 
     await client.generate({ source: "export const a = 1;", path: "src/a.ts" });
 
@@ -104,7 +107,10 @@ describe("EdgeSpecClient", () => {
           headers: { "content-type": "application/json" },
         }),
     );
-    const client = new EdgeSpecClient({ baseUrl: "https://edge.test", fetchImpl });
+    const client = new EdgeSpecClient({
+      baseUrl: "https://edge.test",
+      fetchImpl,
+    });
     await expect(client.scan({ repo: "owner/missing" })).rejects.toThrow("repository not found");
   });
 
@@ -128,7 +134,10 @@ describe("EdgeSpecClient", () => {
       },
     });
     const { fetchImpl } = fakeFetch(() => new Response(stream, { status: 200 }));
-    const client = new EdgeSpecClient({ baseUrl: "https://edge.test", fetchImpl });
+    const client = new EdgeSpecClient({
+      baseUrl: "https://edge.test",
+      fetchImpl,
+    });
     const seen: RunEvent[] = [];
     const events = await client.run({ repo: "owner/repo" }, (event) => seen.push(event));
 
@@ -152,7 +161,7 @@ describe("environment config", () => {
   it("maps provider-specific keys and normalizes the URL", () => {
     const env = {
       EDGESPEC_URL: "https://edge.example/",
-      GITHUB_TOKEN: "gh",
+      GH_TOKEN: "gh",
       EDGESPEC_AI_PROVIDER: "openai",
       EDGESPEC_AI_MODEL: "gpt-test",
       OPENAI_API_KEY: "sk-test",
@@ -168,9 +177,17 @@ describe("environment config", () => {
     expect(clientConfigFromEnv(env, "openai").aiKey).toBe("sk-test");
   });
 
+  it("accepts GITHUB_TOKEN as a legacy alias for GH_TOKEN", () => {
+    expect(envDefaults({ GITHUB_TOKEN: "legacy" }).githubToken).toBe("legacy");
+  });
+
   it("lets EDGESPEC_AI_KEY override the provider key", () => {
     const defaults = envDefaults(
-      { EDGESPEC_AI_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "a", EDGESPEC_AI_KEY: "b" },
+      {
+        EDGESPEC_AI_PROVIDER: "anthropic",
+        ANTHROPIC_API_KEY: "a",
+        EDGESPEC_AI_KEY: "b",
+      },
       "anthropic",
     );
     expect(defaults.aiKey).toBe("b");

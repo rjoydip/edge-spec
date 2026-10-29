@@ -78,7 +78,7 @@ describe("appJwt", () => {
 
   it("refuses a malformed key without echoing it", async () => {
     await expect(appJwt({ appId: "1", privateKey: "not a pem" })).rejects.toThrow(
-      /GITHUB_APP_PRIVATE_KEY/,
+      /GH_APP_PRIVATE_KEY/,
     );
   });
 });
@@ -95,7 +95,10 @@ describe("installationToken", () => {
         authorization: headers.authorization ?? "",
       });
       return new Response(
-        JSON.stringify({ token: "ghs_test", expires_at: "2026-10-26T12:00:00Z" }),
+        JSON.stringify({
+          token: "ghs_test",
+          expires_at: "2026-10-26T12:00:00Z",
+        }),
         {
           status: 201,
         },
@@ -157,9 +160,9 @@ describe("InstallationTokenCache", () => {
 
 describe("gitHubAppFromEnv", () => {
   it("needs both the app id and the key", () => {
-    expect(gitHubAppFromEnv({ GITHUB_APP_ID: "1" })).toBeUndefined();
-    expect(gitHubAppFromEnv({ GITHUB_APP_PRIVATE_KEY: "pem" })).toBeUndefined();
-    expect(gitHubAppFromEnv({ GITHUB_APP_ID: "1", GITHUB_APP_PRIVATE_KEY: "pem" })).toEqual({
+    expect(gitHubAppFromEnv({ GH_APP_ID: "1" })).toBeUndefined();
+    expect(gitHubAppFromEnv({ GH_APP_PRIVATE_KEY: "pem" })).toBeUndefined();
+    expect(gitHubAppFromEnv({ GH_APP_ID: "1", GH_APP_PRIVATE_KEY: "pem" })).toEqual({
       appId: "1",
       privateKey: "pem",
     });

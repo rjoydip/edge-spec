@@ -12,10 +12,10 @@ import {
   type EvalScore,
   type GoldenCase,
   type GoldenResult,
-} from "../packages/core/src/eval";
-import { classifyTree } from "../packages/core/src/scanner";
+} from "../../packages/core/src/eval";
+import { classifyTree } from "../../packages/core/src/scanner";
 
-const SKIP = new Set([".git", "node_modules", "dist", "coverage", ".wrangler"]);
+const SKIP = new Set([".git", "node_modules", "dist", "coverage", ".wrangler", ".alchemy"]);
 
 /** Every file under `directory`, relative and forward-slashed. */
 export function filesUnder(directory: string, base = directory): string[] {
@@ -30,7 +30,9 @@ export function filesUnder(directory: string, base = directory): string[] {
 }
 
 export function readGolden(path: string): GoldenCase[] {
-  const parsed = JSON.parse(readFileSync(path, "utf8")) as { cases?: GoldenCase[] };
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as {
+    cases?: GoldenCase[];
+  };
   return parsed.cases ?? [];
 }
 

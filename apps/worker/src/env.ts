@@ -48,18 +48,22 @@ export interface Env {
   /** Optional artifact bucket for drift summaries. */
   ARTIFACTS?: R2Bucket;
   /** Optional Slack-compatible webhook for drift notifications. */
-  DRIFT_WEBHOOK_URL?: string;
-  DRIFT_WEBHOOK_SECRET?: string;
+  DRIFT_ALERT_WEBHOOK_URL?: string;
+  DRIFT_ALERT_WEBHOOK_SECRET?: string;
   AI?: AiBinding;
   TEST_GENERATION_WORKFLOW?: WorkflowBinding;
   /** Optional run history. Absent on a deployment that does not want it. */
   RUNS_DB?: D1Database;
   /** Automation path only. The dashboard always uses the visitor's own token. */
-  GITHUB_TOKEN?: string;
+  GH_TOKEN?: string;
   /** GitHub App credentials for CI. Short-lived installation tokens are minted. */
-  GITHUB_APP_ID?: string;
-  GITHUB_APP_PRIVATE_KEY?: string;
-  GITHUB_WEBHOOK_SECRET?: string;
+  GH_APP_ID?: string;
+  GH_APP_PRIVATE_KEY?: string;
+  GH_WEBHOOK_SECRET?: string;
+  /**
+   * Optional deployment fallback for automation runs. Interactive requests
+   * normally supply the runner through `x-sandbox-url` / `x-sandbox-key`.
+   */
   SANDBOX_RUNNER_URL?: string;
   SANDBOX_API_KEY?: string;
 }

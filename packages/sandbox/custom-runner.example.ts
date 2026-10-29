@@ -37,7 +37,12 @@ export interface Spawned {
 export type Spawn = (argv: string[], timeoutMs: number) => Spawned;
 
 const docker: Spawn = (argv, timeoutMs) => {
-  const result = Bun.spawnSync({ cmd: argv, timeout: timeoutMs, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync({
+    cmd: argv,
+    timeout: timeoutMs,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   return {
     exitCode: result.exitCode,
     stdout: result.stdout.toString(),

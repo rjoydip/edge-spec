@@ -26,7 +26,12 @@ export function compareGolden(
   const expected = new Set(sorted(expectedGaps));
   const missing = [...expected].filter((path) => !actual.has(path));
   const unexpected = [...actual].filter((path) => !expected.has(path));
-  return { caseId, pass: missing.length === 0 && unexpected.length === 0, missing, unexpected };
+  return {
+    caseId,
+    pass: missing.length === 0 && unexpected.length === 0,
+    missing,
+    unexpected,
+  };
 }
 
 export interface EvalOutcome {

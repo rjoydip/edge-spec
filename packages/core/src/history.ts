@@ -80,8 +80,14 @@ export function compareRuns(before: RunDetail, after: RunDetail): RunComparison 
       before: before.files.filter((file) => file.verified).length,
       after: after.files.filter((file) => file.verified).length,
     },
-    accepted: { before: count(before.files, "accepted"), after: count(after.files, "accepted") },
-    rejected: { before: count(before.files, "rejected"), after: count(after.files, "rejected") },
+    accepted: {
+      before: count(before.files, "accepted"),
+      after: count(after.files, "accepted"),
+    },
+    rejected: {
+      before: count(before.files, "rejected"),
+      after: count(after.files, "rejected"),
+    },
     newFiles: [...afterPaths].filter((path) => !beforePaths.has(path)).sort(),
     closedFiles: [...beforePaths].filter((path) => !afterPaths.has(path)).sort(),
     coverageLines: {
