@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main, fix/deploy-cloudflare-auth]
+    branches: [main]
   workflow_dispatch:
     inputs:
       adopt:
