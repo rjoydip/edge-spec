@@ -740,7 +740,7 @@ binding -> EDGESPEC_<CAP> override -> EDGESPEC_PROVIDER default -> off
 | Variable                                                                                                                   | Capability    |
 | -------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | `EDGESPEC_PROVIDER` (`vercel`, `aws`, `node`)                                                                              | defaults      |
-| `EDGESPEC_DB_URL` (`EDGESPEC_DB=postgres`)                                                                                 | SQL           |
+| `EDGESPEC_DB_URL` (`EDGESPEC_DB=postgres` or `sqlite`)                                                                     | SQL           |
 | `EDGESPEC_BLOB_ENDPOINT`, `_BUCKET`, `_REGION`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_PREFIX` (`EDGESPEC_BLOB=r2\|s3`) | objects       |
 | `EDGESPEC_JOB_URL`, `EDGESPEC_JOB_KEY` (`EDGESPEC_JOBS=http`)                                                              | jobs          |
 | `EDGESPEC_REDIS_URL`, `EDGESPEC_REDIS_TOKEN` (`EDGESPEC_CACHE=redis`)                                                      | cache         |

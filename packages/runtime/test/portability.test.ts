@@ -67,7 +67,7 @@ describe("portability", () => {
     expect(source("server.ts")).toContain('"node:path"');
     expect(repoSource("infra/vercel/handler.ts")).toContain("adapters/node");
     expect(repoSource("api/index.ts")).toContain("../infra/vercel/handler");
-    expect(source("adapters/postgres.ts")).toContain('import("pg")');
+    expect(repoSource("packages/db/src/postgres.ts")).toContain('import("pg")');
     expect(source("adapters/s3.ts")).toContain('"aws4fetch"');
   });
 });

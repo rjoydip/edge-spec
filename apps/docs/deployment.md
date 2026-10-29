@@ -56,6 +56,15 @@ The stack creates the database: `edge-spec-runs` for `--stage prod`, and
 as part of `alchemy deploy` and `alchemy dev`; there is no separate
 `db:migrate` command.
 
+Node providers resolve SQL through `@edge-spec/db`:
+`EDGESPEC_DB=postgres` + `EDGESPEC_DB_URL` for Postgres (apply
+`migrations/postgres.sql` with `packages/runtime/scripts/migrate.ts`), or
+`EDGESPEC_DB=sqlite` for a single-node deployment backed by Bun's built-in
+sqlite (path from `EDGESPEC_DB_URL`, default `.data/edge-spec.sqlite`).
+The sqlite driver applies the `NNNN_*.sql` migrations in `EDGESPEC_MIGRATIONS`
+(default `migrations/`) at boot, ledger-style, applying each file once per
+content hash.
+
 The Worker still deploys without the binding (for example in a local bundle
 test), but every history/backlog/workspace route then answers `enabled: false`
 and the cron does nothing.
@@ -306,7 +315,7 @@ platform's own secret store.
 | AI         | `AI` binding               | `AI_PROVIDER`, `AI_KEY`, `AI_BASE_URL`, `AI_MODEL`                                                         |
 | Static     | `ASSETS`                   | host CDN, or `EDGESPEC_STATIC_DIR` for the Bun entry                                                       |
 
-Overrides: `EDGESPEC_DB=d1|postgres`, `EDGESPEC_BLOB=r2|s3`,
+Overrides: `EDGESPEC_DB=d1|postgres|sqlite`, `EDGESPEC_BLOB=r2|s3`,
 `EDGESPEC_JOBS=http|workflows`, `EDGESPEC_CACHE=kv|redis|memory`. An explicit
 override whose env is missing fails at boot and names the variable.
 

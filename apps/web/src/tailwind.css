@@ -56,8 +56,6 @@
   --glass-bg: rgb(17 17 19 / 0.66);
   --glass-border: rgb(255 255 255 / 0.07);
   --glass-shadow: rgb(0 0 0 / 0.5);
-  --page-glow: color-mix(in oklab, var(--accent-base) 8%, transparent);
-  --aurora-opacity: 0.22;
 
   /* Stage hues are fixed on purpose: the accent swatches must not recolour a step. */
   --stage-clone: #38bdf8;
@@ -118,8 +116,6 @@ html.light {
   --glass-bg: rgb(255 255 255 / 0.78);
   --glass-border: rgb(9 9 11 / 0.08);
   --glass-shadow: rgb(9 9 11 / 0.12);
-  --page-glow: color-mix(in oklab, var(--accent-base) 6%, transparent);
-  --aurora-opacity: 0.12;
 
   --stage-clone: #0369a1;
   --stage-analyze: #6d28d9;
@@ -284,51 +280,7 @@ html.light {
     height: 0;
   }
 
-  /* Accent-driven backdrop: the palette in Settings recolours the whole page. */
-  .app-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    overflow: hidden;
-    pointer-events: none;
-    background:
-      radial-gradient(60rem 42rem at 12% -12%, var(--page-glow), transparent 68%),
-      radial-gradient(48rem 34rem at 98% 6%, var(--page-glow), transparent 68%),
-      radial-gradient(56rem 38rem at 50% 112%, var(--page-glow), transparent 70%);
-  }
-
-  .app-aurora {
-    position: absolute;
-    border-radius: 9999px;
-    background: var(--accent-base);
-    filter: blur(110px);
-    opacity: var(--aurora-opacity);
-    animation: aurora-drift 24s ease-in-out infinite alternate;
-    will-change: transform;
-  }
-
-  .app-aurora-a {
-    top: -12rem;
-    left: -6rem;
-    width: 36rem;
-    height: 36rem;
-  }
-
-  .app-aurora-b {
-    top: 18%;
-    right: -10rem;
-    width: 32rem;
-    height: 32rem;
-    animation-delay: -8s;
-  }
-
-  .app-aurora-c {
-    bottom: -16rem;
-    left: 35%;
-    width: 34rem;
-    height: 34rem;
-    animation-delay: -16s;
-  }
+  /* Accent-driven backdrop: removed — page stays on the plain surface. */
 
   .brand-mark {
     transition:
@@ -350,18 +302,6 @@ html.light {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes aurora-drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(3rem, 2rem, 0) scale(1.08);
-  }
-  100% {
-    transform: translate3d(-2rem, 4rem, 0) scale(0.96);
   }
 }
 
@@ -764,12 +704,6 @@ html.light {
   }
   to {
     height: 0;
-  }
-}
-
-@media (max-width: 640px) {
-  .app-aurora {
-    filter: blur(80px);
   }
 }
 

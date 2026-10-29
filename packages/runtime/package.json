@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@edge-spec/core": "workspace:*",
+    "@edge-spec/db": "workspace:*",
     "aws4fetch": "^1.0.20",
     "hono": "^4.9.6",
     "pg": "^8.16.3"

@@ -770,12 +770,6 @@ export function AgentWorkspace({
     <TooltipProvider delayDuration={180}>
       <IconGradientDefs />
       <div className="no-scrollbar relative min-h-dvh overflow-x-hidden">
-        <div className="app-backdrop" aria-hidden="true">
-          <div className="app-aurora app-aurora-a" />
-          <div className="app-aurora app-aurora-b" />
-          <div className="app-aurora app-aurora-c" />
-        </div>
-
         <div className="relative z-10 mx-auto max-w-7xl space-y-3 px-3 pt-3 pb-28 sm:px-6">
           <header className="app-reveal glass-panel sticky top-0 z-30 rounded-2xl px-3 py-2.5 sm:px-4">
             <div className="flex items-center gap-2.5">
