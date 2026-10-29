@@ -60,6 +60,35 @@ The Worker still deploys without the binding (for example in a local bundle
 test), but every history/backlog/workspace route then answers `enabled: false`
 and the cron does nothing.
 
+### Repairing migration bookkeeping
+
+Alchemy records a `sha256` of each migration file in `__alchemy_migrations` and
+refuses to deploy when a recorded hash no longer matches the file
+(`RewrittenMigrationHistoryError`). Two things cause that without anyone
+editing a migration: rewriting an applied file, and **line endings**.
+
+The production cutover ran on Windows, where `core.autocrlf=true` rewrote the
+`.sql` files to CRLF, so the recorded hashes are CRLF-based. CI checks out LF,
+computes LF hashes, and every migration looks rewritten. `.gitattributes` pins
+`*.sql` to LF so the hashes stay stable across platforms.
+
+`bun run migrate:hashes` repairs the bookkeeping. It reads the recorded
+hashes, and rewrites one **only** when it equals the CRLF hash of the same
+file — proof that the file was not edited, only checked out with different
+line endings. A hash that matches neither the LF nor the CRLF hash means the
+migration was genuinely rewritten; the script leaves it alone and fails, so
+Alchemy still rejects the deploy. Only the bookkeeping hash changes: the
+schema is untouched and no migration is re-run.
+
+```bash
+bun run migrate:hashes                 # repair the live database
+bun run migrate:hashes -- --print      # print the statements instead
+```
+
+The deploy workflow runs the repair before deploying, so a checkout that
+drifted in line endings can never block a release. Edit an already-applied
+migration only by adding a new file.
+
 ## 2. R2 (run artifacts and drift summaries)
 
 D1 keeps summaries; R2 keeps the raw validation bundles and coverage facts
