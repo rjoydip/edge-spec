@@ -49,11 +49,11 @@
       "version": "0.0.0",
       "dependencies": {
         "@edge-spec/core": "workspace:*",
+        "@edge-spec/runtime": "workspace:*",
         "hono": "^4.9.6",
       },
       "devDependencies": {
         "@types/bun": "^1.3.0",
-        "@types/node": "^24.5.2",
         "vite": "^7.1.7",
       },
     },
@@ -81,13 +81,77 @@
         "supertest": "^7.3.1",
       },
     },
-    "infra": {
-      "name": "@edge-spec/infra",
+    "infra/aws": {
+      "name": "@edge-spec/infra-aws",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@alchemy.run/aws": "2.0.0-beta.84",
+        "@types/bun": "^1.3.0",
+        "alchemy": "2.0.0-beta.84",
+        "effect": "4.0.6",
+      },
+    },
+    "infra/cloudflare": {
+      "name": "@edge-spec/infra-cloudflare",
       "version": "0.0.0",
       "devDependencies": {
         "@alchemy.run/cloudflare": "2.0.0-beta.84",
         "@effect/platform-bun": "4.0.6",
         "@effect/platform-node": "4.0.6",
+        "@types/bun": "^1.3.0",
+        "alchemy": "2.0.0-beta.84",
+        "effect": "4.0.6",
+      },
+    },
+    "infra/docker": {
+      "name": "@edge-spec/infra-docker",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@alchemy.run/docker": "2.0.0-beta.84",
+        "@types/bun": "^1.3.0",
+        "alchemy": "2.0.0-beta.84",
+        "effect": "4.0.6",
+      },
+    },
+    "infra/fly": {
+      "name": "@edge-spec/infra-fly",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@alchemy.run/docker": "2.0.0-beta.84",
+        "@alchemy.run/fly": "2.0.0-beta.84",
+        "@types/bun": "^1.3.0",
+        "alchemy": "2.0.0-beta.84",
+        "effect": "4.0.6",
+      },
+    },
+    "infra/kubernetes": {
+      "name": "@edge-spec/infra-kubernetes",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@alchemy.run/kubernetes": "2.0.0-beta.84",
+        "@types/bun": "^1.3.0",
+        "alchemy": "2.0.0-beta.84",
+        "effect": "4.0.6",
+      },
+    },
+    "infra/railway": {
+      "name": "@edge-spec/infra-railway",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@alchemy.run/docker": "2.0.0-beta.84",
+        "@alchemy.run/railway": "2.0.0-beta.84",
+        "@types/bun": "^1.3.0",
+        "alchemy": "2.0.0-beta.84",
+        "effect": "4.0.6",
+      },
+    },
+    "infra/vercel": {
+      "name": "@edge-spec/infra-vercel",
+      "version": "0.0.0",
+      "dependencies": {
+        "@edge-spec/runtime": "workspace:*",
+      },
+      "devDependencies": {
         "@types/bun": "^1.3.0",
         "alchemy": "2.0.0-beta.84",
         "effect": "4.0.6",
@@ -143,6 +207,21 @@
         "@types/node": "^24.5.2",
       },
     },
+    "packages/runtime": {
+      "name": "@edge-spec/runtime",
+      "version": "0.0.0",
+      "dependencies": {
+        "@edge-spec/core": "workspace:*",
+        "aws4fetch": "^1.0.20",
+        "hono": "^4.9.6",
+        "pg": "^8.16.3",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.0",
+        "@types/node": "^24.5.2",
+        "@types/pg": "^8.15.5",
+      },
+    },
     "packages/sandbox": {
       "name": "@edge-spec/sandbox",
       "version": "0.0.0",
@@ -189,13 +268,23 @@
   "packages": {
     "@alchemy.run/acme": ["@alchemy.run/acme@2.0.0-beta.84", "", { "dependencies": { "@distilled.cloud/acme": "1.0.0-rc.17" }, "peerDependencies": { "alchemy": "2.0.0-beta.84", "effect": "^4.0.5" } }, "sha512-ma7HaEN5K7hsNlSkK7CEGn+08hKi4xP1puEAoSO7UACXc/j/2gZKljuztADyCOKOdp8nIMJ/zH12Qs7J11E8cQ=="],
 
+    "@alchemy.run/aws": ["@alchemy.run/aws@2.0.0-beta.84", "", { "dependencies": { "@alchemy.run/docker": "2.0.0-beta.84", "@alchemy.run/kubernetes": "2.0.0-beta.84", "@alchemy.run/sql": "2.0.0-beta.84", "@distilled.cloud/aws": "1.0.0-rc.17", "@types/aws-lambda": "^8.10.164", "rolldown": "1.2.13" }, "peerDependencies": { "@alchemy.run/frontend-frameworks": "2.0.0-beta.84", "@effect/platform-bun": "^4.0.5", "@effect/platform-node": "^4.0.5", "alchemy": "2.0.0-beta.84", "effect": "^4.0.5", "mongodb": "^6.10.0", "pg": "^8.22.0" }, "optionalPeers": ["@alchemy.run/frontend-frameworks", "@effect/platform-bun", "@effect/platform-node", "mongodb", "pg"] }, "sha512-6G5Qze+zF9juaDYCD1rNhnb7SlUMTRXtOxS0qUz1vMF53PhIibeJP2+iV9urvQNDLNVpGrSIEDMf0OUCZrj3Gg=="],
+
     "@alchemy.run/cloudflare": ["@alchemy.run/cloudflare@2.0.0-beta.84", "", { "dependencies": { "@alchemy.run/acme": "2.0.0-beta.84", "@alchemy.run/cloudflare-runtime": "2.0.0-beta.84", "@alchemy.run/docker": "2.0.0-beta.84", "@alchemy.run/sql": "2.0.0-beta.84", "@distilled.cloud/aws4signer": "1.0.0-rc.17", "@distilled.cloud/cloudflare": "1.0.0-rc.17", "@distilled.cloud/core": "1.0.0-rc.17", "@distilled.cloud/iceberg": "1.0.0-rc.17", "@effect/sql-d1": "^4.0.5", "pathe": "^2.0.3", "rolldown": "1.2.13", "tinyglobby": "^0.2.17" }, "peerDependencies": { "@alchemy.run/domain": "2.0.0-beta.84", "@alchemy.run/frontend-frameworks": "2.0.0-beta.84", "@effect/platform-bun": "^4.0.5", "@effect/platform-node": "^4.0.5", "alchemy": "2.0.0-beta.84", "effect": "^4.0.5", "vite": "^8.0.7" }, "optionalPeers": ["@alchemy.run/domain", "@alchemy.run/frontend-frameworks", "@effect/platform-bun", "@effect/platform-node", "vite"] }, "sha512-8AEp0664arL1BLPIxQJ/lgIUPRvsk0SxC/6fW6S3Gt2SOauUF2YpUsgRr94m4pTX453gacMXwJ/kw8lgOv+TMw=="],
 
     "@alchemy.run/cloudflare-runtime": ["@alchemy.run/cloudflare-runtime@2.0.0-beta.84", "", { "dependencies": { "@alchemy.run/node-utils": "2.0.0-beta.84", "@cloudflare/unenv-preset": "^2.16.2", "@puppeteer/browsers": "^3.2.4", "capnp-es": "^0.0.16", "magic-string": "^0.30.21", "mime": "^4.1.1", "sharp": "^0.35.5", "unenv": "^2.0.0-rc.24", "workerd": "1.20261012.1", "yauzl": "^3.4.0" }, "peerDependencies": { "@distilled.cloud/cloudflare": "1.0.0-rc.17", "@effect/platform-bun": "^4.0.5", "@effect/platform-node": "^4.0.5", "effect": "^4.0.5", "rolldown": "1.2.13", "vite": "^7.0.0 || ^8.0.0" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node", "rolldown", "vite"] }, "sha512-wmlfbJHBEpyKpKosIKi6yte0T6WKofed0rDHR1zk7tZdqwUKNNSRcbR9ejfJ4mty7lkQH0fLKn4vcmfnlX9KDQ=="],
 
     "@alchemy.run/docker": ["@alchemy.run/docker@2.0.0-beta.84", "", { "dependencies": { "rolldown": "1.2.13" }, "peerDependencies": { "@effect/platform-bun": "^4.0.5", "alchemy": "2.0.0-beta.84", "effect": "^4.0.5" }, "optionalPeers": ["@effect/platform-bun"] }, "sha512-VaUNlldyPcCrrGDCfFUJD+pvNt3Rpbly+0lzZ4S8AfkpxMD4rZy7GdXcfPzeA26tcDzfsDVax7BGlArzupEc0g=="],
 
+    "@alchemy.run/fly": ["@alchemy.run/fly@2.0.0-beta.84", "", { "dependencies": { "@alchemy.run/docker": "2.0.0-beta.84", "@alchemy.run/redis": "2.0.0-beta.84", "@alchemy.run/sql": "2.0.0-beta.84", "@distilled.cloud/aws": "1.0.0-rc.17", "@distilled.cloud/core": "1.0.0-rc.17", "@distilled.cloud/fly-io": "1.0.0-rc.17", "rolldown": "1.2.13" }, "peerDependencies": { "@effect/platform-node": "^4.0.5", "alchemy": "2.0.0-beta.84", "effect": "^4.0.5", "pg": "^8.22.0" }, "optionalPeers": ["@effect/platform-node", "pg"] }, "sha512-hTb2jKyb/qvCQh3ANRmoW3t25MgVqgEoT8ZvHs024p+xmaAHT9DS/MvCd7GLz91Km/K3WKpZTslUEEaey5F/Dg=="],
+
+    "@alchemy.run/kubernetes": ["@alchemy.run/kubernetes@2.0.0-beta.84", "", { "dependencies": { "@alchemy.run/docker": "2.0.0-beta.84", "yaml": "^2.9.1" }, "peerDependencies": { "@effect/platform-bun": "^4.0.5", "alchemy": "2.0.0-beta.84", "effect": "^4.0.5" }, "optionalPeers": ["@effect/platform-bun"] }, "sha512-yVDuCrHXq4gH5r7y+e5RyDp1YMQbT9KSRvc7uYGYxh9b5EyEzhbKN/Tpvqldi/tfKSU43yuZu44ErCk48kor3g=="],
+
     "@alchemy.run/node-utils": ["@alchemy.run/node-utils@2.0.0-beta.84", "", { "dependencies": { "chokidar": "^5.0.0", "rolldown": "1.2.13" } }, "sha512-UdvCtwEeLmRNN89gVjkMIQTqzkE+xPQb26dPsQM6JzDdHUyqaTyg64U4RmfUjUul0sWQbbVIeAO475GQYbGELw=="],
+
+    "@alchemy.run/railway": ["@alchemy.run/railway@2.0.0-beta.84", "", { "dependencies": { "@alchemy.run/docker": "2.0.0-beta.84", "@alchemy.run/redis": "2.0.0-beta.84", "@distilled.cloud/aws": "1.0.0-rc.17", "@distilled.cloud/core": "1.0.0-rc.17", "@distilled.cloud/railway": "1.0.0-rc.17", "rolldown": "1.2.13" }, "peerDependencies": { "@effect/platform-node": "^4.0.5", "alchemy": "2.0.0-beta.84", "effect": "^4.0.5", "mongodb": "^6.10.0", "mysql2": "^3.24.2", "pg": "^8.22.0" }, "optionalPeers": ["@effect/platform-node", "mongodb", "mysql2", "pg"] }, "sha512-FYG/YCb61Gjxq1ArCaM62xc2QEEEPB2EFVO1dXRvtBP/9V9jQD7j+CGJ1nx7l0HOZeQZ0qhJc8AcHiV8L32I+Q=="],
+
+    "@alchemy.run/redis": ["@alchemy.run/redis@2.0.0-beta.84", "", { "peerDependencies": { "alchemy": "2.0.0-beta.84", "effect": "^4.0.5" } }, "sha512-8UsBke5PAnCkr9RioSJicudJlNgkkWlWETgIDcT1CtreY42Wsa5wmd6KU8H2c6prRsH0/bSk6z3RZLEjmi1jDQ=="],
 
     "@alchemy.run/sigil": ["@alchemy.run/sigil@0.1.0-alpha.1", "", { "peerDependencies": { "@types/react": ">=19.2.0", "react-devtools-core": ">=6.1.2" }, "optionalPeers": ["@types/react", "react-devtools-core"] }, "sha512-RtHELG2w+GluVewRsuKm66idtPzC+4STptMr/61X1Vy5uBkDzcCzjzV8G6jUa4iBv6Il0hHV7UL6wvv//9nD/Q=="],
 
@@ -293,13 +382,19 @@
 
     "@distilled.cloud/acme": ["@distilled.cloud/acme@1.0.0-rc.17", "", { "dependencies": { "@distilled.cloud/core": "1.0.0-rc.17" }, "peerDependencies": { "effect": "^4.0.5" } }, "sha512-s6qWikqh+kdcl0dKOXvYS+++das2f073hkQtHZ9Htt7Oi0hcAFIk7i4is0h4GBjsJX/8bCx0D6EtUVeXUuQI9g=="],
 
+    "@distilled.cloud/aws": ["@distilled.cloud/aws@1.0.0-rc.17", "", { "dependencies": { "@distilled.cloud/aws4signer": "1.0.0-rc.17", "@distilled.cloud/core": "1.0.0-rc.17" }, "peerDependencies": { "effect": "^4.0.5" } }, "sha512-LRR1QFVT6i0LP4sqSuLqoXQV0L+EjS9OBecQDOEcxObcGxbfVrLMToWe72bda+Z60Wwt3eY0gNio5vM1eRld9w=="],
+
     "@distilled.cloud/aws4signer": ["@distilled.cloud/aws4signer@1.0.0-rc.17", "", { "dependencies": { "@distilled.cloud/core": "1.0.0-rc.17" }, "peerDependencies": { "effect": "^4.0.5" } }, "sha512-4wOoFuiadiKOEfDcL0VwGwg4XmZ3vmMxrNJAnTKf87k2WN2Shs7KeUp4GS1TzGGO3NrrpvVw8RFK+dOomDMj5w=="],
 
     "@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@1.0.0-rc.17", "", { "dependencies": { "@distilled.cloud/core": "1.0.0-rc.17" }, "peerDependencies": { "effect": "^4.0.5" } }, "sha512-xT7EFAAUUd9AZetUjXsiwMkpGatdxGNuMZrhuX5cG4MicmJizn9gn5xdqNsojkj4qzv08qIVL9j1XGV20IoYuA=="],
 
     "@distilled.cloud/core": ["@distilled.cloud/core@1.0.0-rc.17", "", { "peerDependencies": { "effect": "^4.0.5" } }, "sha512-BHcVEtqIbyyqU3S3o8DjUtqoAJ4FLnsb4BX3nTK2+mcDARS2Puc+Qak6sn+b+W5CRKOOWyrhltbc+kaYDUwxeQ=="],
 
+    "@distilled.cloud/fly-io": ["@distilled.cloud/fly-io@1.0.0-rc.17", "", { "dependencies": { "@distilled.cloud/core": "1.0.0-rc.17" }, "peerDependencies": { "effect": "^4.0.5" } }, "sha512-az5i35HtWOwN97drHEGFL2WC80A1M2xjhMJqPOUp5lYtBKQN6LfR4tP5UCzibbm5hw0RtLgjjaCa6bvLskjjTg=="],
+
     "@distilled.cloud/iceberg": ["@distilled.cloud/iceberg@1.0.0-rc.17", "", { "dependencies": { "@distilled.cloud/core": "1.0.0-rc.17" }, "peerDependencies": { "effect": "^4.0.5" } }, "sha512-hO9Kqc91dq7SLBCagxlr2RDSTbp7/urqjfxNitSNaaOyKIsUr85llsADT/rS6H85ezOsGf2vSP5y1Qk0kQWLCg=="],
+
+    "@distilled.cloud/railway": ["@distilled.cloud/railway@1.0.0-rc.17", "", { "dependencies": { "@distilled.cloud/core": "1.0.0-rc.17" }, "peerDependencies": { "effect": "^4.0.5" } }, "sha512-L8T5o/PvOswQiaJccV2SssdepMikATeWof3+i5W4tedlHrkiYTK3bcHL3idEda65XW7fz+8hpWSMJPFk2ECcaw=="],
 
     "@docsearch/css": ["@docsearch/css@3.8.2", "", {}, "sha512-y05ayQFyUmCXze79+56v/4HpycYF3uFqB78pLPrSV5ZKAlDuIAAJNhaRi8tTdRNXh05yxX/TyNnzD6LwSM89vQ=="],
 
@@ -319,9 +414,23 @@
 
     "@edge-spec/examples": ["@edge-spec/examples@workspace:examples"],
 
-    "@edge-spec/infra": ["@edge-spec/infra@workspace:infra"],
+    "@edge-spec/infra-aws": ["@edge-spec/infra-aws@workspace:infra/aws"],
+
+    "@edge-spec/infra-cloudflare": ["@edge-spec/infra-cloudflare@workspace:infra/cloudflare"],
+
+    "@edge-spec/infra-docker": ["@edge-spec/infra-docker@workspace:infra/docker"],
+
+    "@edge-spec/infra-fly": ["@edge-spec/infra-fly@workspace:infra/fly"],
+
+    "@edge-spec/infra-kubernetes": ["@edge-spec/infra-kubernetes@workspace:infra/kubernetes"],
+
+    "@edge-spec/infra-railway": ["@edge-spec/infra-railway@workspace:infra/railway"],
+
+    "@edge-spec/infra-vercel": ["@edge-spec/infra-vercel@workspace:infra/vercel"],
 
     "@edge-spec/mcp": ["@edge-spec/mcp@workspace:packages/mcp"],
+
+    "@edge-spec/runtime": ["@edge-spec/runtime@workspace:packages/runtime"],
 
     "@edge-spec/sandbox": ["@edge-spec/sandbox@workspace:packages/sandbox"],
 
@@ -759,6 +868,8 @@
 
     "@tokenizer/token": ["@tokenizer/token@0.3.0", "", {}, "sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A=="],
 
+    "@types/aws-lambda": ["@types/aws-lambda@8.10.164", "", {}, "sha512-XOnrazWcOd6yWPnR7DxqCBPPYciDjHq+NN8LPwwqBCJNXLyPJgKo47fZpJ113+oyAn9Zti0Cf6H4k6yPcE3WFg=="],
+
     "@types/babel__core": ["@types/babel__core@7.20.5", "", { "dependencies": { "@babel/parser": "^7.20.7", "@babel/types": "^7.20.7", "@types/babel__generator": "*", "@types/babel__template": "*", "@types/babel__traverse": "*" } }, "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA=="],
 
     "@types/babel__generator": ["@types/babel__generator@7.27.0", "", { "dependencies": { "@babel/types": "^7.0.0" } }, "sha512-ufFd2Xi92OAVPYsy+P4n7/U7e68fex0+Ee8gSG9KX7eo084CWiQ4sdxktvdl0bOPupXtVJPY19zk6EwWqUQ8lg=="],
@@ -796,6 +907,8 @@
     "@types/methods": ["@types/methods@1.1.4", "", {}, "sha512-ymXWVrDiCxTBE3+RIrrP533E70eA+9qu7zdWoHuOmGujkYtzf4HQF96b8nwHLqhuf4ykX61IGRIB38CC6/sImQ=="],
 
     "@types/node": ["@types/node@24.19.2", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ=="],
+
+    "@types/pg": ["@types/pg@8.23.1", "", { "dependencies": { "@types/node": "*", "pg-protocol": "*", "pg-types": "^2.2.0" } }, "sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A=="],
 
     "@types/qs": ["@types/qs@6.15.1", "", {}, "sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw=="],
 
@@ -878,6 +991,8 @@
     "asap": ["asap@2.0.6", "", {}, "sha512-BSHWgDSAiKs50o2Re8ppvp3seVHXSRM44cdSsT9FfNEUUZLOGWVCsiWaRPWM1Znn+mqZ1OfVZ3z3DWEzSp7hRA=="],
 
     "asynckit": ["asynckit@0.4.0", "", {}, "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q=="],
+
+    "aws4fetch": ["aws4fetch@1.0.20", "", {}, "sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g=="],
 
     "baseline-browser-mapping": ["baseline-browser-mapping@2.11.30", "", { "bin": { "baseline-browser-mapping": "dist/cli.cjs" } }, "sha512-YJs6Pz17RMNv8HoyKREtCY38E3BV1nPkWVmIb+XN1uHC1Vqt3KZCH/uJH9ZKRoiKb/icZ6tvehyee6RZNbFfRA=="],
 
@@ -1195,6 +1310,22 @@
 
     "perfect-debounce": ["perfect-debounce@1.0.0", "", {}, "sha512-xCy9V055GLEqoFaHoC1SoLIaLmWctgCUaBaWxDZ7/Zx4CTyX7cJQLJOok/orfjZAh9kEYpjJa4d0KcJmCbctZA=="],
 
+    "pg": ["pg@8.23.1", "", { "dependencies": { "pg-connection-string": "^2.14.1", "pg-pool": "^3.14.0", "pg-protocol": "^1.16.1", "pg-types": "2.2.0", "pgpass": "1.0.5" }, "optionalDependencies": { "pg-cloudflare": "^1.4.1" }, "peerDependencies": { "pg-native": ">=3.0.1" }, "optionalPeers": ["pg-native"] }, "sha512-aL96AHANtWjPLDOLqnhx+ngp9+UK7ETEU8VJrDCGvsSSi/mGLcWYsS6Herg7lmaBJe4uwrfqsa7gTEFaSizDoQ=="],
+
+    "pg-cloudflare": ["pg-cloudflare@1.4.1", "", {}, "sha512-6PQbsFWZcp9EmJEwy5cGQ2La+AMWpP46lgbb8X+U/XsHIUweYDNCpeuKck5RxL2MdVFi7krbbEi5nX4Zh7JhrQ=="],
+
+    "pg-connection-string": ["pg-connection-string@2.14.1", "", {}, "sha512-qR3kGNPBLpCNtz0evbKA0Y/MRFXwSSdT+pTJvYp/bXTcReZbvX1kzF0IyTc1QnxqF7AZbOeBhNL8R5mYQZV/MA=="],
+
+    "pg-int8": ["pg-int8@1.0.1", "", {}, "sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw=="],
+
+    "pg-pool": ["pg-pool@3.14.0", "", { "peerDependencies": { "pg": ">=8.0" } }, "sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw=="],
+
+    "pg-protocol": ["pg-protocol@1.16.1", "", {}, "sha512-p9VOFMiHB/ZbJATetbg+99PxssTVSQRnyuPSQ67mN1+1KBOjZaZ83ZQzltnxPhJwSsC3nwVjJ10DVJlerbFzLg=="],
+
+    "pg-types": ["pg-types@2.2.0", "", { "dependencies": { "pg-int8": "1.0.1", "postgres-array": "~2.0.0", "postgres-bytea": "~1.0.0", "postgres-date": "~1.0.4", "postgres-interval": "^1.1.0" } }, "sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA=="],
+
+    "pgpass": ["pgpass@1.0.5", "", { "dependencies": { "split2": "^4.1.0" } }, "sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug=="],
+
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 
     "picomatch": ["picomatch@4.0.7", "", {}, "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA=="],
@@ -1202,6 +1333,14 @@
     "pkce-challenge": ["pkce-challenge@5.0.1", "", {}, "sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ=="],
 
     "postcss": ["postcss@8.5.31", "", { "dependencies": { "nanoid": "^3.3.20", "picocolors": "^1.1.1", "source-map-js": "^1.2.2" } }, "sha512-YUbWYCgErwnMAVkjUnYa+KlMBzGpHwiIt/DE7f0G33AuX2LH9UcTk6KgWxd3zRU+pN3u/C+Xl3EnMLM4Hea7Sg=="],
+
+    "postgres-array": ["postgres-array@2.0.0", "", {}, "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA=="],
+
+    "postgres-bytea": ["postgres-bytea@1.0.1", "", {}, "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ=="],
+
+    "postgres-date": ["postgres-date@1.0.7", "", {}, "sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q=="],
+
+    "postgres-interval": ["postgres-interval@1.2.0", "", { "dependencies": { "xtend": "^4.0.0" } }, "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ=="],
 
     "preact": ["preact@11.0.0-beta.0", "", {}, "sha512-IcODoASASYwJ9kxz7+MJeiJhvLriwSb4y4mHIyxdgaRZp6kPUud7xytrk/6GZw8U3y6EFJaRb5wi9SrEK+8+lg=="],
 
@@ -1284,6 +1423,8 @@
     "space-separated-tokens": ["space-separated-tokens@2.0.2", "", {}, "sha512-PEGlAwrG8yXGXRjW32fGbg66JAlOAwbObuqVoJpv/mRgoWDQfgH1wDPvtzWyUSNAXBGSk8h755YDbbcEy3SH2Q=="],
 
     "speakingurl": ["speakingurl@14.0.1", "", {}, "sha512-1POYv7uv2gXoyGFpBCmpDVSNV74IfsWlDW216UPjbWufNf+bSU6GdbDsxdcxtfwb4xlI3yxzOTKClUosxARYrQ=="],
+
+    "split2": ["split2@4.2.0", "", {}, "sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg=="],
 
     "statuses": ["statuses@2.0.2", "", {}, "sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw=="],
 
@@ -1369,6 +1510,8 @@
 
     "ws": ["ws@8.22.0", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg=="],
 
+    "xtend": ["xtend@4.0.2", "", {}, "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ=="],
+
     "y18n": ["y18n@5.0.8", "", {}, "sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA=="],
 
     "yallist": ["yallist@3.1.1", "", {}, "sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g=="],
@@ -1421,6 +1564,8 @@
 
     "@types/express-serve-static-core/@types/node": ["@types/node@26.6.5", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg=="],
 
+    "@types/pg/@types/node": ["@types/node@26.6.5", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg=="],
+
     "@types/send/@types/node": ["@types/node@26.6.5", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg=="],
 
     "@types/serve-static/@types/node": ["@types/node@26.6.5", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg=="],
@@ -1464,6 +1609,8 @@
     "@types/connect/@types/node/undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
 
     "@types/express-serve-static-core/@types/node/undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
+
+    "@types/pg/@types/node/undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
 
     "@types/send/@types/node/undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
 

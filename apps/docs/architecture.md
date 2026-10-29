@@ -31,6 +31,25 @@ validation bundles and drift summaries live in R2 (`ARTIFACTS`). Without the
 bindings the related routes answer `enabled: false` and nothing is stored.
 Generated test source, prompts and keys are never written to either store.
 
+### Ports and adapters
+
+Cloudflare is the reference target, not a requirement. Four ports isolate the
+runtime: `SqlDatabase`, `ObjectStore`, `JobQueue` and `CacheStore`
+(`packages/runtime/src/env.ts`). `packages/runtime/src/platform.ts` resolves each through
+the neutral binding (`DB`, `BLOB`, `JOBS`, `CACHE`) and falls back to the legacy
+Cloudflare names (`RUNS_DB`, `ARTIFACTS`, `TEST_GENERATION_WORKFLOW`).
+`packages/runtime/src/adapters/select.ts` picks an adapter at boot for non-Cloudflare
+targets: Postgres (`pg`), S3-compatible storage (`aws4fetch`), an external HTTP
+job runner, and KV / Upstash Redis / in-memory cache.
+
+Orchestration lives in `packages/runtime/src/jobs.ts` behind a `StepRunner`
+interface; `apps/worker/src/workflow.ts` is a thin Cloudflare adapter, and the
+HTTP runner and Bun server can call the same `runGenerationJob`.
+`apps/worker/src/index.ts`, `infra/vercel/handler.ts` and
+`packages/runtime/src/server.ts` are the three entries. Node-only drivers stay
+unreachable from the Cloudflare bundle. See
+[Deployment](deployment.md#_8-other-targets-vercel-aws-self-hosted-bun).
+
 ## Frontend bundle
 
 The dashboard is a Vite SPA served from `dist/web` by the `ASSETS` binding.
@@ -68,7 +87,8 @@ the app code does not invalidate the cached vendor files.
 | `packages/core/src/sandbox.ts`     | v1/v2 request contract, config parsing, runner health                          | v1 `{files, command}` stays the default body             |
 | `packages/core/src/api-surface.ts` | Infers OpenAPI from route calls when a spec is missing                         | Explicitly `inferred`; regex, not an AST                 |
 | `packages/core/src/pipeline.ts`    | Async generator for scan → generate → validate → correct → PR                  | Transport-agnostic; bounded pool + channel               |
-| `apps/worker/src/index.ts`         | Hono routes, header parsing, SSE framing                                       | Translates HTTP to core calls                            |
+| `packages/runtime/src/app.ts`      | Hono routes, header parsing, SSE framing                                       | Portable; no host bindings                               |
+| `apps/worker/src/index.ts`         | Cloudflare entry: bindings, KV cache, scheduled handler                        | Cloudflare-only                                          |
 | `apps/worker/src/workflow.ts`      | Durable webhook automation                                                     | Deployment credentials only                              |
 | `apps/web/src/`                    | Dashboard                                                                      | `App.tsx` owns run state; components are presentational  |
 | `packages/ui/src/`                 | React primitives and brand tokens                                              | Dashboard imports components; docs imports `theme.css`   |

@@ -162,7 +162,7 @@ Rules:
 
 ### Workers AI
 
-The deployment needs an `AI` binding (created by `infra/alchemy.run.ts`). It is
+The deployment needs an `AI` binding (created by `infra/cloudflare/cloudflare.run.ts`). It is
 the only provider that needs no user key. Workers AI always executes remotely,
 so a local emulation may report the binding as unsupported. For local UI work,
 an OpenAI-compatible provider or the custom path is simpler.
@@ -278,7 +278,7 @@ workspace settings and audit live in one D1 database (`RUNS_DB`). The Alchemy
 stack creates `edge-spec-runs` for `prod` (and `edge-spec-runs-<stage>`
 elsewhere) and applies `migrations/` on every deploy and again in `alchemy dev`.
 Adopting an existing Wrangler database requires
-`bun run alchemy deploy --stage prod --yes --adopt`.
+`bun run --cwd infra/cloudflare deploy --stage prod --yes --adopt`.
 
 Without the binding the Worker still scans, generates and opens pull requests,
 but `/api/runs`, `/api/backlog`, `/api/workspace` and `/api/audit` answer
@@ -286,7 +286,7 @@ but `/api/runs`, `/api/backlog`, `/api/workspace` and `/api/audit` answer
 source text, prompts or keys.
 
 A local `D1_ERROR: no such table: runs` (or `backlog_items`) means the local
-Alchemy state predates a migration. Delete `.alchemy/` to reset the local
+Alchemy state predates a migration. Delete `infra/cloudflare/.alchemy/` to reset the local
 database, or run the stack again; deploy and dev both migrate.
 
 ## Run artifacts (R2)
@@ -388,7 +388,7 @@ export DRIFT_ALERT_WEBHOOK_URL=…
 export DRIFT_ALERT_WEBHOOK_SECRET=…   # sent as x-edgespec-secret
 ```
 
-Set these before `bun run deploy` (or in `infra/.env`). The deployment secrets
+Set these before `bun run deploy` (or in `infra/cloudflare/.env`). The deployment secrets
 remain a fallback for deployments that do not configure a workspace target.
 There is no email adapter yet. Without `RUNS_DB` the cron does nothing. The scan never opens a pull request; PR creation remains the
 explicit next step.
@@ -594,18 +594,24 @@ tool is missing is `skipped`, never a pass.
 
 ## Deployment
 
-`infra/alchemy.run.ts` is the source of truth:
+`infra/cloudflare/cloudflare.run.ts` is the source of truth:
 
 - Worker `edge-spec` (or `edge-spec-<stage>`), uploading the prebuilt
   `dist/worker/index.js` with compatibility date `2025-07-18` and
   `nodejs_compat`.
 - `ASSETS` from `dist/web` with single-page-application fallback.
-- `AI`, `RUNS_DB` (D1), `ARTIFACTS` (R2) and `TEST_GENERATION_WORKFLOW`
-  bindings. The Workflow class is `TestGenerationWorkflow`.
+- `AI`, `RUNS_DB` (D1), `ARTIFACTS` (R2), `CACHE` (KV) and
+  `TEST_GENERATION_WORKFLOW` bindings. The Workflow class is
+  `TestGenerationWorkflow`.
 - The daily cron only for `--stage prod`.
 
 `bun run build` must run before deploy; Alchemy uploads the Vite bundles, not the
 TypeScript sources. `bun run deploy` does both. There is no `wrangler.toml`.
+
+Provider stacks live one folder each under `infra/`: `aws/` provisions the S3
+artifact bucket (`bun run deploy:aws`), `vercel/` wraps `vercel deploy --prod`
+(`bun run deploy:vercel`), and `fly/`, `railway/`, `docker/` and `kubernetes/`
+deploy the Bun runtime from the root `Dockerfile`.
 
 ### Secrets
 
@@ -627,7 +633,7 @@ bun run deploy
 ```
 
 In GitHub Actions, pass the same names as step env from repository secrets. For
-local commands, `infra/.env` is loaded automatically (and is git-ignored).
+local commands, `infra/cloudflare/.env` is loaded automatically (and is git-ignored).
 
 The sandbox runner is user configuration, not a deployment secret. Users set it
 in **Settings → Sandbox**; it travels as `x-sandbox-url` / `x-sandbox-key`.
@@ -711,5 +717,58 @@ Run both for dashboard development. `bun run dev:worker` builds the Worker
 bundle and starts `alchemy dev` with local D1/R2 state. It serves the last built
 assets, so rebuild (`bun run build:web`) after UI changes if you are not using
 Vite. Rebuild the Worker bundle (`bun run build:worker`) after
-`packages/core/src` or `apps/worker/src` changes; `alchemy dev` serves
-`dist/worker/index.js`.
+`packages/core/src`, `packages/runtime/src` or `apps/worker/src` changes;
+`alchemy dev` serves `dist/worker/index.js`.
+
+## Other deployment targets
+
+The Worker is one entry; the same app also runs on Vercel and on Bun/Node. The
+capabilities are ports (`SqlDatabase`, `ObjectStore`, `JobQueue`, `CacheStore`)
+resolved once at boot by `packages/runtime/src/adapters/select.ts`:
+
+```text
+binding -> EDGESPEC_<CAP> override -> EDGESPEC_PROVIDER default -> off
+```
+
+| Variable                                                                                                                   | Capability    |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `EDGESPEC_PROVIDER` (`vercel`, `aws`, `node`)                                                                              | defaults      |
+| `EDGESPEC_DB_URL` (`EDGESPEC_DB=postgres`)                                                                                 | SQL           |
+| `EDGESPEC_BLOB_ENDPOINT`, `_BUCKET`, `_REGION`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_PREFIX` (`EDGESPEC_BLOB=r2\|s3`) | objects       |
+| `EDGESPEC_JOB_URL`, `EDGESPEC_JOB_KEY` (`EDGESPEC_JOBS=http`)                                                              | jobs          |
+| `EDGESPEC_REDIS_URL`, `EDGESPEC_REDIS_TOKEN` (`EDGESPEC_CACHE=redis`)                                                      | cache         |
+| `EDGESPEC_STATIC_DIR`, `PORT`, `EDGESPEC_CRON_INTERVAL_MINUTES`                                                            | Bun entry     |
+| `CRON_SECRET`                                                                                                              | cron route    |
+| `AI_PROVIDER`, `AI_KEY`, `AI_BASE_URL`, `AI_MODEL`                                                                         | automation AI |
+
+`EDGESPEC_PROVIDER` fills defaults only when the matching env exists; the rest
+stay off. An explicit override with missing env fails at boot and names the
+variable. Cloudflare never reads these: it keeps `RUNS_DB`, `ARTIFACTS`,
+`CACHE` and `TEST_GENERATION_WORKFLOW`.
+
+Postgres schema: `EDGESPEC_DB_URL=postgres://… bun run migrate` applies
+`migrations/postgres.sql` once. D1 keeps using `migrations/*.sql` through
+Alchemy.
+
+Entries: `src/index.ts` (Cloudflare), `infra/vercel/handler.ts` + `api/index.ts`
+(Vercel), `src/server.ts` (`bun run serve`). Node-only drivers (`pg`,
+`aws4fetch`) are imported lazily and are unreachable from the Cloudflare bundle.
+
+## Cache
+
+The cache is read-through and never authoritative. A miss loads the real value;
+a cache error is swallowed and the request proceeds. `GET /api/health` reports
+`capabilities.cache` as `kv`, `redis`, `memory` or `none`, so the dashboard can
+show what is actually configured.
+
+| Adapter  | Backend                   | Use                     |
+| -------- | ------------------------- | ----------------------- |
+| `kv`     | Cloudflare KV `CACHE`     | Cloudflare deployments  |
+| `redis`  | Upstash Redis REST        | Vercel, AWS, containers |
+| `memory` | in-process `Map` with TTL | local dev, single node  |
+
+Only `/api/quota` and `GET /api/branches` are cached (60 s), keyed by a hash of
+the token, never the token itself. Tokens, prompts, source, generated tests and
+run artifacts are never cached; artifacts already live in the object store. TTL
+is mandatory and writes invalidate, so stale data is bounded. With no cache
+configured the routes are unchanged.

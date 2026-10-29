@@ -1,6 +1,7 @@
 /**
- * Deployment configuration (D1/R2) shown inside Settings, plus the audit log.
- * These are saved to the server, unlike the browser-bound settings around them.
+ * Deployment configuration (history, artifacts, schedules) shown inside
+ * Settings, plus the audit log. These are saved to the server, unlike the
+ * browser-bound settings around them.
  */
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -41,6 +42,7 @@ import {
   deletePolicy,
   deleteSchedule,
   fetchAudit,
+  fetchHealth,
   fetchMemory,
   fetchPolicy,
   fetchSchedules,
@@ -50,11 +52,33 @@ import {
   updateSchedule,
   updateWorkspace,
   type AuditEvent,
+  type DeploymentCapabilities,
   type ScheduledRepo,
 } from "@/api";
+import { historyNotice } from "./history-notice";
 
-const D1_NOTICE =
-  "Not enabled on this deployment. Add the optional D1 binding in the Alchemy stack and apply the migrations.";
+/** One `/api/health` request per page load; every block shares it. */
+let healthCapabilities: Promise<DeploymentCapabilities> | undefined;
+
+function useCapabilities(): DeploymentCapabilities | undefined {
+  const [capabilities, setCapabilities] = useState<DeploymentCapabilities>();
+  useEffect(() => {
+    let cancelled = false;
+    healthCapabilities ??= fetchHealth().then((health) => health.capabilities);
+    healthCapabilities
+      .then((value) => {
+        if (!cancelled) setCapabilities(value);
+      })
+      .catch(() => {
+        // The notice falls back to generic copy; a later mount retries.
+        healthCapabilities = undefined;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return capabilities;
+}
 
 const linesOf = (raw: string): string[] =>
   raw
@@ -106,6 +130,10 @@ function Notice({ children }: { children: ReactNode }) {
       {children}
     </p>
   );
+}
+
+function HistoryNotice() {
+  return <Notice>{historyNotice(useCapabilities())}</Notice>;
 }
 
 function Loading() {
@@ -179,7 +207,7 @@ function WorkspaceBlock() {
   };
 
   if (loading) return <Loading />;
-  if (!enabled) return <Notice>{D1_NOTICE}</Notice>;
+  if (!enabled) return <HistoryNotice />;
 
   return (
     <div className="space-y-2.5">
@@ -310,7 +338,7 @@ function MemoryBlock({ repo }: { repo: string }) {
   };
 
   if (loading) return <Loading />;
-  if (!enabled) return <Notice>{D1_NOTICE}</Notice>;
+  if (!enabled) return <HistoryNotice />;
 
   return (
     <div className="space-y-2.5">
@@ -435,7 +463,7 @@ function PolicyBlock({ repo }: { repo: string }) {
   };
 
   if (loading) return <Loading />;
-  if (!enabled) return <Notice>{D1_NOTICE}</Notice>;
+  if (!enabled) return <HistoryNotice />;
 
   return (
     <div className="space-y-2.5">
@@ -607,7 +635,7 @@ function SchedulesBlock({ repo }: { repo: string }) {
   };
 
   if (loading) return <Loading />;
-  if (!enabled) return <Notice>{D1_NOTICE}</Notice>;
+  if (!enabled) return <HistoryNotice />;
 
   return (
     <div className="space-y-2.5">
@@ -879,7 +907,7 @@ export function AuditDialog({
       </div>
       {!enabled ? (
         <div className="flex h-[min(26rem,50vh)] items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 text-center text-[11px] text-zinc-500">
-          {D1_NOTICE}
+          <HistoryNotice />
         </div>
       ) : (
         <div

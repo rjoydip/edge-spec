@@ -168,8 +168,8 @@ and returns `{ "exitCode": 0, "stdout": "…", "stderr": "…" }`.
 
 ### Deployment secrets
 
-Set these before `bun run deploy`, or copy `infra/.env.example` to
-`infra/.env` (git-ignored). CI passes the same names as repository secrets.
+Set these before `bun run deploy`, or copy `infra/cloudflare/.env.example` to
+`infra/cloudflare/.env` (git-ignored). CI passes the same names as repository secrets.
 
 ```bash
 export GH_APP_ID=…                      # GitHub App auth for webhooks
@@ -178,11 +178,15 @@ export GH_WEBHOOK_SECRET=…              # verifies x-hub-signature-256
 export GH_TOKEN=…                       # fallback when no App is set
 ```
 
+Other targets build the root `Dockerfile` and deploy through Alchemy:
+`bun run deploy:fly`, `deploy:railway`, `deploy:docker`, `deploy:kubernetes`.
+See [Deployment](apps/docs/deployment.md#_8-other-targets-vercel-aws-fly-railway-docker-kubernetes-bun).
+
 ## GitHub Actions
 
 - **CI** (`ci.yml`) runs format, lint, types, tests and both builds on every
   push and pull request. No Cloudflare credentials required.
-- **Deploy** (`deploy.yml`) builds and runs `bun run alchemy deploy --stage prod`
+- **Deploy** (`deploy.yml`) builds and runs `bun run --cwd infra/cloudflare deploy --stage prod`
   on `main`, or on demand. Add `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID` as repository secrets. The production cutover is
   already adopted; use **adopt** only for a new account or a lost state store.

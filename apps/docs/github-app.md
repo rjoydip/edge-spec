@@ -170,7 +170,7 @@ token scoped to that repository.
 
 For the Alchemy deployment, CI passes these as environment variables; the
 Alchemy stack binds them as Worker secrets for `prod`. Locally, export them or
-put them in `infra/.env` (git-ignored), then `bun run deploy`:
+put them in `infra/cloudflare/.env` (git-ignored), then `bun run deploy`:
 
 ```bash
 export GH_APP_ID=…

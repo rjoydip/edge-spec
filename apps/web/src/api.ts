@@ -57,6 +57,29 @@ export function fetchCatalog(): Promise<Catalog> {
   return apiJson<Catalog>("/api/catalog");
 }
 
+/** Mirrors `Capabilities` in the Worker's `platform.ts`. */
+export interface DeploymentCapabilities {
+  history: boolean;
+  artifacts: boolean;
+  jobs: "cloudflare-workflows" | "external" | "none";
+  durableJobs: boolean;
+  cache: "kv" | "redis" | "memory" | "none";
+  cron: boolean;
+  ai: "binding" | "env" | "byok-only";
+  assets: boolean;
+}
+
+export interface Health {
+  status: string;
+  app: string;
+  timestamp: string;
+  capabilities: DeploymentCapabilities;
+}
+
+export function fetchHealth(): Promise<Health> {
+  return apiJson<Health>("/api/health");
+}
+
 export interface SandboxHealth {
   ok: boolean;
   version?: string;
