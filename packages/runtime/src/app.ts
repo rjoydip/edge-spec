@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { approveDevice, pollDevice, startDeviceFlow } from "./device-flow";
+import { accountRoutes } from "./auth-routes";
 import { streamSSE } from "hono/streaming";
 import type { AiConfig } from "@edge-spec/core/ai";
 import { PROMPT_VERSION, generateTest, probeRateLimit } from "@edge-spec/core/ai";
@@ -1465,6 +1466,11 @@ app.get("/api/cli/device/poll", async (c) => {
   if (poll.status === "expired") return c.json(poll, 410);
   return c.json(poll);
 });
+
+/** Accounts: signup, login, sessions, verification, reset, admin plans.
+ * The credentials sub-app types its env for its own handlers; the shared `app`
+ * keeps blank generics, and the cast is the monomorphic mount. */
+app.route("/", accountRoutes() as unknown as Hono);
 
 app.post("/webhook", async (c) => {
   try {

@@ -35,6 +35,9 @@ const PASSTHROUGH = [
   "AI_MODEL",
   "DRIFT_ALERT_WEBHOOK_URL",
   "DRIFT_ALERT_WEBHOOK_SECRET",
+  "EMAIL_API_KEY",
+  "EMAIL_FROM",
+  "ADMIN_KEY",
 ] as const;
 
 const value = (source: Source, key: string): string | undefined => {

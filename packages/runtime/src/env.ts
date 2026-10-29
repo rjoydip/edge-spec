@@ -94,6 +94,13 @@ export interface Env {
    */
   SANDBOX_RUNNER_URL?: string;
   SANDBOX_API_KEY?: string;
+  /** Email sender fallback (Resend). Requests normally carry it as a header. */
+  EMAIL_API_KEY?: string;
+  EMAIL_FROM?: string;
+  /** Manual plan activation endpoint guard. Absent disables it. */
+  ADMIN_KEY?: string;
+  /** The public origin used in emails; defaults to the request origin. */
+  EDGESPEC_WORKSPACE_URL?: string;
 }
 
 /** @deprecated use SqlStatement */

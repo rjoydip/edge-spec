@@ -31,11 +31,24 @@ export async function applySqliteMigrations(db: SqlLikeDatabase, dir: string): P
       .bind(version)
       .first<{ ok: number }>();
     if (seen) continue;
-    for (const statement of sql.split(";")) {
+    for (const statement of sqliteStatements(sql)) {
       if (statement.trim()) db.prepare(statement).bind().run();
     }
     db.prepare("INSERT INTO schema_migrations (version) VALUES (?)").bind(version).run();
     applied.push(version);
   }
   return applied;
+}
+
+/** Splits on `;`, leaving `--` comment content out so bare comments never
+ * surface as empty statements. */
+export function sqliteStatements(sql: string): string[] {
+  const withoutComments = sql
+    .split("\n")
+    .map((line) => {
+      const start = line.indexOf("--");
+      return start >= 0 ? line.slice(0, start) : line;
+    })
+    .join("\n");
+  return withoutComments.split(";").map((statement) => statement.trim());
 }
