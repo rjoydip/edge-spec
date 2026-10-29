@@ -50,6 +50,10 @@ For local development, point `EDGESPEC_URL` at `http://127.0.0.1:8787` and start
 | `edgespec_run`                  | Calls the AI provider  | Generate and validate several tests                |
 | `edgespec_prepare_pull_request` | Read-only              | Validate files and issue a one-time approval token |
 | `edgespec_open_pull_request`    | Writes a branch and PR | Commit the approved files                          |
+| `edgespec_auth_login`           | Starts a device login  | Shows a code, opens the dashboard authorize page   |
+| `edgespec_auth_check`           | Grants the profile     | Finishes the login after the user authorizes       |
+| `edgespec_auth_status`          | Read-only              | Workspace, authorized-at date and stored fields    |
+| `edgespec_auth_logout`          | Deletes the file       | Removes the stored authorization                   |
 
 `edgespec_generate` and `edgespec_run` return the generated code and validation
 details. `edgespec_run` also returns the ready source paths and logs.

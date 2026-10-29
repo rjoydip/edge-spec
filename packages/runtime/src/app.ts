@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { approveDevice, pollDevice, startDeviceFlow } from "./device-flow";
 import { streamSSE } from "hono/streaming";
 import type { AiConfig } from "@edge-spec/core/ai";
 import { PROMPT_VERSION, generateTest, probeRateLimit } from "@edge-spec/core/ai";
@@ -1403,6 +1404,66 @@ app.get("/auth", (c) => {
       "This endpoint handles GitHub App setup redirects. Return to EdgeSpec to continue.",
     ),
   );
+});
+
+/**
+ * CLI and MCP authorization (GitHub device-flow style). The client shows a
+ * short user code and opens `/authorize`; the dashboard echoes the code,
+ * encrypts the visitor's configured settings with a payload key that only the
+ * client holds, and the Worker relays the ciphertext to the polling client.
+ * See {@link device-flow}: everything here rides on the `CACHE` port and
+ * stores no user configuration (invariant 1).
+ */
+const deviceStore = (c: Context) => c.env.CACHE;
+const PROFILE_LIMIT = 64 * 1024;
+
+app.post("/api/cli/device/start", async (c) => {
+  const store = deviceStore(c);
+  if (!store) {
+    return c.json({ error: "Not enabled: this deployment has no cache store." }, 501);
+  }
+  const record = await startDeviceFlow(store);
+  return c.json({
+    deviceCode: record.deviceCode,
+    userCode: record.userCode,
+    expiresAt: new Date(record.expiresAt).toISOString(),
+  });
+});
+
+app.post("/api/cli/device/approve", async (c) => {
+  const store = deviceStore(c);
+  if (!store) {
+    return c.json({ error: "Not enabled: this deployment has no cache store." }, 501);
+  }
+  const rawBody: unknown = await c.req.json().catch(() => ({}));
+  const body = (rawBody ?? {}) as { userCode?: unknown; profile?: unknown; workspace?: unknown };
+  const userCode = typeof body.userCode === "string" ? body.userCode.trim().toUpperCase() : "";
+  const profile = typeof body.profile === "string" ? body.profile : "";
+  const workspace = typeof body.workspace === "string" ? body.workspace.trim() : "";
+  if (!userCode || !profile || !workspace) {
+    return c.json({ error: "userCode, profile and workspace are required." }, 400);
+  }
+  if (profile.length > PROFILE_LIMIT) {
+    return c.json({ error: `profile is too large (limit ${PROFILE_LIMIT} bytes).` }, 413);
+  }
+  const decision = await approveDevice(store, { userCode, profile, workspace });
+  if (!decision.ok) {
+    return c.json({ error: "Code is unknown or already used." }, 404);
+  }
+  return c.json({ ok: true, token: decision.token });
+});
+
+app.get("/api/cli/device/poll", async (c) => {
+  const store = deviceStore(c);
+  if (!store) {
+    return c.json({ error: "Not enabled: this deployment has no cache store." }, 501);
+  }
+  const deviceCode = c.req.query("device")?.trim();
+  if (!deviceCode) return c.json({ error: "device code is required." }, 400);
+  const poll = await pollDevice(store, deviceCode);
+  if (poll.status === "pending") return c.json(poll, 202);
+  if (poll.status === "expired") return c.json(poll, 410);
+  return c.json(poll);
 });
 
 app.post("/webhook", async (c) => {

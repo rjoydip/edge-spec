@@ -21,6 +21,10 @@ describe("EdgeSpec MCP server", () => {
     try {
       const listed = await client.listTools();
       expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
+        "edgespec_auth_check",
+        "edgespec_auth_login",
+        "edgespec_auth_logout",
+        "edgespec_auth_status",
         "edgespec_catalog",
         "edgespec_generate",
         "edgespec_open_pull_request",

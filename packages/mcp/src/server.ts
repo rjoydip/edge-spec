@@ -2,11 +2,25 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   EdgeSpecClient,
+  authorizeUrl,
   clientConfigFromEnv,
+  clearCredentials,
+  clearPendingAuth,
   collectGenerations,
+  decryptProfile,
+  effectiveEnv,
   envDefaults,
   finalResult,
   folderFirst,
+  generatePayloadKey,
+  openBrowser,
+  pollDeviceFlow,
+  readCredentials,
+  readPendingAuth,
+  startDeviceFlow,
+  writeCredentials,
+  writePendingAuth,
+  type AuthFile,
   type Env,
   type EnvDefaults,
 } from "@edge-spec/client";
@@ -51,16 +65,18 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
   const server = new McpServer({ name: "edgespec", version: "0.1.0" });
   /** Prepared requests await an explicit one-time approval token. */
   const approvals = new Map<string, PendingPull>();
+  /** A stored device-login profile fills the keys the environment leaves empty. */
+  const effective = effectiveEnv(env);
 
   const clientFor = (selectedProvider?: string): EdgeSpecClient => {
     return new EdgeSpecClient({
-      ...clientConfigFromEnv(env, selectedProvider),
+      ...clientConfigFromEnv(effective, selectedProvider),
       ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
     });
   };
 
   const defaultsFor = (selectedProvider?: string): EnvDefaults =>
-    envDefaults(env, selectedProvider);
+    envDefaults(effective, selectedProvider);
 
   const ai = (
     args: { provider?: string; model?: string; accountId?: string },
@@ -323,6 +339,121 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
       } catch (error) {
         return fail(error);
       }
+    },
+  );
+
+  server.registerTool(
+    "edgespec_auth_login",
+    {
+      title: "Start device login",
+      description:
+        "Starts the dashboard device login. A short code is displayed; the user opens the given URL, confirms the code and authorizes. Then call edgespec_auth_check.",
+      inputSchema: {
+        url: z
+          .string()
+          .optional()
+          .describe("EdgeSpec Worker URL. Defaults to EDGESPEC_URL or localhost:8787."),
+      },
+    },
+    async (args) => {
+      try {
+        const defaults = envDefaults(env);
+        const baseUrl = (args.url?.trim() || defaults.baseUrl).replace(/\/+$/, "");
+        const start = await startDeviceFlow(baseUrl, options.fetchImpl);
+        const payloadKey = generatePayloadKey();
+        writePendingAuth({
+          deviceCode: start.deviceCode,
+          userCode: start.userCode,
+          workspace: baseUrl,
+          payloadKey,
+          startedAt: Date.now(),
+        });
+        openBrowser(authorizeUrl(baseUrl, start.userCode, payloadKey));
+        return ok({
+          userCode: start.userCode,
+          waitsAt: `${baseUrl}/authorize?code=${start.userCode}`,
+          instructions:
+            "Tell the member to open that URL, confirm the code, and choose Authorize. Then call edgespec_auth_check.",
+        });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "edgespec_auth_check",
+    {
+      title: "Finish device login",
+      description:
+        "Checks whether the user approved the pending device login and stores the profile when approved. Call after edgespec_auth_login.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const pending = readPendingAuth();
+        if (!pending) {
+          return fail("No login in progress. Call edgespec_auth_login first.");
+        }
+        const poll = await pollDeviceFlow(pending.workspace, pending.deviceCode, options.fetchImpl);
+        if (poll.status === "pending") {
+          return ok({
+            status: "pending",
+            hint: "Wait for the user to authorize, then call again.",
+          });
+        }
+        if (poll.status === "expired") {
+          clearPendingAuth();
+          return fail("The authorization request expired. Start over with edgespec_auth_login.");
+        }
+        const profile = (await decryptProfile(
+          poll.profile ?? "",
+          pending.payloadKey,
+        )) as AuthFile["profile"];
+        writeCredentials({
+          workspace: poll.workspace || pending.workspace,
+          token: poll.token ?? "",
+          authorizedAt: Date.now(),
+          profile,
+        });
+        clearPendingAuth();
+        return ok({ status: "authorized", workspace: poll.workspace || pending.workspace });
+      } catch (error) {
+        return fail(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "edgespec_auth_status",
+    {
+      title: "Show stored authorization",
+      description: "Reports the workspace the server last logged into and what it stores.",
+      inputSchema: {},
+    },
+    async () => {
+      const stored = readCredentials();
+      if (!stored) return ok({ status: "signed-out" });
+      return ok({
+        status: "authorized",
+        workspace: stored.workspace,
+        authorizedAt: stored.authorizedAt,
+        stores: Object.keys(stored.profile ?? {}),
+      });
+    },
+  );
+
+  server.registerTool(
+    "edgespec_auth_logout",
+    {
+      title: "Remove stored authorization",
+      description: "Deletes the locally stored authorization profile.",
+      inputSchema: {},
+    },
+    async () => {
+      clearCredentials();
+      clearPendingAuth();
+      return ok({ status: "signed-out" });
     },
   );
 

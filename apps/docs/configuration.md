@@ -92,6 +92,13 @@ or persist it.
 is set in Settings. They point the Worker at a runner you own, so the generated
 suite is executed instead of only checked statically.
 
+The same headers overhold the CLI and MCP server after `edge-spec auth login`
+(device flow): the dashboard encrypts the settings you configured here and the
+client stores them locally, then applies them as `GH_TOKEN` /
+`EDGESPEC_AI_KEY` / `EDGESPEC_SANDBOX_*` for every request. The server never
+sees the payload key (only in the fragment) and stores only ciphertext.
+`edge-spec auth logout` removes it.
+
 `x-deployment-ai` asks the Worker for its own Workers AI binding. The dashboard
 only sends it while developing locally, so a deployed Worker never spends the
 owner's quota for a visitor.

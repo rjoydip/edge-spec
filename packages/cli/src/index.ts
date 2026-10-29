@@ -16,6 +16,8 @@ import {
   type Validation,
 } from "@edge-spec/client";
 import { helpText, parseCliArgs, UsageError, type ParsedArgs } from "./args";
+import { runAuth } from "./auth-command";
+import { effectiveEnv } from "@edge-spec/client";
 import { runWatch } from "./watch";
 
 const VERSION = "0.1.0";
@@ -163,13 +165,25 @@ function printEvent(event: RunEvent): void {
   }
 }
 
-async function execute(parsed: ParsedArgs, env: Env): Promise<void> {
+async function execute(parsed: ParsedArgs, rawEnv: Env): Promise<void> {
   if (parsed.command === "help") {
     process.stdout.write(helpText);
     return;
   }
   if (parsed.command === "version") {
     process.stdout.write(`edge-spec ${VERSION}\n`);
+    return;
+  }
+
+  // Device login first: the stored profile fills request-header defaults and
+  // anything the shell exported still wins.
+  const env = effectiveEnv(rawEnv);
+
+  if (parsed.command === "auth") {
+    await runAuth(parsed.action, env, {
+      url: parsed.url,
+      json: parsed.json,
+    });
     return;
   }
 

@@ -82,6 +82,24 @@ bun --silent run cli -- catalog --json
 
 Lists providers, models, defaults, and whether a sandbox runner is configured.
 
+### Authentication
+
+```bash
+bun --silent run cli -- auth login            # open the dashboard, confirm the code, approve
+bun --silent run cli -- auth status
+bun --silent run cli -- auth logout
+```
+
+Device flow: `auth login` prints a short code and opens `<workspace>/authorize`.
+The dashboard shows the same code; approving binds the settings that user
+configured there (AI provider/model/key, GitHub token, sandbox runner
+URL/key/config) to this shell. The payload travels encrypted (AES-GCM) and the
+key stays in the URL fragment, so the deployment cannot read it. The result is
+stored in `~/.edgespec/auth.json`; those values only fill the environment
+slots the shell leaves empty, and everything still travels as request headers.
+Secrets remain environment-first: a `GH_TOKEN` in the shell beats a logged-in
+profile.
+
 ## Options
 
 | Option                  | Meaning                                   |
@@ -106,7 +124,10 @@ Lists providers, models, defaults, and whether a sandbox runner is configured.
 
 ## Environment
 
-Secrets are read from the environment, never from flags:
+Secrets are read from the environment, never from flags. Logging in with
+`edge-spec auth login` stores a locally decrypted copy of the dashboard's
+settings in `~/.edgespec/auth.json` that fills whichever of these the shell
+leaves empty (the shell always wins):
 
 | Variable                            | Meaning                                                                               |
 | ----------------------------------- | ------------------------------------------------------------------------------------- |

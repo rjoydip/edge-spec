@@ -69,7 +69,13 @@ export type ParsedArgs =
       json: boolean;
     }
   | { command: "help"; topic?: string }
-  | { command: "version" };
+  | { command: "version" }
+  | {
+      command: "auth";
+      action: "login" | "status" | "logout";
+      url?: string;
+      json: boolean;
+    };
 
 const common = {
   url: { type: "string" as const },
@@ -256,6 +262,24 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     };
   }
 
+  if (command === "auth") {
+    const [action, ...authRest] = rest;
+    const { values } = parse(authRest.slice(action === undefined ? 1 : 1), common);
+    if (values.help) return { command: "help", topic: "auth" };
+    if (action !== "login" && action !== "status" && action !== "logout") {
+      throw new UsageError("auth needs an action: login, status or logout.");
+    }
+    if (action !== "login" && text(values.url)) {
+      throw new UsageError("--url only applies to auth login.");
+    }
+    return {
+      command: "auth",
+      action,
+      ...(text(values.url) ? { url: text(values.url) } : {}),
+      json: values.json === true,
+    };
+  }
+
   if (command === "help") return { command: "help", ...(rest[0] ? { topic: rest[0] } : {}) };
   throw new UsageError(`Unknown command: ${command}`);
 }
@@ -264,6 +288,11 @@ export const helpText = `EdgeSpec CLI
 
 Usage:
   edge-spec scan <owner/name> [options]
+  edge-spec generate <owner/name> <path> [options]
+  edge-spec run <owner/name> [options]
+  edge-spec watch <directory> [options]
+  edge-spec catalog [options]
+  edge-spec auth login | status | logout
   edge-spec generate <owner/name> <path> [options]
   edge-spec run <owner/name> [options]
   edge-spec watch <directory> [options]
@@ -289,6 +318,20 @@ Options:
   --json                     Print machine-readable JSON
   -h, --help                 Show this help
   -v, --version              Show the version
+
+  --write                    Watch mode: apply generated tests without asking
+  --pr                       Open a pull request for passing tests
+  --json                     Print machine-readable JSON
+  -h, --help                 Show this help
+  -v, --version              Show the version
+
+Authentication:
+  edge-spec auth login       Device flow: a code is printed, open the dashboard,
+  --url <url>                accept it there, and the configured profile
+                             (AI model/key, GitHub token, sandbox runner) is
+                             stored for the shell to use as headers.
+  edge-spec auth status      Show what a login stored
+  edge-spec auth logout      Remove it
 
 Secrets are read from the environment, never from flags:
   GH_TOKEN                 GitHub token (GITHUB_TOKEN / EDGESPEC_GITHUB_TOKEN are aliases)
