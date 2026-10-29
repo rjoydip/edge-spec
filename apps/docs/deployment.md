@@ -30,9 +30,12 @@ bun run alchemy profile edit --profile default --add Cloudflare --method stored 
 ```
 
 The token needs Workers Scripts, D1, R2 and Workers AI permissions. The Alchemy
-state store additionally needs account-level Workers access (Secrets Store and
-the workers.dev subdomain), so mint the token with the account-scope Workers
-resource included. Check with `bun run alchemy profile show`.
+state store additionally needs the account-scope **Workers Secrets Store**
+permission (Cloudflare's API names it *Secrets Store Read/Write*) and Workers
+subdomain read access — a token that lists the four resource permissions but
+omits Secrets Store passes a plain Workers/D1/R2 check yet still fails the
+state-store refresh with `Authentication error`. Check with
+`bun run alchemy profile show`.
 
 A deploy that worked before and then fails during "Refreshing Cloudflare State
 Store credentials" with `Unauthorized: Authentication error` means the token
