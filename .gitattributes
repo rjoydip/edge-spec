@@ -1,0 +1,4 @@
+# Migrations are content-hashed into D1's migration history. Force LF so a
+# Windows checkout (core.autocrlf=true) never records CRLF hashes that then
+# mismatch the LF hashes CI computes.
+*.sql text eol=lf
