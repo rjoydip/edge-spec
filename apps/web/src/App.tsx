@@ -24,6 +24,9 @@ import {
 } from "@/api";
 import { AgentWorkspace } from "@/components/agent/workspace";
 import { DeviceAuthorize } from "@/components/agent/device-authorize";
+import { AuthOverlay, authModeOfPath, type AuthMode } from "@/components/agent/account-overlay";
+import { PricingOverlay } from "@/components/agent/pricing-overlay";
+import { fetchAccount, type AccountUser } from "@/lib/account";
 import { readDevicePage } from "@/lib/device";
 import { SettingsSheet, type SettingsSection } from "@/components/agent/settings-sheet";
 import { INITIAL_STEPS, type LogEntry, type LogLevel, type Steps } from "@/components/agent/shared";
@@ -714,9 +717,48 @@ export function App() {
   /** `/authorize` deep link from `edge-spec auth login`. */
   const authorizing = useMemo(() => readDevicePage(), []);
 
+  /** Account screens keyed off the URL, and the session on load. */
+  const [authMode, setAuthMode] = useState<AuthMode | undefined>(() =>
+    authModeOfPath(window.location.pathname, window.location.search),
+  );
+  const [pricingOpen, setPricingOpen] = useState(() => window.location.pathname === "/pricing");
+  const [account, setAccount] = useState<AccountUser | null>(null);
+  const [accountsEnabled, setAccountsEnabled] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAccount().then((state) => {
+      if (cancelled) return;
+      setAccountsEnabled(state.enabled);
+      setAccount(state.user);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authMode, pricingOpen]);
+
   return (
     <>
       {authorizing && <DeviceAuthorize page={authorizing} />}
+      {authMode && (
+        <AuthOverlay
+          mode={authMode}
+          onAuthorized={(user) => {
+            setAccount(user);
+            setAuthMode(undefined);
+          }}
+        />
+      )}
+      {!authMode && pricingOpen && (
+        <PricingOverlay
+          account={account}
+          onSignedOut={() => {
+            setAccount(null);
+            setPricingOpen(false);
+            window.history.replaceState(null, "", "/");
+          }}
+        />
+      )}
       <AgentWorkspace
         project={project}
         settings={settings}
@@ -751,6 +793,7 @@ export function App() {
         onOpenPull={openPullForItems}
         onOpenSettings={openSettings}
         onDismissToast={() => setToast(undefined)}
+        {...(accountsEnabled ? { account } : {})}
       />
       <TooltipProvider delayDuration={180}>
         <SettingsSheet

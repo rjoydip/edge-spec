@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { providerById } from "@edge-spec/core/catalog";
+import { downloadArtifactZip, downloadArtifactFile } from "@/lib/artifact";
 import { compareRuns, type RunComparison, type RunSummary } from "@edge-spec/core/history";
 import { pullRequestBody } from "@edge-spec/core/provenance";
 import type {
@@ -317,6 +318,20 @@ export function SourceDialog({
           <Button variant="outline" size="sm" className="mr-auto" onClick={onViewDiff}>
             <FileDiff className="size-3.5" stroke={ICON_GRADIENT} />
             View diff
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              downloadArtifactFile({
+                testPath: generation.testPath,
+                code: generation.code,
+              })
+            }
+            title="Save this generated file"
+          >
+            <FileCode2 className="size-3.5 text-emerald-400" />
+            Download
           </Button>
           <Button variant="outline" size="sm" onClick={onGenerate} disabled={regenerating}>
             <RefreshCw className={cn("size-3.5 text-sky-400", regenerating && "animate-spin")} />
@@ -1149,10 +1164,29 @@ export function PrDialog({
             <p className="text-[10px] font-semibold tracking-wide text-zinc-500 uppercase">
               Pull request
             </p>
-            <Button variant="outline" size="xs" onClick={generateCopy}>
-              <Sparkles className="size-3.5 text-fuchsia-400" />
-              Generate title & description
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={accepted.length === 0}
+                onClick={() =>
+                  downloadArtifactZip(
+                    accepted.map((entry) => ({
+                      testPath: entry.item.generation.testPath,
+                      code: entry.item.generation.code,
+                    })),
+                    project.repo ? `${project.repo.replace("/", "-")}-tests` : undefined,
+                  )
+                }
+              >
+                <FileCode2 className="size-3.5 text-emerald-400" />
+                Download .zip
+              </Button>
+              <Button variant="outline" size="xs" onClick={generateCopy}>
+                <Sparkles className="size-3.5 text-fuchsia-400" />
+                Generate title & description
+              </Button>
+            </div>
           </div>
           <PField label="Title">
             <Input

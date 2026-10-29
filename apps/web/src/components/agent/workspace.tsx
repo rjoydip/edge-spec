@@ -117,6 +117,7 @@ import {
   cn,
 } from "@edge-spec/ui";
 import { fetchBranches, recordRunDecision, type PullMeta } from "@/api";
+import type { AccountUser } from "@/lib/account";
 import { isLocalPathInput } from "@/lib/local-path";
 import { setProject, type Project, type Settings as SettingsValue } from "@/lib/settings";
 import { toggleMode, useAppearance } from "@/lib/theme";
@@ -221,6 +222,8 @@ export interface AgentWorkspaceProps {
   onOpenPull: (items: AgentTest[], meta: PullMeta) => Promise<string>;
   onOpenSettings: (section?: SettingsSection) => void;
   onDismissToast: () => void;
+  /** Accounts: present only when the deployment has the auth routes. */
+  account?: AccountUser | null;
 }
 
 export function AgentWorkspace({
@@ -257,6 +260,7 @@ export function AgentWorkspace({
   onOpenPull,
   onOpenSettings,
   onDismissToast,
+  account,
 }: AgentWorkspaceProps) {
   const appearance = useAppearance();
   const provider = providerById(settings.provider);
@@ -800,6 +804,27 @@ export function AgentWorkspace({
               </div>
 
               <div className="ml-auto flex items-center gap-1.5">
+                {account !== undefined && (
+                  <Hint
+                    label={
+                      account
+                        ? `${account.email}${account.emailVerified ? "" : " · email not verified"} · plans`
+                        : "Sign in"
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() => window.location.assign(account ? "/pricing" : "/login")}
+                      className="rounded-xl focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none"
+                      aria-label={account ? "Open account plans" : "Sign in"}
+                    >
+                      <Badge variant="accent" className="h-9 items-center gap-1 px-2.5">
+                        <User />
+                        {account ? `${account.plan}${account.emailVerified ? "" : "·"}` : "Sign in"}
+                      </Badge>
+                    </button>
+                  </Hint>
+                )}
                 <Hint label={`${provider?.name ?? settings.provider} · open provider settings`}>
                   <button
                     type="button"
