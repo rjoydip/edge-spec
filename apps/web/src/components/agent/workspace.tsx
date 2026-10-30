@@ -118,6 +118,7 @@ import {
 } from "@edge-spec/ui";
 import { fetchBranches, recordRunDecision, type PullMeta } from "@/api";
 import type { AccountUser } from "@/lib/account";
+import { AccountSection, Avatar as AccountAvatar } from "./account-menu";
 import { isLocalPathInput } from "@/lib/local-path";
 import { setProject, type Project, type Settings as SettingsValue } from "@/lib/settings";
 import { toggleMode, useAppearance } from "@/lib/theme";
@@ -224,6 +225,10 @@ export interface AgentWorkspaceProps {
   onDismissToast: () => void;
   /** Accounts: present only when the deployment has the auth routes. */
   account?: AccountUser | null;
+  /** Opens the pricing screen from the account menu. */
+  onOpenPricing?: () => void;
+  /** A profile edit changed the signed-in user. */
+  onAccountUpdated?: (user: AccountUser) => void;
 }
 
 export function AgentWorkspace({
@@ -261,6 +266,8 @@ export function AgentWorkspace({
   onOpenSettings,
   onDismissToast,
   account,
+  onOpenPricing,
+  onAccountUpdated,
 }: AgentWorkspaceProps) {
   const appearance = useAppearance();
   const provider = providerById(settings.provider);
@@ -328,9 +335,17 @@ export function AgentWorkspace({
 
   useEffect(() => setRepoInput(projectInput), [projectInput]);
 
+  /** Fully Autonomous is a Pro feature; deployments without accounts stay open. */
+  const plan = account?.plan ?? "free";
+  const autoLocked = account !== undefined && plan !== "pro" && plan !== "team";
+
   useEffect(() => {
     if (localDraft) setMode("review");
   }, [localDraft]);
+
+  useEffect(() => {
+    if (autoLocked) setMode("review");
+  }, [autoLocked]);
 
   // Branches come from GitHub; a local folder has none.
   useEffect(() => {
@@ -523,6 +538,8 @@ export function AgentWorkspace({
     pct: number;
     step?: StepId;
     disabled?: boolean;
+    /** Pro-only stage: visible to free plans, locked. */
+    pro?: boolean;
   }> = [
     {
       id: "clone",
@@ -559,8 +576,30 @@ export function AgentWorkspace({
       pct: scanStatus === "done" ? 100 : scanStatus === "running" ? 60 : 0,
     },
     {
+      id: "static",
+      label: "Static Checks",
+      sub: checksTotal
+        ? `${checksTotal} check${checksTotal === 1 ? "" : "s"}`
+        : settings.sandboxUrl.trim()
+          ? "Repo checks · runner"
+          : "Static check only",
+      icon: ShieldCheck,
+      tone: "review",
+      state:
+        steps.validate.status === "running"
+          ? "running"
+          : checksTotal > 0 || steps.validate.status === "done" || scanStatus === "done"
+            ? "done"
+            : "idle",
+      pct: generated.length
+        ? (validated / generated.length) * 100
+        : steps.validate.status === "running"
+          ? 40
+          : 0,
+    },
+    {
       id: "test",
-      label: "Testing OpenSpec",
+      label: "OpenSpec",
       sub: !hasSpec
         ? "Not applicable · no OpenAPI spec"
         : project.localPath
@@ -588,28 +627,7 @@ export function AgentWorkspace({
             : 0,
       ...(hasSpec ? { step: "validate" as StepId } : {}),
       disabled: !hasSpec,
-    },
-    {
-      id: "static",
-      label: "Static checks",
-      sub: checksTotal
-        ? `${checksTotal} check${checksTotal === 1 ? "" : "s"}`
-        : settings.sandboxUrl.trim()
-          ? "Repo checks · runner"
-          : "Static check only",
-      icon: ShieldCheck,
-      tone: "review",
-      state:
-        steps.validate.status === "running"
-          ? "running"
-          : checksTotal > 0 || steps.validate.status === "done"
-            ? "done"
-            : "idle",
-      pct: generated.length
-        ? (validated / generated.length) * 100
-        : steps.validate.status === "running"
-          ? 40
-          : 0,
+      pro: true,
     },
     {
       id: "fix",
@@ -627,6 +645,7 @@ export function AgentWorkspace({
               : "idle",
       pct: Math.min(100, (generated.length / Math.max(1, settings.maxFiles)) * 100),
       step: "generate",
+      pro: true,
     },
   ];
 
@@ -804,27 +823,6 @@ export function AgentWorkspace({
               </div>
 
               <div className="ml-auto flex items-center gap-1.5">
-                {account !== undefined && (
-                  <Hint
-                    label={
-                      account
-                        ? `${account.email}${account.emailVerified ? "" : " · email not verified"} · plans`
-                        : "Sign in"
-                    }
-                  >
-                    <button
-                      type="button"
-                      onClick={() => window.location.assign(account ? "/pricing" : "/login")}
-                      className="rounded-xl focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none"
-                      aria-label={account ? "Open account plans" : "Sign in"}
-                    >
-                      <Badge variant="accent" className="h-9 items-center gap-1 px-2.5">
-                        <User />
-                        {account ? `${account.plan}${account.emailVerified ? "" : "·"}` : "Sign in"}
-                      </Badge>
-                    </button>
-                  </Hint>
-                )}
                 <Hint label={`${provider?.name ?? settings.provider} · open provider settings`}>
                   <button
                     type="button"
@@ -866,37 +864,45 @@ export function AgentWorkspace({
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      aria-label="User profile"
+                      aria-label="Account, appearance, settings and activity"
                       className="rounded-full transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:outline-none"
                     >
-                      <Avatar>
-                        <AvatarFallback>
-                          <User className="size-4" />
-                        </AvatarFallback>
-                      </Avatar>
+                      {account ? (
+                        <AccountAvatar user={account} size={30} />
+                      ) : (
+                        <Avatar>
+                          <AvatarFallback>
+                            <User className="size-4" />
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-64">
-                    <DropdownMenuLabel>
-                      <span className="block truncate text-[11px] font-semibold text-zinc-200">
-                        {project.repo || project.localPath || "No project"}
-                      </span>
-                      <span className="block text-[9px] font-normal text-zinc-500">
-                        {project.ref || "no branch"} · {appearance.mode} mode
-                      </span>
+                    {account && (
+                      <AccountSection
+                        account={account}
+                        onUpdated={(user) => onAccountUpdated?.(user)}
+                        onOpenPricing={() => onOpenPricing?.()}
+                      />
+                    )}
+                    <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-[9px] tracking-wide text-zinc-500 uppercase">
+                      Appearance
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={toggleMode}>
                       {appearance.mode === "dark" ? <Sun /> : <Moon />}
                       Switch to {appearance.mode === "dark" ? "light" : "dark"}
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("appearance"))}
+                    >
+                      <Sparkles />
+                      Theme &amp; accent
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[9px] tracking-wide text-zinc-500 uppercase">
+                    <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-[9px] tracking-wide text-zinc-500 uppercase">
                       Settings
                     </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => openFromMenu(() => onOpenSettings())}>
-                      <Settings />
-                      All settings
-                    </DropdownMenuItem>
                     <DropdownMenuItem
                       onSelect={() => openFromMenu(() => onOpenSettings("provider"))}
                     >
@@ -925,14 +931,12 @@ export function AgentWorkspace({
                       <Server />
                       Deployment
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => openFromMenu(() => onOpenSettings("appearance"))}
-                    >
-                      <Sparkles />
-                      Appearance
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => onOpenSettings())}>
+                      <Settings />
+                      All settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[9px] tracking-wide text-zinc-500 uppercase">
+                    <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-[9px] tracking-wide text-zinc-500 uppercase">
                       Activity
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={() => openFromMenu(() => setHistoryOpen(true))}>
@@ -1091,13 +1095,21 @@ export function AgentWorkspace({
                 </div>
                 <RadioGroup
                   value={mode}
-                  onValueChange={(value) => setMode(value as Mode)}
+                  onValueChange={(value) => {
+                    if (value === "auto" && autoLocked) {
+                      onOpenPricing?.();
+                      return;
+                    }
+                    setMode(value as Mode);
+                  }}
                   className="grid gap-2 sm:grid-cols-2"
                 >
                   {MODES.map((option) => {
                     const Icon = option.icon;
                     const active = mode === option.id;
                     const needsGitHub = option.id === "auto" && localDraft;
+                    const needsPro = option.id === "auto" && autoLocked;
+                    const locked = needsGitHub || needsPro;
                     const tile =
                       option.id === "review"
                         ? active
@@ -1110,11 +1122,15 @@ export function AgentWorkspace({
                       <div
                         key={option.id}
                         onClick={() => {
+                          if (needsPro) {
+                            onOpenPricing?.();
+                            return;
+                          }
                           if (!needsGitHub) setMode(option.id);
                         }}
                         className={cn(
                           "relative flex items-start gap-2.5 rounded-xl border p-2.5 transition",
-                          needsGitHub
+                          locked
                             ? "cursor-not-allowed border-zinc-800 bg-zinc-900/20 opacity-55"
                             : active
                               ? "cursor-pointer border-indigo-500/50 bg-indigo-500/[0.08] shadow-lg shadow-indigo-950/20"
@@ -1124,7 +1140,7 @@ export function AgentWorkspace({
                         <span
                           className={cn(
                             "flex size-8 shrink-0 items-center justify-center rounded-lg border",
-                            needsGitHub ? "border-zinc-800 bg-zinc-950/50 text-zinc-600" : tile,
+                            locked ? "border-zinc-800 bg-zinc-950/50 text-zinc-600" : tile,
                           )}
                         >
                           <Icon className="size-4" />
@@ -1139,6 +1155,15 @@ export function AgentWorkspace({
                                 selected
                               </Badge>
                             )}
+                            {option.id === "auto" && (
+                              <Badge
+                                variant={needsPro ? "warning" : "accent"}
+                                className="gap-0.5 px-1.5 py-0 text-[9px]"
+                              >
+                                {needsPro && <Lock className="size-2.5" />}
+                                PRO
+                              </Badge>
+                            )}
                             {needsGitHub && (
                               <Badge variant="warning" className="gap-0.5 px-1.5 py-0 text-[9px]">
                                 <Lock className="size-2.5" />
@@ -1147,9 +1172,11 @@ export function AgentWorkspace({
                             )}
                           </div>
                           <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
-                            {needsGitHub
-                              ? "Local folders cannot open a pull request."
-                              : option.desc}
+                            {needsPro
+                              ? "Upgrade to Pro to let verified tests be accepted automatically."
+                              : needsGitHub
+                                ? "Local folders cannot open a pull request."
+                                : option.desc}
                           </p>
                           <p
                             className={cn(
@@ -1218,6 +1245,8 @@ export function AgentWorkspace({
                       position={index + 1}
                       onOpen={stage.step ? () => openLog(stage.step as StepId) : undefined}
                       disabled={stage.disabled || scanStatus === "idle"}
+                      locked={Boolean(stage.pro && autoLocked)}
+                      onUpgrade={() => onOpenPricing?.()}
                     />
                   </Fragment>
                 ))}
@@ -2258,6 +2287,8 @@ function StageNode({
   position,
   onOpen,
   disabled,
+  locked,
+  onUpgrade,
 }: {
   position: number;
   label: string;
@@ -2268,6 +2299,9 @@ function StageNode({
   pct: number;
   onOpen?: () => void;
   disabled?: boolean;
+  /** Pro-only stage on a free plan: visible, dimmed, opens the pricing screen. */
+  locked?: boolean;
+  onUpgrade?: () => void;
 }) {
   const palette = TONES[tone];
   const running = state === "running";
@@ -2276,8 +2310,8 @@ function StageNode({
   const card = (
     <button
       type="button"
-      onClick={onOpen}
-      disabled={!interactive}
+      onClick={locked ? onUpgrade : onOpen}
+      disabled={!interactive && !locked}
       style={
         {
           "--stage-progress": `${Math.max(0, Math.min(100, pct))}%`,
@@ -2287,7 +2321,8 @@ function StageNode({
       className={cn(
         "pipeline-node group relative min-w-0 flex-1 rounded-xl border border-transparent px-2.5 py-2.5 text-left transition-all",
         interactive ? "hover:-translate-y-0.5" : "cursor-default",
-        disabled && "opacity-60",
+        (disabled || locked) && "opacity-60",
+        locked && "cursor-pointer hover:opacity-80",
         done
           ? "bg-zinc-900/70"
           : running
@@ -2319,7 +2354,13 @@ function StageNode({
           <p className="truncate text-[11px] font-semibold text-zinc-200">{label}</p>
           <p className="truncate font-mono text-[10px] text-zinc-500">{sub}</p>
         </div>
-        <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-600">
+        <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10px] text-zinc-600">
+          {locked && (
+            <span className="flex items-center gap-0.5 rounded border border-amber-500/30 bg-amber-500/10 px-1 py-0 text-[8.5px] font-semibold text-amber-300">
+              <Lock className="size-2.5" />
+              PRO
+            </span>
+          )}
           {String(position).padStart(2, "0")}
           {interactive && (
             <ChevronRight className="ml-0.5 inline size-3 text-zinc-700 transition group-hover:text-zinc-400" />
@@ -2328,6 +2369,7 @@ function StageNode({
       </div>
     </button>
   );
+  if (locked) return <Hint label={`${label} needs the Pro plan · upgrade`}>{card}</Hint>;
   return interactive ? <Hint label={`Open ${label} events`}>{card}</Hint> : card;
 }
 

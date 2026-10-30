@@ -2,15 +2,18 @@
 import { useState } from "react";
 import { PLANS } from "@edge-spec/core/plans";
 import { Button } from "@edge-spec/ui";
+import { ArrowLeft } from "lucide-react";
 import { signOut, type AccountUser } from "@/lib/account";
 import { Link, Overlay } from "./account-overlay";
 
 export function PricingOverlay({
   account,
   onSignedOut,
+  onClose,
 }: {
   account: AccountUser | null;
   onSignedOut?: () => void;
+  onClose?: () => void;
 }) {
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
@@ -110,7 +113,14 @@ export function PricingOverlay({
           <code className="mx-1 rounded bg-zinc-900 px-1">ADMIN_KEY</code>. Checkout lands here when
           the gateway is added.
         </p>
-        <Link to="/">Back to EdgeSpec</Link>
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex items-center gap-1 text-[11px] text-zinc-500 transition hover:text-zinc-300"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back
+        </button>
       </div>
     </Overlay>
   );

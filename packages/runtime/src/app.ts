@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
+import { isPlanId } from "@edge-spec/core/plans";
 import { approveDevice, pollDevice, startDeviceFlow } from "./device-flow";
-import { accountRoutes } from "./auth-routes";
+import { authFor } from "./auth";
 import { streamSSE } from "hono/streaming";
 import type { AiConfig } from "@edge-spec/core/ai";
 import { PROMPT_VERSION, generateTest, probeRateLimit } from "@edge-spec/core/ai";
@@ -103,8 +104,9 @@ import { parseRepoMemory } from "@edge-spec/core/memory";
 import { routeModel } from "@edge-spec/core/routing";
 import { evaluatePullPolicy, parsePullPolicy, policyBlocked } from "@edge-spec/core/policy";
 import type { RunDecision, RunFile, RunSummary } from "@edge-spec/core/history";
-import { artifactsStore, cacheStore, capabilities, jobsQueue } from "./platform";
+import { artifactsStore, cacheStore, capabilities, historyDb, jobsQueue } from "./platform";
 import { runScheduled } from "./scheduled";
+import { observerFor } from "./observability";
 
 /** Header carrying a bring-your-own GitHub token. Mirrors `src/web/lib/settings.ts`. */
 const TOKEN_HEADER = "x-github-token";
@@ -290,9 +292,19 @@ function sandboxFor(c: AppContext): SandboxConfig | undefined {
   };
 }
 
-function fail(err: unknown): Response {
+function fail(err: unknown, c?: AppContext): Response {
   const status = err instanceof HttpError ? err.status : 500;
   const message = err instanceof Error ? err.message : String(err);
+  if (status >= 500 && c) {
+    waitUntil(
+      c,
+      observerFor(c.env).error(err, {
+        method: c.req.method,
+        path: new URL(c.req.url).pathname,
+        status,
+      }),
+    );
+  }
   return new Response(JSON.stringify({ error: message, status }), {
     status,
     headers: { "content-type": "application/json" },
@@ -356,6 +368,38 @@ export async function cached<T>(
   return value;
 }
 
+/**
+ * Request telemetry: one `http.request` event per finished response, and
+ * `http.error` for the ones the routes could not handle. The observer is
+ * chosen by `EDGESPEC_OBSERVABILITY`; the event promise is handed to the host's
+ * `waitUntil` so a serverless invocation does not drop it.
+ */
+app.use("*", async (c, next) => {
+  const started = Date.now();
+  const observer = observerFor(c.env);
+  const path = new URL(c.req.url).pathname;
+  try {
+    await next();
+  } finally {
+    const pending = observer.event("http.request", {
+      method: c.req.method,
+      path,
+      status: c.res.status,
+      ms: Date.now() - started,
+    });
+    waitUntil(c, pending);
+  }
+});
+
+/** Hosts expose `waitUntil` differently; absence just means fire-and-forget. */
+function waitUntil(c: AppContext, promise: Promise<unknown>): void {
+  try {
+    c.executionCtx.waitUntil(promise);
+  } catch {
+    void promise.catch(() => undefined);
+  }
+}
+
 app.get("/api/health", (c) =>
   c.json({
     status: "ok",
@@ -406,7 +450,7 @@ app.get("/api/quota", async (c) => {
     });
     return c.json(body);
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -461,7 +505,7 @@ app.post("/api/sandbox/health", async (c) => {
       }),
     );
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -484,7 +528,7 @@ app.get("/api/branches", async (c) => {
     });
     return c.json(body);
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -663,7 +707,7 @@ app.post("/api/scan", async (c) => {
       overview,
     });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -682,7 +726,7 @@ app.post("/api/impact", async (c) => {
     const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
     return c.json(await impactForChanges({ github, repo, ref, blobs, changed }));
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -743,7 +787,7 @@ app.post("/api/record", async (c) => {
     }
     return c.json({ enabled: true, specPath, fixtures });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -828,7 +872,7 @@ app.post("/api/coverage", async (c) => {
       coverageStatus: "measured",
     });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -892,7 +936,7 @@ app.post("/api/run", async (c) => {
       },
     };
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 
   const { github, aiConfig, sandbox, repoToken, authFixture, fixtures, input } = prepared;
@@ -1188,7 +1232,7 @@ app.post("/api/generate", async (c) => {
       ...(notices.length > 0 ? { notices } : {}),
     });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1319,7 +1363,7 @@ app.post("/api/pull-request", async (c) => {
     }
     return c.json({ url, files: files.length });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1330,7 +1374,7 @@ app.get("/api/pulls", async (c) => {
     const pulls = await githubFor(c).pulls(`${repo.owner}/${repo.name}`);
     return c.json({ pulls });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1467,10 +1511,41 @@ app.get("/api/cli/device/poll", async (c) => {
   return c.json(poll);
 });
 
-/** Accounts: signup, login, sessions, verification, reset, admin plans.
- * The credentials sub-app types its env for its own handlers; the shared `app`
- * keeps blank generics, and the cast is the monomorphic mount. */
-app.route("/", accountRoutes() as unknown as Hono);
+/**
+ * Accounts: Better Auth owns every `/api/auth/*` endpoint (signup, login,
+ * sessions, verification, password reset). One handler, one source of truth;
+ * the browser's settings headers ride along to the email callbacks.
+ */
+app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  const db = historyDb(c.env);
+  if (!db) return c.json({ error: "Accounts need a database. Bind one first." }, 501);
+  // The platform adapter resolves the neutral binding; better-auth sees `DB`.
+  return authFor(db === c.env.DB ? c.env : { ...c.env, DB: db }).handler(c.req.raw);
+});
+
+/** Manual plan activation until a payment gateway exists. */
+app.post("/api/admin/plans/activate", async (c) => {
+  const db = historyDb(c.env);
+  if (!db) return c.json({ error: "Accounts need a database." }, 501);
+  const expected = c.env.ADMIN_KEY?.trim();
+  if (!expected) return c.json({ error: "Not enabled: set ADMIN_KEY." }, 501);
+  const given = c.req.header("x-admin-key")?.trim() ?? "";
+  if (!sameSecret(given, expected)) return c.json({ error: "Unauthorized." }, 401);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const plan = typeof body.plan === "string" ? body.plan.trim() : "";
+  if (!isPlanId(plan)) return c.json({ error: `Unknown plan "${plan}".` }, 400);
+  const row = await db
+    .prepare('SELECT id, email FROM "user" WHERE lower(email) = ?')
+    .bind(email)
+    .first<{ id: string; email: string }>();
+  if (!row) return c.json({ error: "No account for that email." }, 404);
+  await db
+    .prepare('UPDATE "user" SET plan = ?, "updatedAt" = ? WHERE id = ?')
+    .bind(plan, new Date().toISOString(), row.id)
+    .run();
+  return c.json({ ok: true, user: { id: row.id, email: row.email, plan } });
+});
 
 app.post("/webhook", async (c) => {
   try {
@@ -1576,7 +1651,7 @@ app.post("/webhook", async (c) => {
     });
     return c.json({ workflowId: instance.id }, 202);
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1591,7 +1666,7 @@ app.get("/api/backlog", async (c) => {
       items: await listBacklog(db, `${repo.owner}/${repo.name}`),
     });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1617,7 +1692,7 @@ app.patch("/api/backlog", async (c) => {
     }).catch(() => undefined);
     return c.json({ updated: true });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1630,7 +1705,7 @@ app.get("/api/schedules", async (c) => {
       schedules: (await listScheduledRepos(db)).map(scheduledRepoView),
     });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1670,7 +1745,7 @@ app.put("/api/schedules", async (c) => {
     }).catch(() => undefined);
     return c.json({ enabled: true, schedules });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1688,7 +1763,7 @@ app.delete("/api/schedules", async (c) => {
     }).catch(() => undefined);
     return c.json({ deleted: true });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1701,7 +1776,7 @@ app.get("/api/workspace", async (c) => {
       workspace: workspaceView(await getWorkspace(db)),
     });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1731,7 +1806,7 @@ app.put("/api/workspace", async (c) => {
     }).catch(() => undefined);
     return c.json({ enabled: true, workspace: workspaceView(workspace) });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1749,7 +1824,7 @@ app.get("/api/audit", async (c) => {
       }),
     });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1764,7 +1839,7 @@ app.get("/api/memory", async (c) => {
       memory: await getMemory(db, `${repo.owner}/${repo.name}`),
     });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1788,7 +1863,7 @@ app.put("/api/memory", async (c) => {
     }).catch(() => undefined);
     return c.json({ enabled: true, memory });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1801,7 +1876,7 @@ app.delete("/api/memory", async (c) => {
     await deleteMemory(db, `${repo.owner}/${repo.name}`);
     return c.json({ deleted: true });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1814,7 +1889,7 @@ app.get("/api/policies", async (c) => {
     const policy = await getPolicy(db, `${repo.owner}/${repo.name}`);
     return c.json({ enabled: true, policy });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1838,7 +1913,7 @@ app.put("/api/policies", async (c) => {
     }).catch(() => undefined);
     return c.json({ enabled: true, policy });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1851,7 +1926,7 @@ app.delete("/api/policies", async (c) => {
     await deletePolicy(db, `${repo.owner}/${repo.name}`);
     return c.json({ deleted: true });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1868,7 +1943,7 @@ app.get("/api/runs", async (c) => {
     const runs = await listRuns(db, `${repo.owner}/${repo.name}`, limit);
     return c.json({ enabled: true, runs });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1883,7 +1958,7 @@ app.delete("/api/runs", async (c) => {
     await deleteRunArtifacts(c.env, ids).catch(() => 0);
     return c.json({ deleted });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1897,7 +1972,7 @@ app.get("/api/runs/:id/files", async (c) => {
     if (!detail) throw new HttpError(404, "Run not found.");
     return c.json({ enabled: true, ...detail });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1910,7 +1985,7 @@ app.get("/api/runs/:id/artifacts", async (c) => {
     if (!artifact) throw new HttpError(404, "No artifacts were stored for this run.");
     return c.json({ enabled: true, artifact });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1938,7 +2013,7 @@ app.post("/api/runs/:id/decisions", async (c) => {
     await setRunDecisions(db, id, decisions.slice(0, 200));
     return c.json({ updated: Math.min(decisions.length, 200) });
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 
@@ -1951,7 +2026,7 @@ app.get("/api/runs/:id", async (c) => {
     const instance = await binding.get(id);
     return c.json(await instance.status());
   } catch (err) {
-    return fail(err);
+    return fail(err, c);
   }
 });
 

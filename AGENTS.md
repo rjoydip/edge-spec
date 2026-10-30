@@ -68,9 +68,10 @@ lint, `bun check .` across every project, tests). For a UI change, also run
   (`missing-openapi/`, `express/`, `elysia/`), `node/`, `openapi/`, and dependency-free
   fixtures in `src/`. Reference tests stay in each `tests/` folder;
   `complete-app/` deliberately has sibling tests.
-- `apps/worker/src/` — Cloudflare-only: `index.ts` entry, `workflow.ts`
-  (Workflow adapter over the shared jobs runner), `kv.ts` and
-  `cloudflare.d.ts`.
+- `apps/worker/src/` — Cloudflare-only entry: `index.ts` (bindings → ports,
+  `fetch` + `scheduled`, Workflow export). The KV cache and Workflows
+  adapters live in `packages/adapters/src/cloudflare/`, including the local
+  `cloudflare.d.ts` declaration.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `evals/` — golden-scan harness (`harness.ts`, `run.ts`, `golden.json`) and its
@@ -112,7 +113,9 @@ dashboard and the deployment's Workers AI/sandbox.
 
 1. **The deployment stores no user configuration.** Repository, provider, model,
    pipeline knobs live in `localStorage`; GitHub and AI keys are sent as headers
-   (`x-github-token`, `x-ai-key`, `x-ai-base-url`) per request.
+   (`x-github-token`, `x-ai-key`, `x-ai-base-url`) per request. Account rows
+   (email, Better Auth's password hash, plan) are the deliberate exception:
+   they live in SQL and the dashboard requires a session before it renders.
 2. **Workflow params are persisted.** Never pass a user API key to
    `TestGenerationWorkflow`; it uses the deployment's Workers AI and a GitHub App
    installation token (or `GH_TOKEN` when no App is configured). The
@@ -136,12 +139,15 @@ dashboard and the deployment's Workers AI/sandbox.
 10. **UI primitives live in `packages/ui`.** The dashboard imports the React
     components; the VitePress site consumes only `theme.css`. Do not copy
     primitives back into `apps/web`.
-11. **Runtime capabilities go through ports.** SQL, objects, jobs and cache are
-    `SqlDatabase` / `ObjectStore` / `JobQueue` / `CacheStore` from
-    `packages/runtime/src/env.ts`, resolved by `platform.ts` and selected for other
-    hosts by `packages/runtime/src/adapters/select.ts`. `apps/worker` stays
-    Cloudflare-only: do not import a runtime binding directly in shared code,
-    and never let `pg`/`aws4fetch` reach the Cloudflare entry.
+11. **Runtime capabilities go through ports.** SQL, objects, jobs, cache and
+    email are `SqlDatabase` / `ObjectStore` / `JobQueue` / `CacheStore` /
+    `EmailSender` and `Observer` from `packages/runtime/src/ports.ts`
+    (re-exported by `env.ts`), resolved by `platform.ts`. Vendor drivers live in `packages/adapters`
+    (`node/select.ts`, `cloudflare/`, `aws/lambda.ts`) and `packages/db`; the
+    shared app must not import them. One Hono app (`packages/runtime/src/app.ts`)
+    serves every entry — `apps/worker` (Cloudflare), `apps/server` (Bun), the
+    Vercel function and the AWS Lambda handler — and each entry stays thin.
+    `apps/worker` stays Cloudflare-only: never let `pg`/`aws4fetch` reach it.
 
 ## Adding a provider or model
 
@@ -160,7 +166,8 @@ Edit `packages/core/src/catalog.ts` only:
 - In Workers, call `fetch` as a standalone function. `this.fetchImpl(...)` throws
   `Illegal invocation`; `github.ts` captures it in a local first.
 - `import ... from "cloudflare:workers"` must stay external in
-  `apps/worker/vite.config.ts`; it is declared in `apps/worker/src/cloudflare.d.ts`.
+  `apps/worker/vite.config.ts`; it is declared in
+  `packages/adapters/src/cloudflare/cloudflare.d.ts`.
 - GitHub ignores unauthenticated access to private repos and rate-limits
   anonymous tree reads.
 - `design.sample.ts` is a reference mockup, not app code. It is excluded from

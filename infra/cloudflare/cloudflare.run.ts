@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
@@ -12,9 +11,10 @@ import { stageSlug } from "../shared/stage.ts";
 /**
  * Cloudflare stack for EdgeSpec.
  *
- * `script` uploads the Vite-built Worker bundle so Alchemy does not introduce
- * a second bundler. `alchemy dev` serves that same bundle locally on the port
- * the dashboard's Vite proxy expects.
+ * `main` + `bundle: false` uploads the Vite-built Worker bundle byte-for-byte,
+ * so Alchemy does not introduce a second bundler. In dev it also watches that
+ * directory: the `vite build --watch` process (`bun run dev:worker`) rebuilds
+ * `dist/worker/index.js`, and `alchemy dev` reloads the local Worker.
  */
 const localDev = /^(1|true)$/i.test(process.env.ALCHEMY_DEV ?? "");
 
@@ -59,12 +59,20 @@ export default Alchemy.Stack(
     const driftAlertWebhookSecret = yield* Config.option(
       Config.Redacted("DRIFT_ALERT_WEBHOOK_SECRET"),
     );
+    // Accounts and observability are optional: unset means "better-auth
+    // derives/uses its default secret" and "consola logs".
+    const betterAuthSecret = yield* Config.option(Config.Redacted("BETTER_AUTH_SECRET"));
+    const emailApiKey = yield* Config.option(Config.Redacted("EMAIL_API_KEY"));
+    const sentryDsn = yield* Config.option(Config.Redacted("SENTRY_DSN"));
+    const axiomToken = yield* Config.option(Config.Redacted("AXIOM_TOKEN"));
+    const otlpEndpoint = yield* Config.option(Config.Redacted("OTEL_EXPORTER_OTLP_ENDPOINT"));
+    const otlpHeaders = yield* Config.option(Config.Redacted("OTEL_EXPORTER_OTLP_HEADERS"));
 
     const worker = yield* Cloudflare.Worker("edge-spec", {
-      script: readFileSync(
-        fileURLToPath(new URL("../../dist/worker/index.js", import.meta.url)),
-        "utf8",
-      ),
+      // Prebuilt source (not an inline `script`): Alchemy watches this file in
+      // dev, so a Vite rebuild reloads the Worker without restarting the stack.
+      main: fileURLToPath(new URL("../../dist/worker/index.js", import.meta.url)),
+      bundle: false,
       name: isProd ? "edge-spec" : `edge-spec-${slug}`,
       compatibility: { date: "2025-07-18", flags: ["nodejs_compat"] },
       // Keep the API on the port the dashboard's Vite proxy and docs use.
@@ -101,6 +109,12 @@ export default Alchemy.Stack(
         ...(Option.isSome(driftAlertWebhookSecret)
           ? { DRIFT_ALERT_WEBHOOK_SECRET: driftAlertWebhookSecret.value }
           : {}),
+        ...(Option.isSome(betterAuthSecret) ? { BETTER_AUTH_SECRET: betterAuthSecret.value } : {}),
+        ...(Option.isSome(emailApiKey) ? { EMAIL_API_KEY: emailApiKey.value } : {}),
+        ...(Option.isSome(sentryDsn) ? { SENTRY_DSN: sentryDsn.value } : {}),
+        ...(Option.isSome(axiomToken) ? { AXIOM_TOKEN: axiomToken.value } : {}),
+        ...(Option.isSome(otlpEndpoint) ? { OTEL_EXPORTER_OTLP_ENDPOINT: otlpEndpoint.value } : {}),
+        ...(Option.isSome(otlpHeaders) ? { OTEL_EXPORTER_OTLP_HEADERS: otlpHeaders.value } : {}),
       },
     });
 

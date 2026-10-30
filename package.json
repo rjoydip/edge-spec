@@ -4,6 +4,9 @@
   "private": true,
   "description": "Find untested code, generate tests with the model you choose, and open a pull request.",
   "type": "module",
+  "overrides": {
+    "@effect/platform-node-shared": "4.0.6"
+  },
   "workspaces": [
     "apps/*",
     "packages/*",
@@ -14,13 +17,13 @@
   "scripts": {
     "dev": "bun run --filter @edge-spec/web dev",
     "dev:all": "bun run scripts/dev.ts",
-    "dev:worker": "bun run build:worker && bun run --cwd infra/cloudflare dev",
+    "dev:worker": "bun run build:worker && bun run scripts/dev-worker.ts",
     "cli": "bun packages/cli/src/index.ts",
     "mcp": "bun packages/mcp/src/index.ts",
     "sandbox": "bun run --filter @edge-spec/sandbox start",
-    "serve": "bun packages/runtime/src/server.ts",
-    "start:node": "bun packages/runtime/src/server.ts",
-    "dev:node": "bun --watch packages/runtime/src/server.ts",
+    "serve": "bun apps/server/src/index.ts",
+    "start:node": "bun apps/server/src/index.ts",
+    "dev:node": "bun --watch apps/server/src/index.ts",
     "migrate": "bun packages/runtime/scripts/migrate.ts",
     "docs:dev": "bun run --filter @edge-spec/docs dev",
     "docs:build": "bun run --filter @edge-spec/docs build",

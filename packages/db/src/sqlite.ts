@@ -32,7 +32,12 @@ function adapt(statement: {
 }
 
 export function createSqlite(options: { path: string }): SqlLikeDatabase {
-  const db = createDatabase(bunSqlite({ name: options.path }));
+  // The connector resolves `path` against the cwd and only special-cases
+  // `:memory:` through `name`; passing an absolute path as `name` would nest it
+  // under `.data/`.
+  const db = createDatabase(
+    bunSqlite(options.path === ":memory:" ? { name: ":memory:" } : { path: options.path }),
+  );
   return {
     prepare(query: string) {
       return adapt(db.prepare(query));

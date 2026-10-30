@@ -4,10 +4,10 @@
  */
 import { describe, expect, it } from "bun:test";
 import { cached } from "@edge-spec/runtime/app";
-import { memoryCache } from "@edge-spec/runtime/adapters/memory-cache";
-import { redisCache } from "@edge-spec/runtime/adapters/redis";
+import { memoryCache } from "../src/node/memory-cache";
+import { redisCache } from "../src/node/redis";
 import type { CacheStore, Env } from "@edge-spec/runtime/env";
-import { kvCache, type KvBinding } from "../src/kv";
+import { kvCache, type KvBinding } from "../src/cloudflare/cache";
 
 const context = (env: Env): Parameters<typeof cached>[0] =>
   ({ env }) as unknown as Parameters<typeof cached>[0];

@@ -11,9 +11,18 @@ export interface DevicePage {
   payloadKey?: string;
 }
 
-export const readDevicePage = (location: Location = window.location): DevicePage => {
+/**
+ * The device page exists only for the `/authorize` deep link the CLI or MCP
+ * server prints. Everywhere else this returns `undefined`, so the app never
+ * shows "Authorize a CLI or MCP app" during a normal launch.
+ */
+export const readDevicePage = (
+  location: Pick<Location, "href" | "pathname"> = window.location,
+): DevicePage | undefined => {
+  if (location.pathname !== "/authorize") return undefined;
   const url = new URL(location.href);
   const userCode = (url.searchParams.get("code") ?? "").trim().toUpperCase();
+  if (!userCode) return undefined;
   const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
   const params = new URLSearchParams(fragment);
   const payloadKey = params.get("p")?.trim() || undefined;

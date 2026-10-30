@@ -5,7 +5,7 @@
  * deployment stores none of it (invariant 1).
  */
 import type { Env } from "./env";
-import type { Context } from "hono";
+import type { EmailSender } from "./ports";
 
 export interface EmailInput {
   to: string;
@@ -20,16 +20,24 @@ export interface EmailConfig {
 }
 
 /** The visitor's settings carry the sender; env is the deployment fallback. */
-export function emailConfigOf(env: Env, c?: Context): EmailConfig | undefined {
-  const key = c?.req.header("x-email-key")?.trim() || env.EMAIL_API_KEY?.trim();
+export function emailConfigOf(env: Env, headers?: Headers): EmailConfig | undefined {
+  const key = headers?.get("x-email-key")?.trim() || env.EMAIL_API_KEY?.trim();
   const from =
-    c?.req.header("x-email-from")?.trim() ||
+    headers?.get("x-email-from")?.trim() ||
     env.EMAIL_FROM?.trim() ||
     (key ? "EdgeSpec <noreply@edgespec.dev>" : undefined);
   return key && from ? { key, from } : undefined;
 }
 
 export type EmailResult = { sent: true } | { sent: false; reason: string };
+
+/**
+ * The `EmailSender` port for one configuration. Resend is plain HTTP, so the
+ * same adapter serves every target; per-request keys stay in `emailConfigOf`.
+ */
+export const emailSender = (config: EmailConfig | undefined): EmailSender => ({
+  send: (input) => sendEmail(config, input),
+});
 
 /** Sends via Resend; a missing config answers "not sent", never throws. */
 export async function sendEmail(
@@ -76,22 +84,20 @@ const action = (url: string, label: string): string => `
   background:#18181b;color:#fff;text-decoration:none;font-size:14px;">${label}</a>
 </p>`;
 
-export function verifyEmailHtml(workspace: string, token: string): string {
-  const url = `${workspace}/verify-email?token=${encodeURIComponent(token)}`;
+export function verifyEmailHtml(url: string): string {
   return shell(
     "Confirm your email",
     `${action(url, "Confirm email")}
-<p style="margin:0;font-size:13px;color:#52525b;">Or paste this token:
-<code>${token}</code></p>`,
+<p style="margin:0;font-size:13px;color:#52525b;">Or open this link:
+<code>${url}</code></p>`,
   );
 }
 
-export function resetPasswordHtml(workspace: string, token: string): string {
-  const url = `${workspace}/reset-password?token=${encodeURIComponent(token)}`;
+export function resetPasswordHtml(url: string): string {
   return shell(
     "Reset your password",
     `${action(url, "Choose a new password")}
-<p style="margin:0;font-size:13px;color:#52525b;">Or paste this token:
-<code>${token}</code></p>`,
+<p style="margin:0;font-size:13px;color:#52525b;">Or open this link:
+<code>${url}</code></p>`,
   );
 }

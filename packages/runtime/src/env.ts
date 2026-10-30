@@ -1,55 +1,32 @@
 import type { AiBinding } from "@edge-spec/core/ai";
+import type {
+  CacheStore,
+  CacheDriver,
+  JobInstance,
+  JobQueue,
+  JobStatus,
+  ObjectStore,
+  ObserverLevel,
+  SqlDatabase,
+  SqlStatement,
+} from "./ports";
 
-/** Just the parts of a job status the dashboard needs. */
-export interface JobStatus {
-  status: string;
-  error?: { message?: string } | null;
-  output?: unknown;
-  steps?: { name: string; status: string }[];
-}
-
-export interface JobInstance {
-  id: string;
-  status(): Promise<JobStatus>;
-}
-
-export interface JobQueue {
-  create(options?: { params?: unknown; id?: string }): Promise<JobInstance>;
-  get(id: string): Promise<JobInstance>;
-}
-
-/** The subset of SQL this Worker uses. Backed by D1, Postgres or SQLite. */
-export interface SqlStatement {
-  bind(...values: unknown[]): SqlStatement;
-  first<T = unknown>(): Promise<T | null>;
-  all<T = unknown>(): Promise<{ results?: T[] }>;
-  run(): Promise<{ meta?: { changes?: number } }>;
-}
-
-export interface SqlDatabase {
-  prepare(query: string): SqlStatement;
-  batch<T = unknown>(statements: SqlStatement[]): Promise<T[]>;
-}
-
-/** The subset of object storage used for drift and run artifacts. */
-export interface ObjectStore {
-  put(
-    key: string,
-    value: string,
-    options?: { httpMetadata?: { contentType?: string } },
-  ): Promise<unknown>;
-  get(key: string): Promise<{ text(): Promise<string> } | null>;
-  delete(key: string): Promise<void>;
-}
-
-/** Optional read-through cache. Never the source of truth. */
-export interface CacheStore {
-  get<T>(key: string): Promise<T | undefined>;
-  set<T>(key: string, value: T, ttlSeconds: number): Promise<void>;
-  delete(key: string): Promise<void>;
-}
-
-export type CacheDriver = "kv" | "redis" | "memory";
+/**
+ * The ports are declared in `./ports`; re-exported here so every existing
+ * `@edge-spec/runtime/env` import keeps working.
+ */
+export type {
+  CacheDriver,
+  CacheStore,
+  EmailSender,
+  JobInstance,
+  JobQueue,
+  JobStatus,
+  ObjectStore,
+  ObserverLevel,
+  SqlDatabase,
+  SqlStatement,
+} from "./ports";
 
 export interface Env {
   /** Static-assets binding. Absent when the host serves the bundle itself. */
@@ -101,6 +78,22 @@ export interface Env {
   ADMIN_KEY?: string;
   /** The public origin used in emails; defaults to the request origin. */
   EDGESPEC_WORKSPACE_URL?: string;
+  /** Observability: consola (default), otlp, sentry, axiom or none. */
+  EDGESPEC_OBSERVABILITY?: string;
+  EDGESPEC_LOG_LEVEL?: ObserverLevel;
+  EDGESPEC_SERVICE_NAME?: string;
+  EDGESPEC_ENV?: string;
+  NODE_ENV?: string;
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+  OTEL_EXPORTER_OTLP_HEADERS?: string;
+  SENTRY_DSN?: string;
+  AXIOM_TOKEN?: string;
+  AXIOM_DATASET?: string;
+  AXIOM_URL?: string;
+  /** Better Auth signing secret; set it in production. */
+  BETTER_AUTH_SECRET?: string;
+  /** Set to 1 only when serving over plain HTTP (local Docker). */
+  EDGESPEC_INSECURE_COOKIES?: string;
 }
 
 /** @deprecated use SqlStatement */

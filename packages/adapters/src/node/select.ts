@@ -8,7 +8,7 @@
  * whose env is missing just leaves that capability off, so a partial
  * deployment still starts and reports honestly.
  */
-import type { Env } from "../env";
+import type { Env } from "@edge-spec/runtime/env";
 import { httpJobs } from "./http-jobs";
 import { memoryCache } from "./memory-cache";
 import { redisCache } from "./redis";
@@ -38,6 +38,20 @@ const PASSTHROUGH = [
   "EMAIL_API_KEY",
   "EMAIL_FROM",
   "ADMIN_KEY",
+  "BETTER_AUTH_SECRET",
+  "EDGESPEC_INSECURE_COOKIES",
+  "EDGESPEC_WORKSPACE_URL",
+  "EDGESPEC_OBSERVABILITY",
+  "EDGESPEC_LOG_LEVEL",
+  "EDGESPEC_SERVICE_NAME",
+  "EDGESPEC_ENV",
+  "NODE_ENV",
+  "OTEL_EXPORTER_OTLP_ENDPOINT",
+  "OTEL_EXPORTER_OTLP_HEADERS",
+  "SENTRY_DSN",
+  "AXIOM_TOKEN",
+  "AXIOM_DATASET",
+  "AXIOM_URL",
 ] as const;
 
 const value = (source: Source, key: string): string | undefined => {

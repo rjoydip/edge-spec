@@ -1,17 +1,21 @@
-/** Account API for the dashboard: /api/auth/* plus the session cache. */
+/**
+ * Account API for the dashboard. Better Auth owns `/api/auth/*`; this module
+ * only adapts its JSON to the dashboard's small surface.
+ */
 import { requestHeaders } from "./settings";
 
 export interface AccountUser {
   id: string;
   email: string;
   name?: string;
-  plan: string;
-  emailVerified: boolean;
-  createdAt: number;
+  image?: string | null;
+  plan?: string;
+  emailVerified?: boolean;
+  createdAt?: string | number;
 }
 
 export interface AccountState {
-  /** The deployment's database exists, so accounts route exists. */
+  /** The deployment has a database, so accounts are available. */
   enabled: boolean;
   user: AccountUser | null;
 }
@@ -19,63 +23,96 @@ export interface AccountState {
 async function errorMessage(response: Response): Promise<string> {
   const text = await response.text();
   try {
-    const parsed = JSON.parse(text) as { error?: unknown };
-    if (typeof parsed.error === "string") return parsed.error;
+    const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
+    const value = parsed.error ?? parsed.message;
+    if (typeof value === "string") return value;
   } catch {
     // Not JSON.
   }
   return text.slice(0, 400) || `Request failed (${response.status}).`;
 }
 
-async function post(path: string, body: unknown): Promise<Response> {
-  return fetch(path, {
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(path, {
     method: "POST",
     headers: { ...requestHeaders() },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    body: JSON.stringify(body),
   });
-}
-
-async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const response = await post(path, body);
   if (!response.ok) throw new Error(await errorMessage(response));
-  return (await response.json()) as T;
+  return (await response.json().catch(() => ({}))) as T;
 }
 
+/** Better Auth's get-session; `null` means signed out, 501 means no database. */
 export async function fetchAccount(): Promise<AccountState> {
   try {
-    const response = await fetch("/api/auth/me", { headers: { ...requestHeaders() } });
-    if (response.status === 404) return { enabled: false, user: null };
-    const body = (await response.json()) as Partial<AccountState>;
-    if (!body.enabled) return { enabled: false, user: null };
-    return { enabled: true, user: body.user ?? null };
+    const response = await fetch("/api/auth/get-session", {
+      headers: { ...requestHeaders() },
+    });
+    if (response.status === 501) return { enabled: false, user: null };
+    if (!response.ok) return { enabled: true, user: null };
+    const body = (await response.json()) as { user?: AccountUser } | null;
+    return { enabled: true, user: body?.user ?? null };
   } catch {
     return { enabled: false, user: null };
   }
 }
 
-export async function signUp(input: { email: string; password: string; name?: string }): Promise<{
-  user: AccountUser;
-  emailNote?: string;
-}> {
-  return postJson("/api/auth/signup", input);
+export async function signUp(input: {
+  email: string;
+  password: string;
+  name: string;
+}): Promise<{ user: AccountUser }> {
+  const result = await post<{ user?: AccountUser }>("/api/auth/sign-up/email", {
+    ...input,
+    callbackURL: "/",
+  });
+  if (!result.user) throw new Error("Sign-up did not return a user.");
+  return { user: result.user };
 }
 
 export async function signIn(email: string, password: string): Promise<{ user: AccountUser }> {
-  return postJson("/api/auth/login", { email, password });
+  const result = await post<{ user?: AccountUser }>("/api/auth/sign-in/email", {
+    email,
+    password,
+    rememberMe: true,
+  });
+  if (!result.user) throw new Error("Sign-in did not return a user.");
+  return { user: result.user };
+}
+
+/** Better Auth's update-user: name and avatar only (plan is server-owned). */
+export async function updateProfile(input: {
+  name: string;
+  image?: string | null;
+}): Promise<AccountUser> {
+  await post("/api/auth/update-user", input);
+  const state = await fetchAccount();
+  if (!state.user) throw new Error("Profile saved, but the session could not be refreshed.");
+  return state.user;
 }
 
 export async function signOut(): Promise<void> {
-  await post("/api/auth/logout", undefined);
-}
-
-export async function verifyEmail(token: string): Promise<void> {
-  await postJson("/api/auth/verify-email", { token });
+  await post("/api/auth/sign-out", {});
 }
 
 export async function requestPasswordReset(email: string): Promise<{ delivered: boolean }> {
-  return postJson("/api/auth/password-reset", { email });
+  await post("/api/auth/request-password-reset", {
+    email,
+    redirectTo: "/reset-password",
+  });
+  // Better Auth answers the same whether or not the address exists.
+  return { delivered: true };
 }
 
 export async function confirmPasswordReset(token: string, password: string): Promise<void> {
-  await postJson("/api/auth/password-reset/confirm", { token, password });
+  await post("/api/auth/reset-password", { token, newPassword: password });
+}
+
+/** Better Auth verifies through its own endpoint; the page forwards the token. */
+export async function verifyEmail(token: string): Promise<void> {
+  const response = await fetch(
+    `/api/auth/verify-email?token=${encodeURIComponent(token)}&callbackURL=/login`,
+    { headers: { ...requestHeaders() } },
+  );
+  if (!response.ok) throw new Error(await errorMessage(response));
 }
