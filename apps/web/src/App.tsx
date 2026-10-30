@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ApiTestResult,
   CoverageStatus,
@@ -23,6 +23,8 @@ import {
   type PullMeta,
 } from "@/api";
 import { AgentWorkspace } from "@/components/agent/workspace";
+import { DeviceAuthorize } from "@/components/agent/device-authorize";
+import { readDevicePage } from "@/lib/device";
 import { SettingsSheet, type SettingsSection } from "@/components/agent/settings-sheet";
 import { INITIAL_STEPS, type LogEntry, type LogLevel, type Steps } from "@/components/agent/shared";
 import { TooltipProvider } from "@edge-spec/ui";
@@ -709,8 +711,12 @@ export function App() {
     addGapLog("warn", "Generation stopped.");
   };
 
+  /** `/authorize` deep link from `edge-spec auth login`. */
+  const authorizing = useMemo(() => readDevicePage(), []);
+
   return (
     <>
+      {authorizing && <DeviceAuthorize page={authorizing} />}
       <AgentWorkspace
         project={project}
         settings={settings}

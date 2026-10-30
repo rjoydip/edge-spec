@@ -99,10 +99,15 @@ Both are thin clients of the Worker API, so start the local Worker or set
 ```bash
 bun --silent run cli -- scan honojs/hono --limit 20
 bun --silent run cli -- catalog
+bun --silent run cli -- auth login            # confirm the code in the dashboard, approve
+bun --silent run cli -- auth status
 bun run mcp -- --help
 ```
 
-See [`apps/docs/cli.md`](apps/docs/cli.md) and [`apps/docs/mcp.md`](apps/docs/mcp.md)
+After `auth login`, the terminal shares the profile the dashboard user
+configured (AI model/key, GitHub token, sandbox runner), stored in
+`~/.edgespec/auth.json`; exported env still wins. See
+[`apps/docs/cli.md`](apps/docs/cli.md) and [`apps/docs/mcp.md`](apps/docs/mcp.md)
 for commands, environment variables, and MCP client configuration.
 
 ## Repository map

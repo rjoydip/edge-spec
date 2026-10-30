@@ -11,6 +11,16 @@ Runs a stdio MCP server that exposes the configured EdgeSpec deployment:
   edgespec_run
   edgespec_prepare_pull_request
   edgespec_open_pull_request
+  edgespec_auth_login          start the dashboard device login (shows a code)
+  edgespec_auth_check          finish it after the user authorizes
+  edgespec_auth_status         what a login stored
+  edgespec_auth_logout         remove it
+
+Device login: edgespec_auth_login shows a short code and a URL. The user
+confirms the code matches in the dashboard and approves; the configured
+profile (AI model/key, GitHub token, sandbox runner) travels encrypted and is
+stored in ~/.edgespec/auth.json. Then call edgespec_auth_check and every
+tool serves the same request headers the dashboard sends per request.
 
 Resources:
   edgespec://gaps/{owner}/{name}
