@@ -1,0 +1,21 @@
+{
+  "name": "@edge-spec/infra-fly",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "alchemy": "bunx alchemy",
+    "plan": "bunx alchemy plan fly.run.ts",
+    "deploy": "bunx alchemy deploy fly.run.ts",
+    "destroy": "bunx alchemy destroy fly.run.ts",
+    "test": "bun test ./test/stack.integration.ts",
+    "typecheck": "bun check --no-script -p ."
+  },
+  "devDependencies": {
+    "@alchemy.run/docker": "2.0.0-beta.84",
+    "@alchemy.run/fly": "2.0.0-beta.84",
+    "@types/bun": "^1.3.0",
+    "alchemy": "2.0.0-beta.84",
+    "effect": "4.0.6"
+  }
+}

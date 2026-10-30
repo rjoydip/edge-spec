@@ -89,12 +89,13 @@ bun run deploy -- --dry-run
 
 ```text
 packages/core/src/   pure pipeline logic (scanner, AI, GitHub, validation)
+packages/runtime/src/    portable runtime: routes, ports, adapters, jobs, Bun entry
 packages/client/src/ Worker API client shared by the CLI and MCP server
 packages/ui/src/     shared React primitives and theme tokens
 packages/cli/src/    terminal client
 packages/mcp/src/    stdio MCP server
 packages/sandbox/src/ self-hosted sandbox runner
-apps/worker/src/     Hono routes, bindings, durable Workflow
+apps/worker/src/     Cloudflare-only entry, Workflow and KV adapters
 apps/web/src/        React dashboard
 apps/docs/           this documentation site
 evals/               golden-scan harness and optional provider scoring

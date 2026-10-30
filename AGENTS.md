@@ -24,13 +24,19 @@ bun run sandbox        # self-hosted test runner on http://127.0.0.1:8788
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
 bun run docs:build     # static site in apps/docs/.vitepress/dist
 bun run docs:deploy    # build + upload the site to Cloudflare Pages
-bun run test:stack     # build + local Alchemy stack test (opt-in live with STACK_URL)
+bun run test:stack     # opt-in live stack test for every target (test:cloudflare|aws|vercel|fly|railway|docker|kubernetes individually)
 bun test               # discovers every workspace's test/ directory
 bun run typecheck      # bun check in every workspace
 bun run build
 bun run verify         # format:check + lint + check + test
-bun run deploy         # build + bun run alchemy deploy --stage prod
-bun run alchemy deploy --stage prod --dry-run
+bun run deploy         # build + bun run --cwd infra/cloudflare deploy --stage prod
+bun run deploy:aws     # bun run --cwd infra/aws deploy --stage prod
+bun run deploy:vercel  # bun run --cwd infra/vercel deploy --stage prod
+bun run deploy:fly     # bun run --cwd infra/fly deploy --stage prod
+bun run deploy:railway # bun run --cwd infra/railway deploy --stage prod
+bun run deploy:docker  # bun run --cwd infra/docker deploy --stage prod
+bun run deploy:kubernetes # bun run --cwd infra/kubernetes deploy --stage prod
+bun run --cwd infra/cloudflare deploy --stage prod --dry-run
 ```
 
 Formatting is Bun-native (`bun fmt`), with the width and object-wrap flags in
@@ -62,15 +68,20 @@ lint, `bun check .` across every project, tests). For a UI change, also run
   (`missing-openapi/`, `express/`, `elysia/`), `node/`, `openapi/`, and dependency-free
   fixtures in `src/`. Reference tests stay in each `tests/` folder;
   `complete-app/` deliberately has sibling tests.
-- `apps/worker/src/` — HTTP adapters (`index.ts`), bindings (`env.ts`) and the
-  durable `workflow.ts`.
+- `apps/worker/src/` — Cloudflare-only: `index.ts` entry, `workflow.ts`
+  (Workflow adapter over the shared jobs runner), `kv.ts` and
+  `cloudflare.d.ts`.
 - `apps/web/src/` — dashboard. `App.tsx` owns run state; components are presentational.
 - `apps/docs/` — VitePress documentation site (markdown in `apps/docs`, `.vitepress` = config/theme).
 - `evals/` — golden-scan harness (`harness.ts`, `run.ts`, `golden.json`) and its
   test; `bun run eval` spends no AI. `scripts/dev.ts` is the combined dev stack.
 - `config/` — shared `tsconfig.base.json`; every workspace tsconfig extends it.
-- `infra/` — the Cloudflare stack (`alchemy.run.ts`) and its opt-in live test.
-  There is no `wrangler.toml`; `bun run deploy` and `bun run dev:worker` go through
+- `infra/` — provider glue and IaC, one folder per target: `cloudflare/`
+  (`cloudflare.run.ts` + live test), `aws/` (`aws.run.ts`), `vercel/`
+  (`vercel.run.ts` + handler), `fly/`, `railway/`, `docker/`, `kubernetes/`,
+  and `shared/stage.ts`. Each provider folder is its own Bun workspace with its
+  own scripts and `.env.example`. There is no `wrangler.toml`;
+  `bun run deploy[:aws|:vercel|:fly|:railway|:docker|:kubernetes]` goes through
   Alchemy.
 - `assets/github-app/` — GitHub App listing copy and its `icon.svg`. Change the
   copy there, then paste it into the app's settings.
@@ -82,9 +93,11 @@ EdgeSpec still sees the incomplete examples as gaps. `examples/complete-app/`
 deliberately keeps its test beside the source. Do not colocate `*.test.ts` under
 `src/` elsewhere.
 
-Bun workspaces live under `apps/*`, `packages/*`, `evals/`, and `examples/`. `packages/`
+Bun workspaces live under `apps/*`, `packages/*`, `evals/`, `examples/`, and
+`infra/*`. `packages/`
 holds what you import or run yourself: `packages/core`
-(`@edge-spec/core/<module>`), `packages/client` (`@edge-spec/client`),
+(`@edge-spec/core/<module>`), `packages/runtime` (`@edge-spec/runtime/<module>`, the
+portable runtime), `packages/client` (`@edge-spec/client`),
 `packages/ui` (`@edge-spec/ui`, plus `theme.css`), the `bin` entry points
 `packages/cli` and `packages/mcp`, and the self-hosted `packages/sandbox`
 runner. `apps/` is what this repository deploys: `@edge-spec/web`,
@@ -123,6 +136,12 @@ dashboard and the deployment's Workers AI/sandbox.
 10. **UI primitives live in `packages/ui`.** The dashboard imports the React
     components; the VitePress site consumes only `theme.css`. Do not copy
     primitives back into `apps/web`.
+11. **Runtime capabilities go through ports.** SQL, objects, jobs and cache are
+    `SqlDatabase` / `ObjectStore` / `JobQueue` / `CacheStore` from
+    `packages/runtime/src/env.ts`, resolved by `platform.ts` and selected for other
+    hosts by `packages/runtime/src/adapters/select.ts`. `apps/worker` stays
+    Cloudflare-only: do not import a runtime binding directly in shared code,
+    and never let `pg`/`aws4fetch` reach the Cloudflare entry.
 
 ## Adding a provider or model
 

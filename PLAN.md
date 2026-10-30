@@ -14,7 +14,7 @@ These corrections to the first mockup are part of the definition of done.
 | --- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Header items not in proper alignment                                                                      | One header row, `items-center`, every control a fixed 36 px (`h-9`) or icon button. Stats move out of the header into the Pipeline page's KPI strip.                                                                                                                                                                                         |
 | 2   | No visible vertical scrollbar, but the page still scrolls                                                 | `.no-scrollbar` utility (`scrollbar-width: none`, `::-webkit-scrollbar { display: none }`) on the page root and the terminal pane. Scroll behaviour is unchanged.                                                                                                                                                                            |
-| 3   | Application name is **EdgeSpec**                                                                          | `package.json`, `infra/alchemy.run.ts`, `<title>`, brand mark, PR footer, docs. No "Testflare".                                                                                                                                                                                                                                              |
+| 3   | Application name is **EdgeSpec**                                                                          | `package.json`, `infra/cloudflare/cloudflare.run.ts`, `<title>`, brand mark, PR footer, docs. No "Testflare".                                                                                                                                                                                                                                |
 | 4   | Repository must be user-supplied                                                                          | `owner/name` input in the header, persisted in local storage; every API call requires `repo`. No server-side default repository.                                                                                                                                                                                                             |
 | 5   | "Cloudflare Workflows v2" must not be in the header                                                       | Removed. Header shows product name, repo, provider badge, theme toggle, settings only. Engine detail belongs in docs, not chrome.                                                                                                                                                                                                            |
 | 6   | Theme toggle (dark/light) missing                                                                         | Sun/Moon icon button in the header, `html.dark` / `html.light`, applied before first paint, persisted.                                                                                                                                                                                                                                       |
@@ -57,10 +57,11 @@ GitHub              ──▶ /webhook ──▶ Workflow ─┘      └─▶ 
 ```
 
 - `packages/core/src/*` — pure logic, unit-tested without network.
+- `packages/runtime/src/*` — portable runtime: routes, ports, adapters, jobs.
 - `packages/client/src/*` — Worker API client shared by the CLI and MCP server.
-- `apps/worker/src/index.ts` — Hono routes, header parsing, SSE.
+- `apps/worker/src/index.ts` — Cloudflare entry: bindings, scheduled handler.
 - `apps/worker/src/workflow.ts` — durable webhook path (deployment-owned credentials).
-- `apps/worker/src/db.ts`, `scheduled.ts` — optional D1 queries and the cron.
+- `packages/runtime/src/db.ts`, `packages/runtime/src/scheduled.ts` — optional SQL queries and the cron.
 - `apps/web/src/*` — dashboard; talks only to `/api/*`.
 - `packages/cli/src/*` — terminal commands.
 - `packages/mcp/src/*` — stdio MCP server.
@@ -75,7 +76,15 @@ edge-spec/
 ├── PLAN.md, TASKS.md, AGENTS.md, README.md
 ├── package.json              # Bun workspaces and root scripts
 ├── config/tsconfig.base.json # shared TypeScript settings
-├── infra/                  # Cloudflare stack, local/dev parity test
+├── infra/cloudflare/         # Cloudflare stack, local/dev parity test
+├── infra/aws/                # AWS artifact bucket stack
+├── infra/vercel/             # Vercel handler + deploy stack
+├── infra/fly/                # Fly Machine + registry image
+├── infra/railway/            # Railway service from the Docker context
+├── infra/docker/             # local container
+├── infra/kubernetes/         # Deployment (kind locally, kubeconfig elsewhere)
+├── infra/shared/             # stageSlug shared by the stacks
+├── Dockerfile                # Bun runtime image used by Fly/Railway/K8s/Docker
 ├── migrations/               # 0001–0007: runs, policies, commands, drift,
 │                             # backlog, repo memory, workspace/audit
 ├── evals/                    # golden cases and the eval runner
@@ -113,7 +122,7 @@ Alchemy uploads.
 
 ---
 
-## 5. Configuration (`infra/alchemy.run.ts`)
+## 5. Configuration (`infra/cloudflare/cloudflare.run.ts`)
 
 ```ts
 const worker = Cloudflare.Worker("edge-spec", {
@@ -407,7 +416,7 @@ bun run deploy                                                    # build + depl
 ```
 
 Optional secrets for the webhook/automation path. Export them or put them in
-`infra/.env` (git-ignored); the stack binds them for `prod`:
+`infra/cloudflare/.env` (git-ignored); the stack binds them for `prod`:
 
 ```bash
 export GH_APP_ID=…
@@ -428,7 +437,7 @@ production cutover already adopted the existing Worker, D1, R2 and Workflow;
 lost Alchemy state store:
 
 ```bash
-bun run alchemy deploy --stage prod --yes --adopt
+bun run --cwd infra/cloudflare deploy --stage prod --yes --adopt
 ```
 
 See `apps/docs/deployment.md` and `apps/docs/configuration.md`.
