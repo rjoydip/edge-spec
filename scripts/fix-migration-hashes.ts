@@ -52,6 +52,27 @@ if (printOnly) {
   process.exit(0);
 }
 
+/**
+ * Extract the JSON payload from wrangler's stdout.
+ *
+ * `--json` makes the payload structured, but `bunx` can print installer lines
+ * such as `[Scripts] Starting scripts for "workerd"` on the same stream before
+ * the command runs (fresh CI cache). Searching for the first bracket picks
+ * those lines up and throws `JSON Parse error`. Try every line that starts
+ * with `{` or `[` instead, so the payload wins.
+ */
+const parseWranglerJson = (raw: string): unknown => {
+  for (const match of raw.matchAll(/^[ \t]*[[{]/gm)) {
+    if (match.index === undefined) continue;
+    try {
+      return JSON.parse(raw.slice(match.index));
+    } catch {
+      // A bunx log line, not the payload.
+    }
+  }
+  return undefined;
+};
+
 /** Read the hashes Alchemy recorded, whatever shape wrangler prints them in. */
 const readStored = async () => {
   const proc = Bun.spawn(
@@ -62,6 +83,7 @@ const readStored = async () => {
       "execute",
       database,
       "--remote",
+      "--json",
       `--command=SELECT name, hash FROM ${table};`,
     ],
     { stdout: "pipe", stderr: "inherit" },
@@ -69,9 +91,10 @@ const readStored = async () => {
   const raw = await new Response(proc.stdout).text();
   if ((await proc.exited) !== 0) return undefined;
 
-  const start = raw.search(/[[{]/);
-  if (start === -1) return undefined;
-  const parsed = JSON.parse(raw.slice(start));
+  const parsed = parseWranglerJson(raw);
+  if (parsed === undefined) {
+    throw new Error(`Could not parse wrangler output for ${database}:\n${raw}`);
+  }
 
   const stored = new Map<string, string>();
   const visit = (value: unknown) => {
