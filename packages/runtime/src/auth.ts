@@ -25,8 +25,11 @@ export function authFor(env: Env): ReturnType<typeof betterAuth> {
   const auth = betterAuth({
     appName: "EdgeSpec",
     basePath: "/api/auth",
-    // Optional canonical origin; otherwise Better Auth infers it per request.
-    ...(env.EDGESPEC_WORKSPACE_URL?.trim() ? { baseURL: env.EDGESPEC_WORKSPACE_URL.trim() } : {}),
+    // Canonical origin: set BETTER_AUTH_URL (or EDGESPEC_WORKSPACE_URL) to
+    // silence Better Auth's per-request inference warning and get stable links.
+    ...((env.EDGESPEC_WORKSPACE_URL ?? env.BETTER_AUTH_URL)?.trim()
+      ? { baseURL: (env.EDGESPEC_WORKSPACE_URL ?? env.BETTER_AUTH_URL)?.trim() }
+      : {}),
     ...(env.BETTER_AUTH_SECRET?.trim() ? { secret: env.BETTER_AUTH_SECRET.trim() } : {}),
     database: sqlAuthAdapter(db),
     emailAndPassword: {
@@ -65,12 +68,6 @@ export function authFor(env: Env): ReturnType<typeof betterAuth> {
     ...(/^(1|true)$/i.test(env.EDGESPEC_INSECURE_COOKIES ?? "")
       ? { advanced: { useSecureCookies: false } }
       : {}),
-    user: {
-      additionalFields: {
-        // Set by the admin activation endpoint; clients may read, not write.
-        plan: { type: "string", defaultValue: "free", input: false },
-      },
-    },
   } as Parameters<typeof betterAuth>[0]);
   instances.set(env, auth);
   return auth;

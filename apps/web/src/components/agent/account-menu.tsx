@@ -1,8 +1,8 @@
 /**
  * Account menu in the dashboard header: avatar + name trigger, a popover with
- * the identity and plan, profile editing (name + uploaded avatar) and the
- * pricing screen. The avatar is resized in the browser and stored on the
- * Better Auth user record as a small data URL, so no new storage is needed.
+ * the identity and profile editing (name + uploaded avatar). The avatar is
+ * resized in the browser and stored on the Better Auth user record as a small
+ * data URL, so no new storage is needed.
  */
 import { useRef, useState, type ChangeEvent } from "react";
 import {
@@ -14,10 +14,8 @@ import {
   DropdownMenuSeparator,
   Input,
 } from "@edge-spec/ui";
-import { CreditCard, LogOut, Pencil, Sparkles } from "lucide-react";
+import { LogOut, Pencil } from "lucide-react";
 import { signOut, updateProfile, type AccountUser } from "@/lib/account";
-
-const PLAN_LABEL: Record<string, string> = { free: "Free", pro: "Pro", team: "Team" };
 
 const initialsOf = (user: AccountUser): string => {
   const source = user.name?.trim() || user.email;
@@ -26,17 +24,15 @@ const initialsOf = (user: AccountUser): string => {
 };
 
 /**
- * Profile block for the header's existing account dropdown: identity, plan,
- * profile editing and the pricing screen. No extra trigger button.
+ * Profile block for the header's existing account dropdown: identity and
+ * profile editing. No extra trigger button.
  */
 export function AccountSection({
   account,
   onUpdated,
-  onOpenPricing,
 }: {
   account: AccountUser;
   onUpdated: (user: AccountUser) => void;
-  onOpenPricing: () => void;
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -52,28 +48,18 @@ export function AccountSection({
             {account.name?.trim() || "EdgeSpec member"}
           </p>
           <p className="truncate text-[10px] text-zinc-500">{account.email}</p>
-          <div className="mt-1 flex items-center gap-1">
-            <Badge variant="accent" className="px-1.5 py-0 text-[9px]">
-              {PLAN_LABEL[account.plan ?? "free"] ?? account.plan}
-            </Badge>
-            {!account.emailVerified && (
+          {!account.emailVerified && (
+            <div className="mt-1">
               <Badge variant="warning" className="px-1.5 py-0 text-[9px]">
                 unverified
               </Badge>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
       <DropdownMenuItem onSelect={() => window.setTimeout(() => setEditing(true), 0)}>
         <Pencil />
         Edit profile
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => window.setTimeout(onOpenPricing, 0)}>
-        <CreditCard />
-        Plans &amp; billing
-        {(account.plan ?? "free") === "free" && (
-          <Sparkles className="ml-auto size-3.5 text-fuchsia-400" />
-        )}
       </DropdownMenuItem>
       <DropdownMenuItem
         onSelect={() => {

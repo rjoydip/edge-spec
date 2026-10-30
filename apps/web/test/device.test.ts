@@ -11,7 +11,7 @@ describe("readDevicePage", () => {
   test("is undefined on ordinary app URLs", () => {
     expect(readDevicePage(at("https://edge.example/"))).toBeUndefined();
     expect(readDevicePage(at("https://edge.example/login"))).toBeUndefined();
-    expect(readDevicePage(at("https://edge.example/pricing"))).toBeUndefined();
+    expect(readDevicePage(at("https://edge.example/settings"))).toBeUndefined();
     expect(readDevicePage(at("https://edge.example/authorize"))).toBeUndefined();
   });
 

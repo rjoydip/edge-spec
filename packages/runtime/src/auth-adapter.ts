@@ -93,9 +93,6 @@ export function whereSql(where: readonly Where[] | undefined): {
   return { sql: `WHERE ${parts.join(" ")}`, values };
 }
 
-export const columnsOf = (rows: readonly Record<string, unknown>[]): string[] =>
-  rows.length === 0 ? [] : Object.keys(rows[0] as Record<string, unknown>);
-
 /** Projection list: `*`, or quoted columns in the order better-auth asked. */
 export function selectSql(select: readonly string[] | undefined): string {
   if (!select || select.length === 0) return "*";

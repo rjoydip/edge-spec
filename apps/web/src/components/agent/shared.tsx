@@ -1,5 +1,5 @@
 /** Shared atoms for the agent workspace: stage tones, badges, checks, downloads. */
-import { Check, CheckCircle2, TriangleAlert, Wrench, X } from "lucide-react";
+import { Check, TriangleAlert, X } from "lucide-react";
 import { Badge, Hint, cn } from "@edge-spec/ui";
 import type {
   ApiHealthRow,
@@ -20,7 +20,6 @@ export interface AgentTest {
 
 export type ReviewState = "pending" | "accepted" | "rejected";
 export type ValidationFilter = "all" | "passed" | "failed" | "static";
-export type StageKey = "clone" | "analyze" | "test" | "fix";
 export type StepStatus = "idle" | "running" | "done" | "failed";
 export type Steps = Record<StepId, { status: StepStatus; note?: string }>;
 export type Verification = "none" | "verified" | "static" | "failed";
@@ -242,36 +241,6 @@ export function CheckSummary({ validation }: { validation: Validation }) {
   );
 }
 
-export function DiffLines({ lines, capped = 30 }: { lines: string[]; capped?: number }) {
-  return (
-    <div className="py-1">
-      {lines.map((line, index) => {
-        const blank = line.trim() === "";
-        return (
-          <div
-            key={index}
-            className={cn(
-              "diff-line flex gap-3 px-3 font-mono text-[11px] leading-5",
-              !blank && "bg-emerald-500/[0.06]",
-            )}
-            style={{ animationDelay: `${Math.min(index, capped) * 12}ms` }}
-          >
-            <span className="w-6 shrink-0 text-right text-[10px] text-zinc-500 select-none">
-              {index + 1}
-            </span>
-            <span className={cn("w-2 shrink-0", blank ? "text-zinc-600" : "text-emerald-400")}>
-              {blank ? "" : "+"}
-            </span>
-            <span className="min-w-0 whitespace-pre-wrap break-words text-zinc-300">
-              {line || " "}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /** Downloads generated text as a real file. */
 export function downloadFile(name: string, content: string, type = "text/plain"): void {
   const blob = new Blob([content], { type });
@@ -305,12 +274,6 @@ export function verificationLabel(validation: Validation): string {
   if (validation.flaky) return "Flaky · quarantined";
   if (!validation.ok) return "Validation failed";
   return validation.verified ? "Executed on the runner" : "Static check only";
-}
-
-export function verificationVariant(validation: Validation): "success" | "warning" | "danger" {
-  if (validation.flaky) return "warning";
-  if (!validation.ok) return "danger";
-  return validation.verified ? "success" : "warning";
 }
 
 /** A compact delta for the review row; absence means it was not measured. */
@@ -365,12 +328,4 @@ export function skippedChecks(validation: Validation): number {
 
 export function failedChecks(validation: Validation): number {
   return (validation.checks ?? []).filter((check) => !check.ok && !check.skipped).length;
-}
-
-export function CheckIcon({ ok }: { ok: boolean }) {
-  return ok ? (
-    <CheckCircle2 className="size-3.5 text-emerald-400" />
-  ) : (
-    <Wrench className="size-3.5 text-amber-400" />
-  );
 }

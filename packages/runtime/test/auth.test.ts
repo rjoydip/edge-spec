@@ -35,7 +35,11 @@ const call = (
         },
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
       }),
-      { DB: db as unknown as SqlDatabase, ...init.env } as Env,
+      {
+        DB: db as unknown as SqlDatabase,
+        BETTER_AUTH_URL: "https://edge.example",
+        ...init.env,
+      } as Env,
     ),
   );
 
@@ -78,10 +82,9 @@ describe("better auth routes", () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
       token?: string;
-      user: { email: string; plan?: string; emailVerified?: boolean };
+      user: { email: string; emailVerified?: boolean };
     };
     expect(body.user.email).toBe("dev@example.dev");
-    expect(body.user.plan).toBe("free");
     expect(body.user.emailVerified).toBe(false);
     expect(sessionCookie(response)).toContain("better-auth.session_token");
   });
@@ -146,7 +149,7 @@ describe("better auth routes", () => {
     expect(body.user?.email).toBe("runs-db@example.dev");
   });
 
-  test("profile updates change name/image but never the plan", async () => {
+  test("profile updates change name and image", async () => {
     const created = await signUp("profile@example.dev");
     const cookie = sessionCookie(created);
     const updated = await call("POST", "/api/auth/update-user", {
@@ -157,11 +160,10 @@ describe("better auth routes", () => {
 
     const session = await call("GET", "/api/auth/get-session", { headers: { cookie } });
     const body = (await session.json()) as {
-      user?: { name?: string; image?: string; plan?: string };
+      user?: { name?: string; image?: string };
     } | null;
     expect(body?.user?.name).toBe("Ada Lovelace");
     expect(body?.user?.image).toBe("data:image/png;base64,iVBORw0KGgo=");
-    expect(body?.user?.plan).toBe("free");
 
     // Clearing the avatar is allowed too.
     const cleared = await call("POST", "/api/auth/update-user", {
@@ -172,16 +174,6 @@ describe("better auth routes", () => {
     const afterClear = await call("GET", "/api/auth/get-session", { headers: { cookie } });
     const clearBody = (await afterClear.json()) as { user?: { image?: string | null } } | null;
     expect(clearBody?.user?.image ?? null).toBeNull();
-
-    // `plan` is input:false, so a client cannot even submit it.
-    const escalation = await call("POST", "/api/auth/update-user", {
-      headers: { cookie },
-      body: { plan: "team" },
-    });
-    expect(escalation.status).toBe(400);
-    const after = await call("GET", "/api/auth/get-session", { headers: { cookie } });
-    const afterBody = (await after.json()) as { user?: { plan?: string } } | null;
-    expect(afterBody?.user?.plan).toBe("free");
   });
 
   test("accounts need a database", async () => {
@@ -190,40 +182,5 @@ describe("better auth routes", () => {
       {} as Env,
     );
     expect(response.status).toBe(501);
-  });
-
-  test("admin plan activation updates the user row", async () => {
-    await signUp("pro@example.dev");
-    expect(
-      (
-        await call("POST", "/api/admin/plans/activate", {
-          body: { email: "pro@example.dev", plan: "pro" },
-        })
-      ).status,
-    ).toBe(501);
-    expect(
-      (
-        await call("POST", "/api/admin/plans/activate", {
-          body: { email: "pro@example.dev", plan: "pro" },
-          headers: { "x-admin-key": "wrong" },
-          env: { ADMIN_KEY: "sekrit" },
-        })
-      ).status,
-    ).toBe(401);
-    const activated = await call("POST", "/api/admin/plans/activate", {
-      body: { email: "pro@example.dev", plan: "pro" },
-      headers: { "x-admin-key": "sekrit" },
-      env: { ADMIN_KEY: "sekrit" },
-    });
-    expect(activated.status).toBe(200);
-    expect(((await activated.json()) as { user: { plan: string } }).user.plan).toBe("pro");
-
-    const session = await call("POST", "/api/auth/sign-in/email", {
-      body: { email: "pro@example.dev", password: "longenough1" },
-    });
-    const cookie = sessionCookie(session);
-    const me = await call("GET", "/api/auth/get-session", { headers: { cookie } });
-    const body = (await me.json()) as { user?: { plan?: string } } | null;
-    expect(body?.user?.plan).toBe("pro");
   });
 });

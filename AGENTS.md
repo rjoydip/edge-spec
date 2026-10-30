@@ -24,12 +24,14 @@ bun run sandbox        # self-hosted test runner on http://127.0.0.1:8788
 bun run docs:dev       # documentation site on http://127.0.0.1:5174
 bun run docs:build     # static site in apps/docs/.vitepress/dist
 bun run docs:deploy    # build + upload the site to Cloudflare Pages
+bun run dev:www        # landing page on http://127.0.0.1:5175
+bun run www:deploy     # build + upload the landing page to Cloudflare Pages
 bun run test:stack     # opt-in live stack test for every target (test:cloudflare|aws|vercel|fly|railway|docker|kubernetes individually)
 bun test               # discovers every workspace's test/ directory
 bun run typecheck      # bun check in every workspace
 bun run build
 bun run verify         # format:check + lint + check + test
-bun run deploy         # build + bun run --cwd infra/cloudflare deploy --stage prod
+bun run deploy         # build + Worker deploy + landing page upload
 bun run deploy:aws     # bun run --cwd infra/aws deploy --stage prod
 bun run deploy:vercel  # bun run --cwd infra/vercel deploy --stage prod
 bun run deploy:fly     # bun run --cwd infra/fly deploy --stage prod
@@ -102,8 +104,8 @@ portable runtime), `packages/client` (`@edge-spec/client`),
 `packages/ui` (`@edge-spec/ui`, plus `theme.css`), the `bin` entry points
 `packages/cli` and `packages/mcp`, and the self-hosted `packages/sandbox`
 runner. `apps/` is what this repository deploys: `@edge-spec/web`,
-`@edge-spec/worker`, and the `@edge-spec/docs` site. Vite outputs the web and
-worker bundles to the root `dist/`, which Alchemy uploads.
+`@edge-spec/worker`, the `@edge-spec/www` landing page, and the `@edge-spec/docs` site.
+Vite outputs the web and worker bundles to the root `dist/`, which Alchemy uploads.
 
 The CLI and MCP server are **API clients**. Do not make them call
 `packages/core/src/pipeline.ts` directly; that would fork the behavior from the
@@ -114,8 +116,8 @@ dashboard and the deployment's Workers AI/sandbox.
 1. **The deployment stores no user configuration.** Repository, provider, model,
    pipeline knobs live in `localStorage`; GitHub and AI keys are sent as headers
    (`x-github-token`, `x-ai-key`, `x-ai-base-url`) per request. Account rows
-   (email, Better Auth's password hash, plan) are the deliberate exception:
-   they live in SQL and the dashboard requires a session before it renders.
+   (email and Better Auth's password hash) are the deliberate exception: they
+   live in SQL and the dashboard requires a session before it renders.
 2. **Workflow params are persisted.** Never pass a user API key to
    `TestGenerationWorkflow`; it uses the deployment's Workers AI and a GitHub App
    installation token (or `GH_TOKEN` when no App is configured). The

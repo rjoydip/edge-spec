@@ -225,8 +225,6 @@ export interface AgentWorkspaceProps {
   onDismissToast: () => void;
   /** Accounts: present only when the deployment has the auth routes. */
   account?: AccountUser | null;
-  /** Opens the pricing screen from the account menu. */
-  onOpenPricing?: () => void;
   /** A profile edit changed the signed-in user. */
   onAccountUpdated?: (user: AccountUser) => void;
 }
@@ -266,7 +264,6 @@ export function AgentWorkspace({
   onOpenSettings,
   onDismissToast,
   account,
-  onOpenPricing,
   onAccountUpdated,
 }: AgentWorkspaceProps) {
   const appearance = useAppearance();
@@ -335,17 +332,9 @@ export function AgentWorkspace({
 
   useEffect(() => setRepoInput(projectInput), [projectInput]);
 
-  /** Fully Autonomous is a Pro feature; deployments without accounts stay open. */
-  const plan = account?.plan ?? "free";
-  const autoLocked = account !== undefined && plan !== "pro" && plan !== "team";
-
   useEffect(() => {
     if (localDraft) setMode("review");
   }, [localDraft]);
-
-  useEffect(() => {
-    if (autoLocked) setMode("review");
-  }, [autoLocked]);
 
   // Branches come from GitHub; a local folder has none.
   useEffect(() => {
@@ -538,8 +527,6 @@ export function AgentWorkspace({
     pct: number;
     step?: StepId;
     disabled?: boolean;
-    /** Pro-only stage: visible to free plans, locked. */
-    pro?: boolean;
   }> = [
     {
       id: "clone",
@@ -588,7 +575,7 @@ export function AgentWorkspace({
       state:
         steps.validate.status === "running"
           ? "running"
-          : checksTotal > 0 || steps.validate.status === "done" || scanStatus === "done"
+          : checksTotal > 0 || steps.validate.status === "done"
             ? "done"
             : "idle",
       pct: generated.length
@@ -627,7 +614,6 @@ export function AgentWorkspace({
             : 0,
       ...(hasSpec ? { step: "validate" as StepId } : {}),
       disabled: !hasSpec,
-      pro: true,
     },
     {
       id: "fix",
@@ -645,7 +631,6 @@ export function AgentWorkspace({
               : "idle",
       pct: Math.min(100, (generated.length / Math.max(1, settings.maxFiles)) * 100),
       step: "generate",
-      pro: true,
     },
   ];
 
@@ -883,7 +868,6 @@ export function AgentWorkspace({
                       <AccountSection
                         account={account}
                         onUpdated={(user) => onAccountUpdated?.(user)}
-                        onOpenPricing={() => onOpenPricing?.()}
                       />
                     )}
                     <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-[9px] tracking-wide text-zinc-500 uppercase">
@@ -1095,21 +1079,14 @@ export function AgentWorkspace({
                 </div>
                 <RadioGroup
                   value={mode}
-                  onValueChange={(value) => {
-                    if (value === "auto" && autoLocked) {
-                      onOpenPricing?.();
-                      return;
-                    }
-                    setMode(value as Mode);
-                  }}
+                  onValueChange={(value) => setMode(value as Mode)}
                   className="grid gap-2 sm:grid-cols-2"
                 >
                   {MODES.map((option) => {
                     const Icon = option.icon;
                     const active = mode === option.id;
                     const needsGitHub = option.id === "auto" && localDraft;
-                    const needsPro = option.id === "auto" && autoLocked;
-                    const locked = needsGitHub || needsPro;
+                    const locked = needsGitHub;
                     const tile =
                       option.id === "review"
                         ? active
@@ -1122,10 +1099,6 @@ export function AgentWorkspace({
                       <div
                         key={option.id}
                         onClick={() => {
-                          if (needsPro) {
-                            onOpenPricing?.();
-                            return;
-                          }
                           if (!needsGitHub) setMode(option.id);
                         }}
                         className={cn(
@@ -1155,15 +1128,6 @@ export function AgentWorkspace({
                                 selected
                               </Badge>
                             )}
-                            {option.id === "auto" && (
-                              <Badge
-                                variant={needsPro ? "warning" : "accent"}
-                                className="gap-0.5 px-1.5 py-0 text-[9px]"
-                              >
-                                {needsPro && <Lock className="size-2.5" />}
-                                PRO
-                              </Badge>
-                            )}
                             {needsGitHub && (
                               <Badge variant="warning" className="gap-0.5 px-1.5 py-0 text-[9px]">
                                 <Lock className="size-2.5" />
@@ -1172,11 +1136,9 @@ export function AgentWorkspace({
                             )}
                           </div>
                           <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
-                            {needsPro
-                              ? "Upgrade to Pro to let verified tests be accepted automatically."
-                              : needsGitHub
-                                ? "Local folders cannot open a pull request."
-                                : option.desc}
+                            {needsGitHub
+                              ? "Local folders cannot open a pull request."
+                              : option.desc}
                           </p>
                           <p
                             className={cn(
@@ -1245,8 +1207,6 @@ export function AgentWorkspace({
                       position={index + 1}
                       onOpen={stage.step ? () => openLog(stage.step as StepId) : undefined}
                       disabled={stage.disabled || scanStatus === "idle"}
-                      locked={Boolean(stage.pro && autoLocked)}
-                      onUpgrade={() => onOpenPricing?.()}
                     />
                   </Fragment>
                 ))}
@@ -2287,8 +2247,6 @@ function StageNode({
   position,
   onOpen,
   disabled,
-  locked,
-  onUpgrade,
 }: {
   position: number;
   label: string;
@@ -2299,9 +2257,6 @@ function StageNode({
   pct: number;
   onOpen?: () => void;
   disabled?: boolean;
-  /** Pro-only stage on a free plan: visible, dimmed, opens the pricing screen. */
-  locked?: boolean;
-  onUpgrade?: () => void;
 }) {
   const palette = TONES[tone];
   const running = state === "running";
@@ -2310,8 +2265,8 @@ function StageNode({
   const card = (
     <button
       type="button"
-      onClick={locked ? onUpgrade : onOpen}
-      disabled={!interactive && !locked}
+      onClick={onOpen}
+      disabled={!interactive}
       style={
         {
           "--stage-progress": `${Math.max(0, Math.min(100, pct))}%`,
@@ -2321,8 +2276,7 @@ function StageNode({
       className={cn(
         "pipeline-node group relative min-w-0 flex-1 rounded-xl border border-transparent px-2.5 py-2.5 text-left transition-all",
         interactive ? "hover:-translate-y-0.5" : "cursor-default",
-        (disabled || locked) && "opacity-60",
-        locked && "cursor-pointer hover:opacity-80",
+        disabled && "opacity-60",
         done
           ? "bg-zinc-900/70"
           : running
@@ -2355,12 +2309,6 @@ function StageNode({
           <p className="truncate font-mono text-[10px] text-zinc-500">{sub}</p>
         </div>
         <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10px] text-zinc-600">
-          {locked && (
-            <span className="flex items-center gap-0.5 rounded border border-amber-500/30 bg-amber-500/10 px-1 py-0 text-[8.5px] font-semibold text-amber-300">
-              <Lock className="size-2.5" />
-              PRO
-            </span>
-          )}
           {String(position).padStart(2, "0")}
           {interactive && (
             <ChevronRight className="ml-0.5 inline size-3 text-zinc-700 transition group-hover:text-zinc-400" />
@@ -2369,7 +2317,6 @@ function StageNode({
       </div>
     </button>
   );
-  if (locked) return <Hint label={`${label} needs the Pro plan · upgrade`}>{card}</Hint>;
   return interactive ? <Hint label={`Open ${label} events`}>{card}</Hint> : card;
 }
 

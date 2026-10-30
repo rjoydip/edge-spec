@@ -25,7 +25,6 @@ import {
 import { AgentWorkspace } from "@/components/agent/workspace";
 import { DeviceAuthorize } from "@/components/agent/device-authorize";
 import { AuthOverlay, authModeOfPath, type AuthMode } from "@/components/agent/account-overlay";
-import { PricingOverlay } from "@/components/agent/pricing-overlay";
 import { fetchAccount, type AccountUser } from "@/lib/account";
 import { readDevicePage } from "@/lib/device";
 import { SettingsSheet, type SettingsSection } from "@/components/agent/settings-sheet";
@@ -350,17 +349,6 @@ export function App() {
     const active = getProject();
     const retesting = Boolean(options.retestOperations?.length);
     if (running) return;
-    if (planLocked && !retesting) {
-      // Free plans stop after the static scan; generation is Pro.
-      await scan();
-      showToast({
-        title: "Scan complete",
-        description: "OpenSpec and Fixing & Generating are Pro. The first three stages ran.",
-        variant: "warning",
-      });
-      return;
-    }
-    if (retesting && requirePro("OpenSpec retesting")) return;
     if (active.localPath) {
       showToast({
         title: "Local project",
@@ -438,7 +426,6 @@ export function App() {
   /** Retests only the failed contract operations; the scan and unit work stay put. */
   const retest = (operations: RetestOperation[]) => {
     if (operations.length === 0) return;
-    if (requirePro("OpenSpec retesting")) return;
     void run({ retestOperations: operations });
   };
 
@@ -670,7 +657,6 @@ export function App() {
    */
   const generatePaths = async (paths: string[]) => {
     if (paths.length === 0) return;
-    if (requirePro("Test generation")) return;
     if (activeBatches.current > 0 && !settings.parallelGeneration) return;
     const controller = generationAbortRef.current ?? new AbortController();
     generationAbortRef.current = controller;
@@ -735,7 +721,6 @@ export function App() {
   const [authMode, setAuthMode] = useState<AuthMode | undefined>(() =>
     authModeOfPath(window.location.pathname, window.location.search),
   );
-  const [pricingOpen, setPricingOpen] = useState(() => window.location.pathname === "/pricing");
   const [account, setAccount] = useState<AccountUser | null>(null);
   const [accountsEnabled, setAccountsEnabled] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
@@ -751,29 +736,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [authMode, pricingOpen]);
+  }, [authMode]);
 
   /** Accounts exist and nobody is signed in: the app does not start. */
   const needsSignIn = sessionReady && accountsEnabled && !account;
-
-  /** Free plans run the first three stages; OpenSpec and generation are Pro. */
-  const planLocked =
-    sessionReady &&
-    accountsEnabled &&
-    account !== null &&
-    !["pro", "team"].includes(account.plan ?? "free");
-
-  const requirePro = (feature: string): boolean => {
-    if (!planLocked) return false;
-    showToast({
-      title: `${feature} needs Pro`,
-      description:
-        "Free runs cover clone, gap analysis and static checks. Upgrade for OpenSpec and test generation.",
-      variant: "warning",
-    });
-    setPricingOpen(true);
-    return true;
-  };
 
   if (!sessionReady) {
     return <main className="min-h-dvh bg-zinc-950" aria-busy="true" />;
@@ -794,23 +760,6 @@ export function App() {
   return (
     <>
       {authorizing && <DeviceAuthorize page={authorizing} />}
-      {!authMode && pricingOpen && (
-        <PricingOverlay
-          account={account}
-          onClose={() => {
-            setPricingOpen(false);
-            if (window.location.pathname === "/pricing") {
-              window.history.replaceState(null, "", "/");
-            }
-          }}
-          onSignedOut={() => {
-            setAccount(null);
-            setPricingOpen(false);
-            window.history.replaceState(null, "", "/");
-            window.location.assign("/");
-          }}
-        />
-      )}
       <AgentWorkspace
         project={project}
         settings={settings}
@@ -846,11 +795,7 @@ export function App() {
         onOpenSettings={openSettings}
         onDismissToast={() => setToast(undefined)}
         {...(accountsEnabled
-          ? {
-              account,
-              onOpenPricing: () => setPricingOpen(true),
-              onAccountUpdated: (user: AccountUser) => setAccount(user),
-            }
+          ? { account, onAccountUpdated: (user: AccountUser) => setAccount(user) }
           : {})}
       />
       <TooltipProvider delayDuration={180}>

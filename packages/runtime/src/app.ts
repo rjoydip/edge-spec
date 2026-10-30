@@ -1,5 +1,4 @@
 import { Hono, type Context } from "hono";
-import { isPlanId } from "@edge-spec/core/plans";
 import { approveDevice, pollDevice, startDeviceFlow } from "./device-flow";
 import { authFor } from "./auth";
 import { streamSSE } from "hono/streaming";
@@ -1521,30 +1520,6 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
   if (!db) return c.json({ error: "Accounts need a database. Bind one first." }, 501);
   // The platform adapter resolves the neutral binding; better-auth sees `DB`.
   return authFor(db === c.env.DB ? c.env : { ...c.env, DB: db }).handler(c.req.raw);
-});
-
-/** Manual plan activation until a payment gateway exists. */
-app.post("/api/admin/plans/activate", async (c) => {
-  const db = historyDb(c.env);
-  if (!db) return c.json({ error: "Accounts need a database." }, 501);
-  const expected = c.env.ADMIN_KEY?.trim();
-  if (!expected) return c.json({ error: "Not enabled: set ADMIN_KEY." }, 501);
-  const given = c.req.header("x-admin-key")?.trim() ?? "";
-  if (!sameSecret(given, expected)) return c.json({ error: "Unauthorized." }, 401);
-  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-  const plan = typeof body.plan === "string" ? body.plan.trim() : "";
-  if (!isPlanId(plan)) return c.json({ error: `Unknown plan "${plan}".` }, 400);
-  const row = await db
-    .prepare('SELECT id, email FROM "user" WHERE lower(email) = ?')
-    .bind(email)
-    .first<{ id: string; email: string }>();
-  if (!row) return c.json({ error: "No account for that email." }, 404);
-  await db
-    .prepare('UPDATE "user" SET plan = ?, "updatedAt" = ? WHERE id = ?')
-    .bind(plan, new Date().toISOString(), row.id)
-    .run();
-  return c.json({ ok: true, user: { id: row.id, email: row.email, plan } });
 });
 
 app.post("/webhook", async (c) => {

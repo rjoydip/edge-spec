@@ -2,9 +2,7 @@ import type { AiBinding } from "@edge-spec/core/ai";
 import type {
   CacheStore,
   CacheDriver,
-  JobInstance,
   JobQueue,
-  JobStatus,
   ObjectStore,
   ObserverLevel,
   SqlDatabase,
@@ -74,8 +72,6 @@ export interface Env {
   /** Email sender fallback (Resend). Requests normally carry it as a header. */
   EMAIL_API_KEY?: string;
   EMAIL_FROM?: string;
-  /** Manual plan activation endpoint guard. Absent disables it. */
-  ADMIN_KEY?: string;
   /** The public origin used in emails; defaults to the request origin. */
   EDGESPEC_WORKSPACE_URL?: string;
   /** Observability: consola (default), otlp, sentry, axiom or none. */
@@ -92,6 +88,8 @@ export interface Env {
   AXIOM_URL?: string;
   /** Better Auth signing secret; set it in production. */
   BETTER_AUTH_SECRET?: string;
+  /** Canonical origin for auth callbacks; inferred per request when unset. */
+  BETTER_AUTH_URL?: string;
   /** Set to 1 only when serving over plain HTTP (local Docker). */
   EDGESPEC_INSECURE_COOKIES?: string;
 }
@@ -102,9 +100,3 @@ export type D1PreparedStatement = SqlStatement;
 export type D1Database = SqlDatabase;
 /** @deprecated use ObjectStore */
 export type R2Bucket = ObjectStore;
-/** @deprecated use JobQueue */
-export type WorkflowBinding = JobQueue;
-/** @deprecated use JobStatus */
-export type WorkflowStatus = JobStatus;
-/** @deprecated use JobInstance */
-export type WorkflowInstance = JobInstance;

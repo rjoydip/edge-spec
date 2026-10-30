@@ -173,22 +173,23 @@ The names in the stack (`edge-spec`, `edge-spec-runs`, `edge-spec-artifacts`,
 `test-generation-workflow`) are fixed for `prod`, which is what makes adoption
 possible. Do not change them in place.
 
-### Documentation site (Cloudflare Pages)
+### Documentation and landing sites (Cloudflare Pages)
 
-The stack declares one Pages project for the VitePress site, `edge-spec-docs`,
-and only on `prod`. Preview and dev stages reuse the published site instead of
-creating an empty `edge-spec-docs-<stage>` subdomain that serves nothing.
-Alchemy owns the project; the Pages REST API has no public asset-upload
-endpoint, so the static files go up through Wrangler:
+The stack declares two Pages projects, both only on `prod`: `edge-spec-docs` for
+the VitePress site and `edge-spec-www` for the marketing page. Preview and dev
+stages reuse the published sites instead of creating empty per-stage subdomains
+that serve nothing. Alchemy owns the projects; the Pages REST API has no public
+asset-upload endpoint, so the static files go up through Wrangler:
 
 ```bash
 bun run docs:deploy   # docs:build + wrangler pages deploy … --project-name edge-spec-docs
+bun run www:deploy    # build:www + wrangler pages deploy dist/www --project-name edge-spec-www
 ```
 
-Live at `https://edge-spec-docs.pages.dev`. `bun run docs:build` alone still
-only writes `apps/docs/.vitepress/dist`, so CI keeps checking the build without
-publishing. A landing page is not hosted yet — the stack has a placeholder
-comment where its project would go.
+Live at `https://edge-spec-docs.pages.dev` and `https://edge-spec-www.pages.dev`.
+`bun run deploy` uploads the landing page after the Worker, so a normal release
+publishes both. `bun run docs:build` and `bun run build:www` alone still only
+write static output, so CI keeps checking the builds without publishing.
 
 ### Rollback
 
@@ -423,6 +424,23 @@ health, catalog, assets and D1 parity; AWS: the artifact bucket; Vercel: the
 memoized `vercel deploy`; Fly/Railway/Docker/Kubernetes: the deployed URL's
 `/api/health`). Any test supports `SKIP_DEPLOY=1` to run its assertions
 against a live URL you supply through `STACK_URL`.
+
+**Test status by target.** Only Cloudflare is exercised end-to-end today. The
+other Alchemy stacks are maintained but have **not** been run against real
+credentials from this repository; treat their first deploy as unverified work.
+
+| Target     | Alchemy stack | Live-tested                                            | Notes                                                                                        |
+| ---------- | ------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Cloudflare | Yes           | Yes — production deploy workflow + `test:cloudflare`   | The reference stack: D1, R2, KV, Workflows, scheduled cron and assets                        |
+| AWS        | Yes           | No — not run with AWS credentials                      | Defines the Lambda Function URL and the artifact bucket; `plan` stops at missing credentials |
+| Vercel     | Yes           | No — `vercel deploy --prod` never run                  | `Command.Exec` wrapper; needs `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`           |
+| Fly        | Yes           | No — never run (needs Docker + `FLY_API_TOKEN`)        | Builds/pushes the shared image and starts a Machine                                          |
+| Railway    | Yes           | No — never run (needs `RAILWAY_API_TOKEN`)             | Builds the Docker context; variables stay in Railway                                         |
+| Docker     | Yes           | No — Docker is unavailable on this development machine | Local image/container build unverified                                                       |
+| Kubernetes | Yes           | No — `plan` only; no cluster or `kind` run             | Deployment/Service manifests are generated but not applied                                   |
+
+All stacks share the same app, ports and Dockerfile, and every one compiles and
+plans; the gap is live provisioning, not code structure.
 
 The Fly, Railway, Docker and Kubernetes stacks all build the same root
 `Dockerfile` (`oven/bun` running `apps/server/src/index.ts`). Fly pushes

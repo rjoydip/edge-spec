@@ -15,14 +15,16 @@ import { runScheduled } from "@edge-spec/runtime/scheduled";
 import { platformFromEnv } from "@edge-spec/adapters/node";
 import { observerFor } from "@edge-spec/runtime/observability";
 
-const env = await platformFromEnv(process.env);
-const observer = observerFor(env);
 const port = Number(process.env.PORT ?? 8787);
 const hostname = process.env.HOST?.trim() || "0.0.0.0";
+const loopback = /^(127\.0\.0\.1|localhost|::1|\[::1\])$/.test(hostname);
+if (loopback && !process.env.BETTER_AUTH_URL?.trim()) {
+  process.env.BETTER_AUTH_URL = `http://${hostname}:${port}`;
+}
+const env = await platformFromEnv(process.env);
+const observer = observerFor(env);
 const root = resolve(process.env.EDGESPEC_STATIC_DIR?.trim() || "dist/web");
-const local =
-  /^(127\.0\.0\.1|localhost|::1|\[::1\])$/.test(hostname) ||
-  /^(1|true)$/i.test(process.env.EDGESPEC_LOCAL ?? "");
+const local = loopback || /^(1|true)$/i.test(process.env.EDGESPEC_LOCAL ?? "");
 
 async function staticFile(pathname: string): Promise<Response | undefined> {
   const candidate = resolve(root, `.${pathname}`);

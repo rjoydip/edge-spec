@@ -72,6 +72,25 @@
         "vite": "^7.1.7",
       },
     },
+    "apps/www": {
+      "name": "@edge-spec/www",
+      "version": "0.0.0",
+      "dependencies": {
+        "@edge-spec/ui": "workspace:*",
+        "react": "^19.1.1",
+        "react-dom": "^19.1.1",
+      },
+      "devDependencies": {
+        "@tailwindcss/vite": "^4.3.3",
+        "@types/bun": "^1.4.4",
+        "@types/node": "^24.5.2",
+        "@types/react": "^19.1.13",
+        "@types/react-dom": "^19.1.9",
+        "@vitejs/plugin-react": "^5.0.3",
+        "tailwindcss": "^4.3.3",
+        "vite": "^7.1.7",
+      },
+    },
     "evals": {
       "name": "@edge-spec/evals",
       "version": "0.0.0",
@@ -513,6 +532,8 @@
     "@edge-spec/web": ["@edge-spec/web@workspace:apps/web"],
 
     "@edge-spec/worker": ["@edge-spec/worker@workspace:apps/worker"],
+
+    "@edge-spec/www": ["@edge-spec/www@workspace:apps/www"],
 
     "@effect/platform-bun": ["@effect/platform-bun@4.0.6", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.6" }, "peerDependencies": { "effect": "^4.0.6" } }, "sha512-RAsGcIVcqhV4aBiM07VnMeNWDyewp8WDwTdIUtiklUDBRtddDllYzPsTlsn+0gLdpdz2lGnMEOFzoNaNrcMfSA=="],
 

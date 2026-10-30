@@ -9,7 +9,6 @@ export interface AccountUser {
   email: string;
   name?: string;
   image?: string | null;
-  plan?: string;
   emailVerified?: boolean;
   createdAt?: string | number;
 }
@@ -80,7 +79,7 @@ export async function signIn(email: string, password: string): Promise<{ user: A
   return { user: result.user };
 }
 
-/** Better Auth's update-user: name and avatar only (plan is server-owned). */
+/** Better Auth's update-user: name and avatar only. */
 export async function updateProfile(input: {
   name: string;
   image?: string | null;

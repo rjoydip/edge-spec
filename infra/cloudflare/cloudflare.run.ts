@@ -92,6 +92,8 @@ export default Alchemy.Stack(
           workflowName: isProd ? "test-generation-workflow" : `test-generation-workflow-${slug}`,
         }),
         AI: Cloudflare.Workers.AI(),
+        // Local dev needs a stable origin for Better Auth callbacks.
+        ...(localDev ? { BETTER_AUTH_URL: "http://127.0.0.1:8787" } : {}),
 
         // Automation credentials are production-only. Preview deployments use
         // the visitor's per-request GitHub token.
@@ -132,18 +134,33 @@ export default Alchemy.Stack(
         })
       : undefined;
 
-    // Landing page placeholder. When the marketing page exists, build it to a
-    // static directory (e.g. `apps/landing/dist`) and either add a second
-    // `Cloudflare.Pages.Project` here plus a `wrangler pages deploy` script, or
-    // serve it from this docs project with a custom domain and redirects.
-    // Nothing is created today, so no unused Pages project is left behind.
+    // Marketing landing page. Same split as the docs: Alchemy owns the Pages
+    // project; `bun run www:deploy` uploads the static build because the Pages
+    // REST API has no public asset-upload endpoint. Prod-only for the same
+    // reason: a preview project would be empty until someone uploaded to it.
+    const www = isProd
+      ? yield* Cloudflare.Pages.Project("EdgeSpecWww", {
+          name: "edge-spec-www",
+          productionBranch: "main",
+        })
+      : undefined;
 
     return {
       url: worker.url,
       // The published docs site; preview/dev stages do not own one.
-      docsUrl: docs
-        ? Output.interpolate`https://${docs.subdomain}`
-        : "https://edge-spec-docs.pages.dev",
+      // Local dev does not own a Pages project; `bun run dev:all` serves the
+      // docs site at this address.
+      docsUrl: localDev
+        ? "http://localhost:5174"
+        : docs
+          ? Output.interpolate`https://${docs.subdomain}`
+          : "https://edge-spec-docs.pages.dev",
+      // The landing page; `dev-worker` serves it locally on this port.
+      wwwUrl: localDev
+        ? "http://localhost:5175"
+        : www
+          ? Output.interpolate`https://${www.subdomain}`
+          : "https://edge-spec-www.pages.dev",
     };
   }),
 );

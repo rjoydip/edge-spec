@@ -796,8 +796,7 @@ email verification and password reset. Rows (`user`, `session`, `account`,
 D1, Postgres and SQLite alike; the dashboard cannot start until a session
 exists. Set `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) in production;
 email links are sent from the visitor's Resend key in Settings (or
-`EMAIL_API_KEY`/`EMAIL_FROM`). The `plan` field is read-only for clients and is
-changed only by the admin activation endpoint.
+`EMAIL_API_KEY`/`EMAIL_FROM`).
 
 ## Cache
 

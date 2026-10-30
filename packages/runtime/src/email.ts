@@ -5,7 +5,6 @@
  * deployment stores none of it (invariant 1).
  */
 import type { Env } from "./env";
-import type { EmailSender } from "./ports";
 
 export interface EmailInput {
   to: string;
@@ -30,14 +29,6 @@ export function emailConfigOf(env: Env, headers?: Headers): EmailConfig | undefi
 }
 
 export type EmailResult = { sent: true } | { sent: false; reason: string };
-
-/**
- * The `EmailSender` port for one configuration. Resend is plain HTTP, so the
- * same adapter serves every target; per-request keys stay in `emailConfigOf`.
- */
-export const emailSender = (config: EmailConfig | undefined): EmailSender => ({
-  send: (input) => sendEmail(config, input),
-});
 
 /** Sends via Resend; a missing config answers "not sent", never throws. */
 export async function sendEmail(

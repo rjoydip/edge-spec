@@ -109,8 +109,8 @@ export function AuthOverlay({
   const entry = mode === "login" || mode === "signup";
 
   const goHome = () => {
-    // A device login or pricing page brought the visitor here; keep them on it.
-    const keep = ["/authorize", "/pricing"].includes(window.location.pathname);
+    // A device login brought the visitor here; keep them on it.
+    const keep = window.location.pathname === "/authorize";
     if (keep) return;
     window.history.replaceState(null, "", "/");
     window.location.assign("/");
@@ -308,15 +308,6 @@ export function AuthOverlay({
               </button>
             )}
 
-            <div className="flex items-center gap-2">
-              <span className="auth-divider" />
-              <ShieldCheck className="size-3.5 text-emerald-400" />
-              <span className="auth-divider" />
-            </div>
-            <p className="text-center text-[10.5px] leading-relaxed text-zinc-600">
-              Email + password secured by Better Auth. Accounts live in this deployment&apos;s own
-              database — keys for GitHub, AI and your runner never leave your browser.
-            </p>
             <button
               type="button"
               onClick={goHome}
@@ -474,7 +465,7 @@ function Alert({ tone, children }: { tone: "error" | "success"; children: ReactN
 
 /* ------------------------------------------------------------------ */
 
-/** Inline link used by the auth card and the pricing overlay. */
+/** Inline link used by the auth card. */
 export function Link({ to, children }: { to: string; children: string }) {
   return (
     <a
@@ -485,17 +476,3 @@ export function Link({ to, children }: { to: string; children: string }) {
     </a>
   );
 }
-
-/** Dark backdrop used by overlays layered over the dashboard (pricing). */
-export const Overlay = ({ children }: { children: ReactNode }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/60 p-4">
-    {children}
-  </div>
-);
-
-/** Kept for callers that want a plain card outside the auth scene. */
-export const Card = ({ children }: { children: ReactNode }) => (
-  <div className="flex w-84 max-w-full flex-col items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-6 text-center shadow-2xl">
-    {children}
-  </div>
-);
