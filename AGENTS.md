@@ -64,6 +64,9 @@ lint, `bun check .` across every project, tests). For a UI change, also run
 - `packages/mcp/src/` — stdio MCP server wrapping the shared client.
 - `packages/sandbox/src/` — reference self-hosted runner; `bwrap`/Docker/Podman plus
   hosted E2B/Vercel/Daytona SDK drivers, no image build.
+- `skills/` — portable agent skills in the open Agent Skills format
+  (`skills/<name>/SKILL.md`), published through `npx skills add <owner>/edge-spec`.
+  Content only: nothing imports it into a workspace or build.
 - `examples/` — scenario apps for local test generation: framework examples
   (`missing-openapi/`, `express/`, `elysia/`), `node/`, `openapi/`, and dependency-free
   fixtures in `src/`. Reference tests stay in each `tests/` folder;
