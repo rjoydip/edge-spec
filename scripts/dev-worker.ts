@@ -114,3 +114,5 @@ process.on("SIGTERM", shutdown);
 const exitCode = await Promise.race([watch.exited, alchemy.exited, docs.exited, www.exited]);
 shutdown();
 process.exit(exitCode ?? 1);
+
+export {};
