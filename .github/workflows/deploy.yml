@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main, fix/migration-hash-repair]
+    branches: [main]
   workflow_dispatch:
     inputs:
       adopt:
