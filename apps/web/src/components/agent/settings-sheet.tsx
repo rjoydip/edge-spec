@@ -800,7 +800,7 @@ export function SettingsSheet({
                     Accent
                   </span>
                   <span className="block text-[10px] leading-snug text-zinc-500">
-                    Recolours the primary action, focus rings and the aurora.
+                    Recolours the primary action and focus rings.
                   </span>
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">

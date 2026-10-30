@@ -1,22 +1,12 @@
 /**
  * Postgres speaks `$1` placeholders; the shared SQL is written for SQLite. The
- * converter is the only thing standing between the two, and the `repo_memory`
- * upsert is the statement that relies on it most.
+ * converter lives in `@edge-spec/db`, and the `repo_memory` upsert is the
+ * statement that relies on it most.
  */
 import { describe, expect, it } from "bun:test";
-import { placeholders } from "../src/adapters/postgres";
+import { placeholders } from "@edge-spec/db";
 import { putMemory } from "../src/db";
 import type { SqlDatabase, SqlStatement } from "../src/env";
-
-describe("postgres placeholders", () => {
-  it("numbers only unquoted question marks", () => {
-    expect(placeholders("SELECT '?', \"?\", ? , ?")).toBe("SELECT '?', \"?\", $1 , $2");
-  });
-
-  it("leaves comments alone", () => {
-    expect(placeholders("SELECT ? -- ?\n, ?")).toBe("SELECT $1 -- ?\n, $2");
-  });
-});
 
 /** Records the SQL `putMemory` prepares, without running it. */
 function recordingDb(): { db: SqlDatabase; statements: string[] } {

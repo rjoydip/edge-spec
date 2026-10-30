@@ -721,17 +721,21 @@ bun run dev            # Vite on :5173, proxies /api to :8787
 ```
 
 Run both for dashboard development. `bun run dev:worker` builds the Worker
-bundle and starts `alchemy dev` with local D1/R2 state. It serves the last built
-assets, so rebuild (`bun run build:web`) after UI changes if you are not using
-Vite. Rebuild the Worker bundle (`bun run build:worker`) after
-`packages/core/src`, `packages/runtime/src` or `apps/worker/src` changes;
-`alchemy dev` serves `dist/worker/index.js`.
+bundle, starts a `vite build --watch` for it, and runs `alchemy dev` with local
+D1/R2 state. Editing `packages/core/src`, `packages/runtime/src` or
+`apps/worker/src` rebuilds `dist/worker/index.js`; `alchemy dev` watches that
+file and reloads the Worker (the stack uses `main` + `bundle: false`, not an
+inline `script`). Dashboard changes still need Vite (`bun run dev`) or
+`bun run build:web`; the Worker serves the last built assets.
+
+`bun run dev:worker` runs two processes; stopping it kills the whole tree so a
+stale `workerd` never keeps port 8787 bound.
 
 ## Other deployment targets
 
 The Worker is one entry; the same app also runs on Vercel and on Bun/Node. The
 capabilities are ports (`SqlDatabase`, `ObjectStore`, `JobQueue`, `CacheStore`)
-resolved once at boot by `packages/runtime/src/adapters/select.ts`:
+resolved once at boot by `packages/adapters/src/node/select.ts`:
 
 ```text
 binding -> EDGESPEC_<CAP> override -> EDGESPEC_PROVIDER default -> off
@@ -740,13 +744,15 @@ binding -> EDGESPEC_<CAP> override -> EDGESPEC_PROVIDER default -> off
 | Variable                                                                                                                   | Capability    |
 | -------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | `EDGESPEC_PROVIDER` (`vercel`, `aws`, `node`)                                                                              | defaults      |
-| `EDGESPEC_DB_URL` (`EDGESPEC_DB=postgres`)                                                                                 | SQL           |
+| `EDGESPEC_DB_URL` (`EDGESPEC_DB=postgres` or `sqlite`)                                                                     | SQL           |
 | `EDGESPEC_BLOB_ENDPOINT`, `_BUCKET`, `_REGION`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_PREFIX` (`EDGESPEC_BLOB=r2\|s3`) | objects       |
 | `EDGESPEC_JOB_URL`, `EDGESPEC_JOB_KEY` (`EDGESPEC_JOBS=http`)                                                              | jobs          |
 | `EDGESPEC_REDIS_URL`, `EDGESPEC_REDIS_TOKEN` (`EDGESPEC_CACHE=redis`)                                                      | cache         |
-| `EDGESPEC_STATIC_DIR`, `PORT`, `EDGESPEC_CRON_INTERVAL_MINUTES`                                                            | Bun entry     |
+| `EDGESPEC_STATIC_DIR`, `PORT`, `HOST`, `EDGESPEC_CRON_INTERVAL_MINUTES`                                                    | Bun entry     |
 | `CRON_SECRET`                                                                                                              | cron route    |
 | `AI_PROVIDER`, `AI_KEY`, `AI_BASE_URL`, `AI_MODEL`                                                                         | automation AI |
+| `BETTER_AUTH_SECRET`, `EMAIL_API_KEY`, `EMAIL_FROM`                                                                        | accounts      |
+| `EDGESPEC_OBSERVABILITY` (`consola`, `otlp`, `sentry`, `axiom`, `none`), `EDGESPEC_LOG_LEVEL`                              | observability |
 
 `EDGESPEC_PROVIDER` fills defaults only when the matching env exists; the rest
 stay off. An explicit override with missing env fails at boot and names the
@@ -757,9 +763,40 @@ Postgres schema: `EDGESPEC_DB_URL=postgres://… bun run migrate` applies
 `migrations/postgres.sql` once. D1 keeps using `migrations/*.sql` through
 Alchemy.
 
-Entries: `src/index.ts` (Cloudflare), `infra/vercel/handler.ts` + `api/index.ts`
-(Vercel), `src/server.ts` (`bun run serve`). Node-only drivers (`pg`,
-`aws4fetch`) are imported lazily and are unreachable from the Cloudflare bundle.
+Entries: `apps/worker/src/index.ts` (Cloudflare), `apps/server/src/index.ts`
+(`bun run serve`), `infra/vercel/handler.ts` + `api/index.ts` (Vercel) and
+`infra/aws/lambda.ts` (Lambda Function URL). Node-only drivers live in
+`packages/adapters` (`pg` via `@edge-spec/db`, `aws4fetch`) and are
+unreachable from the Cloudflare bundle.
+
+## Observability
+
+`EDGESPEC_OBSERVABILITY` picks where structured events go. The app emits
+`http.request` for every response (method, path, status, duration) and
+`http.error` for 5xx failures; the Bun entry also emits `server.started`.
+
+| Provider  | Required env                                                         | Notes                                     |
+| --------- | -------------------------------------------------------------------- | ----------------------------------------- |
+| `consola` | — (default)                                                          | Structured console lines                  |
+| `otlp`    | `OTEL_EXPORTER_OTLP_ENDPOINT`, optional `OTEL_EXPORTER_OTLP_HEADERS` | OTLP/HTTP JSON logs; works on all targets |
+| `sentry`  | `SENTRY_DSN`                                                         | Sentry store API                          |
+| `axiom`   | `AXIOM_TOKEN`, `AXIOM_DATASET`, optional `AXIOM_URL`                 | Axiom ingest (NDJSON)                     |
+| `none`    | —                                                                    | Disables events                           |
+
+`EDGESPEC_LOG_LEVEL=debug|info|warn|error` filters (default `info`). Every
+provider is a plain `fetch` (or console), so nothing platform-specific is
+bundled into the Worker. The Bun server prints `EdgeSpec listening on …` only
+for loopback hosts (`HOST=127.0.0.1` or `EDGESPEC_LOCAL=1`).
+
+## Authentication
+
+Accounts use [Better Auth](https://better-auth.com) with email + password,
+email verification and password reset. Rows (`user`, `session`, `account`,
+`verification`) live in the deployment's SQL database, so accounts work on
+D1, Postgres and SQLite alike; the dashboard cannot start until a session
+exists. Set `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) in production;
+email links are sent from the visitor's Resend key in Settings (or
+`EMAIL_API_KEY`/`EMAIL_FROM`).
 
 ## Cache
 

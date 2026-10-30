@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { httpJobs } from "../src/adapters/http-jobs";
-import { createPlatform } from "../src/adapters/select";
-import { runGenerationJob } from "../src/jobs";
-import { artifactsStore, capabilities, historyDb, jobsQueue } from "../src/platform";
+import { httpJobs } from "../src/node/http-jobs";
+import { createPlatform } from "../src/node/select";
+import { runGenerationJob } from "@edge-spec/runtime/jobs";
+import { artifactsStore, capabilities, historyDb, jobsQueue } from "@edge-spec/runtime/platform";
 
 describe("provider selection", () => {
   it("leaves every capability off when nothing is configured", async () => {

@@ -1,5 +1,4 @@
 /** Same-origin API client. Every call carries the visitor's own settings. */
-import type { Provider } from "@edge-spec/core/catalog";
 import type {
   Generation,
   RateLimitInfo,
@@ -8,7 +7,6 @@ import type {
   ScanResult,
   Validation,
 } from "@edge-spec/core/types";
-import type { PullSummary } from "@edge-spec/core/github";
 import type { BacklogItem, BacklogState } from "@edge-spec/core/backlog";
 import type { RunDecision, RunDetail, RunSummary } from "@edge-spec/core/history";
 import type { RepoMemory } from "@edge-spec/core/memory";
@@ -16,15 +14,6 @@ import type { PullPolicy } from "@edge-spec/core/policy";
 import type { PullFile } from "@edge-spec/core/pr";
 import type { SkippedContractOperation } from "@edge-spec/core/provenance";
 import { getProject, requestHeaders, type Project, type Settings } from "./lib/settings";
-
-export interface Catalog {
-  providers: Provider[];
-  defaults: {
-    ai: { provider: string; model: string };
-    pipeline: Record<string, number | boolean>;
-  };
-  sandbox: boolean;
-}
 
 async function errorMessage(response: Response): Promise<string> {
   const text = await response.text();
@@ -51,10 +40,6 @@ async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!response.ok) throw new Error(await errorMessage(response));
   return (await response.json()) as T;
-}
-
-export function fetchCatalog(): Promise<Catalog> {
-  return apiJson<Catalog>("/api/catalog");
 }
 
 /** Mirrors `Capabilities` in the Worker's `platform.ts`. */
@@ -148,10 +133,6 @@ async function localSource(project: Project, path: string): Promise<string> {
     `/local-api/file?root=${encodeURIComponent(project.localPath)}&path=${encodeURIComponent(path)}`,
   );
   return result.source;
-}
-
-export function fetchPulls(repo: string): Promise<{ pulls: PullSummary[] }> {
-  return apiJson<{ pulls: PullSummary[] }>(`/api/pulls?repo=${encodeURIComponent(repo)}`);
 }
 
 export async function regenerate(

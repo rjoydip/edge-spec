@@ -3,7 +3,7 @@
 Provider-specific glue for the Vercel target.
 
 - `handler.ts` — Web API function. It builds `Env` once per instance from
-  `process.env` through `@edge-spec/runtime/adapters/node`, then delegates every
+  `process.env` through `@edge-spec/adapters/node`, then delegates every
   request to the shared Hono app.
 - `../../api/index.ts` — Vercel only discovers functions under the root `api/`
   directory, so this file re-exports the handler. Keep it a one-liner.

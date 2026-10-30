@@ -117,6 +117,8 @@ import {
   cn,
 } from "@edge-spec/ui";
 import { fetchBranches, recordRunDecision, type PullMeta } from "@/api";
+import type { AccountUser } from "@/lib/account";
+import { AccountSection, Avatar as AccountAvatar } from "./account-menu";
 import { isLocalPathInput } from "@/lib/local-path";
 import { setProject, type Project, type Settings as SettingsValue } from "@/lib/settings";
 import { toggleMode, useAppearance } from "@/lib/theme";
@@ -221,6 +223,10 @@ export interface AgentWorkspaceProps {
   onOpenPull: (items: AgentTest[], meta: PullMeta) => Promise<string>;
   onOpenSettings: (section?: SettingsSection) => void;
   onDismissToast: () => void;
+  /** Accounts: present only when the deployment has the auth routes. */
+  account?: AccountUser | null;
+  /** A profile edit changed the signed-in user. */
+  onAccountUpdated?: (user: AccountUser) => void;
 }
 
 export function AgentWorkspace({
@@ -257,6 +263,8 @@ export function AgentWorkspace({
   onOpenPull,
   onOpenSettings,
   onDismissToast,
+  account,
+  onAccountUpdated,
 }: AgentWorkspaceProps) {
   const appearance = useAppearance();
   const provider = providerById(settings.provider);
@@ -555,8 +563,30 @@ export function AgentWorkspace({
       pct: scanStatus === "done" ? 100 : scanStatus === "running" ? 60 : 0,
     },
     {
+      id: "static",
+      label: "Static Checks",
+      sub: checksTotal
+        ? `${checksTotal} check${checksTotal === 1 ? "" : "s"}`
+        : settings.sandboxUrl.trim()
+          ? "Repo checks · runner"
+          : "Static check only",
+      icon: ShieldCheck,
+      tone: "review",
+      state:
+        steps.validate.status === "running"
+          ? "running"
+          : checksTotal > 0 || steps.validate.status === "done"
+            ? "done"
+            : "idle",
+      pct: generated.length
+        ? (validated / generated.length) * 100
+        : steps.validate.status === "running"
+          ? 40
+          : 0,
+    },
+    {
       id: "test",
-      label: "Testing OpenSpec",
+      label: "OpenSpec",
       sub: !hasSpec
         ? "Not applicable · no OpenAPI spec"
         : project.localPath
@@ -584,28 +614,6 @@ export function AgentWorkspace({
             : 0,
       ...(hasSpec ? { step: "validate" as StepId } : {}),
       disabled: !hasSpec,
-    },
-    {
-      id: "static",
-      label: "Static checks",
-      sub: checksTotal
-        ? `${checksTotal} check${checksTotal === 1 ? "" : "s"}`
-        : settings.sandboxUrl.trim()
-          ? "Repo checks · runner"
-          : "Static check only",
-      icon: ShieldCheck,
-      tone: "review",
-      state:
-        steps.validate.status === "running"
-          ? "running"
-          : checksTotal > 0 || steps.validate.status === "done"
-            ? "done"
-            : "idle",
-      pct: generated.length
-        ? (validated / generated.length) * 100
-        : steps.validate.status === "running"
-          ? 40
-          : 0,
     },
     {
       id: "fix",
@@ -770,12 +778,6 @@ export function AgentWorkspace({
     <TooltipProvider delayDuration={180}>
       <IconGradientDefs />
       <div className="no-scrollbar relative min-h-dvh overflow-x-hidden">
-        <div className="app-backdrop" aria-hidden="true">
-          <div className="app-aurora app-aurora-a" />
-          <div className="app-aurora app-aurora-b" />
-          <div className="app-aurora app-aurora-c" />
-        </div>
-
         <div className="relative z-10 mx-auto max-w-7xl space-y-3 px-3 pt-3 pb-28 sm:px-6">
           <header className="app-reveal glass-panel sticky top-0 z-30 rounded-2xl px-3 py-2.5 sm:px-4">
             <div className="flex items-center gap-2.5">
@@ -847,37 +849,44 @@ export function AgentWorkspace({
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      aria-label="User profile"
+                      aria-label="Account, appearance, settings and activity"
                       className="rounded-full transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:outline-none"
                     >
-                      <Avatar>
-                        <AvatarFallback>
-                          <User className="size-4" />
-                        </AvatarFallback>
-                      </Avatar>
+                      {account ? (
+                        <AccountAvatar user={account} size={30} />
+                      ) : (
+                        <Avatar>
+                          <AvatarFallback>
+                            <User className="size-4" />
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-64">
-                    <DropdownMenuLabel>
-                      <span className="block truncate text-[11px] font-semibold text-zinc-200">
-                        {project.repo || project.localPath || "No project"}
-                      </span>
-                      <span className="block text-[9px] font-normal text-zinc-500">
-                        {project.ref || "no branch"} · {appearance.mode} mode
-                      </span>
+                    {account && (
+                      <AccountSection
+                        account={account}
+                        onUpdated={(user) => onAccountUpdated?.(user)}
+                      />
+                    )}
+                    <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-[9px] tracking-wide text-zinc-500 uppercase">
+                      Appearance
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={toggleMode}>
                       {appearance.mode === "dark" ? <Sun /> : <Moon />}
                       Switch to {appearance.mode === "dark" ? "light" : "dark"}
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => openFromMenu(() => onOpenSettings("appearance"))}
+                    >
+                      <Sparkles />
+                      Theme &amp; accent
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[9px] tracking-wide text-zinc-500 uppercase">
+                    <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-[9px] tracking-wide text-zinc-500 uppercase">
                       Settings
                     </DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => openFromMenu(() => onOpenSettings())}>
-                      <Settings />
-                      All settings
-                    </DropdownMenuItem>
                     <DropdownMenuItem
                       onSelect={() => openFromMenu(() => onOpenSettings("provider"))}
                     >
@@ -906,14 +915,12 @@ export function AgentWorkspace({
                       <Server />
                       Deployment
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => openFromMenu(() => onOpenSettings("appearance"))}
-                    >
-                      <Sparkles />
-                      Appearance
+                    <DropdownMenuItem onSelect={() => openFromMenu(() => onOpenSettings())}>
+                      <Settings />
+                      All settings
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[9px] tracking-wide text-zinc-500 uppercase">
+                    <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-[9px] tracking-wide text-zinc-500 uppercase">
                       Activity
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={() => openFromMenu(() => setHistoryOpen(true))}>
@@ -1079,6 +1086,7 @@ export function AgentWorkspace({
                     const Icon = option.icon;
                     const active = mode === option.id;
                     const needsGitHub = option.id === "auto" && localDraft;
+                    const locked = needsGitHub;
                     const tile =
                       option.id === "review"
                         ? active
@@ -1095,7 +1103,7 @@ export function AgentWorkspace({
                         }}
                         className={cn(
                           "relative flex items-start gap-2.5 rounded-xl border p-2.5 transition",
-                          needsGitHub
+                          locked
                             ? "cursor-not-allowed border-zinc-800 bg-zinc-900/20 opacity-55"
                             : active
                               ? "cursor-pointer border-indigo-500/50 bg-indigo-500/[0.08] shadow-lg shadow-indigo-950/20"
@@ -1105,7 +1113,7 @@ export function AgentWorkspace({
                         <span
                           className={cn(
                             "flex size-8 shrink-0 items-center justify-center rounded-lg border",
-                            needsGitHub ? "border-zinc-800 bg-zinc-950/50 text-zinc-600" : tile,
+                            locked ? "border-zinc-800 bg-zinc-950/50 text-zinc-600" : tile,
                           )}
                         >
                           <Icon className="size-4" />
@@ -2300,7 +2308,7 @@ function StageNode({
           <p className="truncate text-[11px] font-semibold text-zinc-200">{label}</p>
           <p className="truncate font-mono text-[10px] text-zinc-500">{sub}</p>
         </div>
-        <span className="ml-auto shrink-0 font-mono text-[10px] text-zinc-600">
+        <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10px] text-zinc-600">
           {String(position).padStart(2, "0")}
           {interactive && (
             <ChevronRight className="ml-0.5 inline size-3 text-zinc-700 transition group-hover:text-zinc-400" />

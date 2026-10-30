@@ -6,7 +6,7 @@
  * of crashing the module load.
  */
 import { app } from "@edge-spec/runtime/app";
-import { platformFromEnv } from "@edge-spec/runtime/adapters/node";
+import { platformFromEnv } from "@edge-spec/adapters/node";
 
 let platform: ReturnType<typeof platformFromEnv> | undefined;
 

@@ -8,12 +8,12 @@
  * whose env is missing just leaves that capability off, so a partial
  * deployment still starts and reports honestly.
  */
-import type { Env } from "../env";
+import type { Env } from "@edge-spec/runtime/env";
 import { httpJobs } from "./http-jobs";
 import { memoryCache } from "./memory-cache";
-import { createPostgres } from "./postgres";
 import { redisCache } from "./redis";
 import { s3Store } from "./s3";
+import { resolveDatabase, applySqliteMigrations } from "@edge-spec/db";
 
 type Source = Record<string, string | undefined>;
 
@@ -35,6 +35,23 @@ const PASSTHROUGH = [
   "AI_MODEL",
   "DRIFT_ALERT_WEBHOOK_URL",
   "DRIFT_ALERT_WEBHOOK_SECRET",
+  "EMAIL_API_KEY",
+  "EMAIL_FROM",
+  "BETTER_AUTH_SECRET",
+  "BETTER_AUTH_URL",
+  "EDGESPEC_INSECURE_COOKIES",
+  "EDGESPEC_WORKSPACE_URL",
+  "EDGESPEC_OBSERVABILITY",
+  "EDGESPEC_LOG_LEVEL",
+  "EDGESPEC_SERVICE_NAME",
+  "EDGESPEC_ENV",
+  "NODE_ENV",
+  "OTEL_EXPORTER_OTLP_ENDPOINT",
+  "OTEL_EXPORTER_OTLP_HEADERS",
+  "SENTRY_DSN",
+  "AXIOM_TOKEN",
+  "AXIOM_DATASET",
+  "AXIOM_URL",
 ] as const;
 
 const value = (source: Source, key: string): string | undefined => {
@@ -56,17 +73,23 @@ export async function createPlatform(bindings: Partial<Env>, source: Source): Pr
     if (raw !== undefined) (env as Record<string, unknown>)[key] = raw;
   }
 
-  // SQL: D1 only exists as a binding; everything else is Postgres.
-  const explicitDb = value(source, "EDGESPEC_DB")?.toLowerCase();
-  const dbDriver = explicitDb ?? (provider ? "postgres" : undefined);
-  if (!env.DB && !env.RUNS_DB && dbDriver === "postgres") {
-    const url = value(source, "EDGESPEC_DB_URL");
-    if (url) env.DB = await createPostgres(url);
-    else if (explicitDb) throw new Error("EDGESPEC_DB=postgres requires EDGESPEC_DB_URL.");
-  } else if (explicitDb === "d1" && !env.DB && !env.RUNS_DB) {
-    throw new Error("EDGESPEC_DB=d1 requires the DB or RUNS_DB binding.");
-  } else if (explicitDb && explicitDb !== "d1" && explicitDb !== "postgres") {
-    throw new Error(`Unknown EDGESPEC_DB adapter "${explicitDb}". Use d1 or postgres.`);
+  // SQL: D1 only exists as a binding; the node drivers resolve via @edge-spec/db.
+  const resolved = await resolveDatabase(env, source);
+  if (resolved) {
+    env.DB = resolved.db as Env["DB"];
+    if (resolved.driver === "sqlite") {
+      // Bun single-node deployments carry the schema with them.
+      const migrationsDir = value(source, "EDGESPEC_MIGRATIONS") ?? "migrations";
+      try {
+        await applySqliteMigrations(resolved.db, migrationsDir);
+      } catch (error) {
+        throw new Error(
+          `Could not apply sqlite migrations from "${migrationsDir}" (set EDGESPEC_MIGRATIONS to override): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
   }
 
   // Objects: S3 API covers AWS, R2, MinIO and Supabase.
