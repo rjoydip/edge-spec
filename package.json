@@ -4,6 +4,9 @@
   "private": true,
   "description": "Find untested code, generate tests with the model you choose, and open a pull request.",
   "type": "module",
+  "overrides": {
+    "@effect/platform-node-shared": "4.0.6"
+  },
   "workspaces": [
     "apps/*",
     "packages/*",
