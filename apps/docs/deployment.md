@@ -60,6 +60,16 @@ The Worker still deploys without the binding (for example in a local bundle
 test), but every history/backlog/workspace route then answers `enabled: false`
 and the cron does nothing.
 
+### Alchemy peer dependency errors
+
+`bunx alchemy` failing with `Alchemy could not load the required peer
+dependency "@effect/platform-bun"` means the local install resolved
+`@effect/platform-node-shared@4.1.x` (which needs `effect@4.1`) next to
+`effect@4.0.6`. The root `overrides` pin keeps it on `4.0.6`; run
+`bun install` from the repository root after pulling, then invoke Alchemy from
+`infra/cloudflare` (`bun run --cwd infra/cloudflare deploy …`) so the local CLI
+is used instead of a globally installed one.
+
 ### Repairing migration bookkeeping
 
 Alchemy records a `sha256` of each migration file in `__alchemy_migrations` and
