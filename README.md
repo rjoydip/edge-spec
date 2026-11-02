@@ -67,10 +67,12 @@ bun run docs:preview  # serve the build locally
 ```
 
 The landing page (`bun run dev:www`, http://localhost:5175) links to the docs
-(http://localhost:5174) and dashboard (http://localhost:5173) in development.
-Production builds default to https://edge-spec-www.pages.dev,
-https://edge-spec-docs.pages.dev and https://edge-spec.rjoydip.workers.dev; set
-`VITE_APP_URL` and `VITE_DOCS_URL` when hosting elsewhere.
+(http://localhost:5174) and the Worker dashboard (http://localhost:8787) in
+development. `bun run dev:all` additionally serves the live dashboard at
+http://localhost:5173. Production builds default to
+https://edge-spec-www.pages.dev, https://edge-spec-docs.pages.dev and
+https://edge-spec.rjoydip.workers.dev; set `VITE_APP_URL` and `VITE_DOCS_URL`
+when hosting elsewhere.
 
 ## Local development
 

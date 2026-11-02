@@ -5,7 +5,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from
 // dev-worker) and on Cloudflare Pages in a build. Anchors stay in-page.
 const APP =
   import.meta.env.VITE_APP_URL ??
-  (import.meta.env.DEV ? "http://localhost:5173" : "https://edge-spec.rjoydip.workers.dev");
+  (import.meta.env.DEV ? "http://localhost:8787" : "https://edge-spec.rjoydip.workers.dev");
 const DOCS =
   import.meta.env.VITE_DOCS_URL ??
   (import.meta.env.DEV ? "http://localhost:5174" : "https://edge-spec-docs.pages.dev");

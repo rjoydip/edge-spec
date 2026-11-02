@@ -10,7 +10,22 @@
  * The docs site runs alongside the Worker so the stack's local `docsUrl`
  * (`http://127.0.0.1:5174`) is reachable while the app is running.
  */
+import { existsSync } from "node:fs";
+
 const WATCH_READY = "watching for file changes";
+
+// The Worker serves `dist/web` at 8787. Build it once when it is missing so the
+// landing page's "Open app" link works without a separate `bun run build`.
+if (!existsSync("dist/web/index.html")) {
+  const build = Bun.spawnSync(["bun", "run", "build:web"], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  if (build.exitCode !== 0) {
+    console.error("Dashboard build failed; the Worker has no assets to serve.");
+    process.exit(1);
+  }
+}
 
 const watch = Bun.spawn(["bun", "run", "--cwd", "apps/worker", "watch"], {
   stdout: "pipe",
@@ -114,5 +129,3 @@ process.on("SIGTERM", shutdown);
 const exitCode = await Promise.race([watch.exited, alchemy.exited, docs.exited, www.exited]);
 shutdown();
 process.exit(exitCode ?? 1);
-
-export {};
