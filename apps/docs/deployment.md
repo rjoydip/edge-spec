@@ -29,8 +29,11 @@ bun run alchemy profile edit --profile default --add Cloudflare --method stored 
   --set accountId=env:CLOUDFLARE_ACCOUNT_ID
 ```
 
-The token needs Workers Scripts, D1, R2 and Workers AI permissions. The Alchemy
-state store additionally needs the account-scope **Workers Secrets Store**
+The token needs Workers Scripts, D1, R2 and Workers AI permissions, plus
+**Cloudflare Pages: Edit** for the docs Pages project (the landing page is
+published separately with `bun run www:deploy`, so a Worker deploy never needs
+it).
+The Alchemy state store additionally needs the account-scope **Workers Secrets Store**
 permission (Cloudflare's API names it _Secrets Store Read/Write_) and Workers
 subdomain read access — a token that lists the four resource permissions but
 omits Secrets Store passes a plain Workers/D1/R2 check yet still fails the
