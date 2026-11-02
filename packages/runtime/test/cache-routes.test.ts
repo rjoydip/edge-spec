@@ -53,6 +53,45 @@ const get = async (
 const TOKEN = "ghp_secret_token_value";
 const AI_KEY = "sk-secret-ai-key";
 
+describe("scan cache", () => {
+  it("reuses GitHub tree and file reads when the TTL is set", async () => {
+    const { cache, keys } = fakeCache();
+    const treeUrl = "https://api.github.com/repos/acme/api/git/trees/main?recursive=1";
+    const fileUrl = "https://api.github.com/repos/acme/api/contents/src/a.ts?ref=main";
+    const calls = stubFetch((url) => {
+      if (url === treeUrl) {
+        return new Response(JSON.stringify({ tree: [{ path: "src/a.ts", type: "blob" }] }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url === fileUrl) {
+        return new Response(
+          JSON.stringify({ content: Buffer.from("export const a = 1;").toString("base64") }),
+          { headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 404 });
+    });
+    const env = { CACHE: cache, EDGESPEC_SCAN_CACHE_TTL: "60" } as Env;
+    const scan = () =>
+      app.fetch(
+        new Request("https://edge.example/api/scan", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ repo: "acme/api", ref: "main" }),
+        }),
+        env,
+      );
+
+    expect((await scan()).status).toBe(200);
+    expect((await scan()).status).toBe(200);
+    expect(calls.filter((url) => url === treeUrl)).toHaveLength(1);
+    expect(calls.filter((url) => url === fileUrl)).toHaveLength(1);
+    expect(keys.some((key) => key.startsWith("scan:"))).toBe(true);
+    expect(keys.every((key) => !key.includes(TOKEN))).toBe(true);
+  });
+});
+
 describe("cached routes", () => {
   it("serves quota from the cache and keeps the token out of the key", async () => {
     const { cache, keys } = fakeCache();

@@ -218,3 +218,9 @@ explicitly changes:
 - Storing user PATs or AI keys server-side.
 - Autonomous merges; human approval stays for anything that leaves the session.
 - Multi-language test generation before the JS/TS loop is excellent.
+- Turning mutation, flaky detection, or evaluation defaults on without measured
+  cost and flake data.
+- Queue-backed batch scans until the 10-repo cron cap or command latency is a
+  measured limit; the cron and synchronous paths cover current volume.
+- Changing prompt targeting, model routing, draft-PR, or commit-on-PR defaults
+  before the four product experiments have recorded outcomes.

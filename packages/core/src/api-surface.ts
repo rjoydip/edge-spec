@@ -128,9 +128,9 @@ const ROUTE_CALL =
 const ON_CALL =
   /\b([A-Za-z_$][\w$]*)\s*\.\s*on\s*\(\s*(['"])(get|post|put|patch|delete|options|head)\2\s*,\s*(['"`])(\/[^'"`]*)\4/gi;
 
-/** Elysia chains: `new Elysia().get("/x", …)` or `).post("/x", …)`. */
+/** Elysia chains: `new Elysia().get("/x", …)`. */
 const CHAIN_CALL =
-  /(?:\bnew\s+[A-Za-z_$][\w$]*\s*\([^)]*\)|\))\s*\.\s*(get|post|put|patch|delete|options|head)\s*\(\s*(['"`])(\/[^'"`]*)\2/gi;
+  /\bnew\s+[A-Za-z_$][\w$]*\s*\([^)]*\)\s*\.\s*(get|post|put|patch|delete|options|head)\s*\(\s*(['"`])(\/[^'"`]*)\2/gi;
 
 /** `app.route("/api", router)`, `.mount()` and Express's `.use()`. */
 const MOUNT_CALL =

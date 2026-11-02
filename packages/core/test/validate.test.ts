@@ -96,6 +96,24 @@ describe("validateTest", () => {
     expect(called).toBe(false);
   });
 
+  it("keeps flaky repeats, mutation and coverage opt-in", async () => {
+    let calls = 0;
+    const fakeFetch = (async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ exitCode: 0, stdout: "1 pass" }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example" },
+      fetchImpl: fakeFetch,
+    });
+    expect(calls).toBe(1);
+    expect(result.runs).toBe(1);
+    expect(result.mutation).toBeUndefined();
+    expect(result.coverage).toBeUndefined();
+  });
+
   it("keeps raw JUnit and LCOV from the runner for the run bundle", async () => {
     const fakeFetch = (async () =>
       new Response(

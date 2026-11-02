@@ -15,13 +15,22 @@ const root = join(import.meta.dir, "..", "..");
 describe("golden scans", () => {
   it("passes every golden case against the examples", () => {
     const cases = readGolden(join(import.meta.dir, "..", "golden.json"));
-    expect(cases.map((testCase) => testCase.id)).toEqual(["mixed-gaps", "complete-app"]);
+    expect(cases.map((testCase) => testCase.id)).toEqual([
+      "mixed-gaps",
+      "complete-app",
+      "express-mounted-routes",
+    ]);
     const results = runGolden(root, cases);
     expect(results.every((result) => result.pass)).toBe(true);
     expect(results[0]).toMatchObject({
       caseId: "mixed-gaps",
       missing: [],
       unexpected: [],
+    });
+    expect(results[2]).toMatchObject({
+      caseId: "express-mounted-routes",
+      endpointMissing: [],
+      endpointUnexpected: [],
     });
   });
 

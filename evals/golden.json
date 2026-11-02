@@ -10,6 +10,12 @@
       "id": "complete-app",
       "path": "examples/complete-app",
       "expectedGaps": []
+    },
+    {
+      "id": "express-mounted-routes",
+      "path": "examples/express",
+      "expectedGaps": [],
+      "expectedEndpoints": ["GET /", "GET /api/users", "GET /api/users/{id}", "POST /echo"]
     }
   ]
 }

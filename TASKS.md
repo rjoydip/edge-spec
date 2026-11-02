@@ -16,22 +16,3 @@ commitment to a date.
 - [ ] **Approval binding.** A token currently authorizes the prepared files as
       stored. If approvals ever cross processes, bind the token to a digest of
       the payload and the repository.
-
-## Quality and evaluation
-
-- [ ] **Eval coverage for new surfaces.** `evals/` covers generation outcomes,
-      not MCP resources or audit. Add cases only where the outcome is
-      measurable.
-- [ ] **Mutation/flaky/eval defaults.** All remain opt-in. Revisit only with
-      measured cost and flake data; do not turn them on by default.
-- [ ] **Shared scan cache (KV).** Nothing is cached server-side; repeated scans
-      of the same commit still pay GitHub calls. Add KV only if that becomes a
-      measured cost or rate-limit problem.
-- [ ] **Run the recorded product experiments.** The earlier plan named four:
-      targeted vs untargeted prompts, cheap-vs-strong model routing, draft vs
-      ready PRs, and comment-only vs commit-on-PR defaults. Record outcomes and
-      change a default only when the measurement supports it.
-- [ ] **Queue-backed batch work.** The earlier plan listed Cloudflare Queues
-      for batch scans and PR commands; the cron and synchronous paths are
-      sufficient at current volume. Add Queues when the 10-repo cron cap or
-      command latency becomes a real limit.

@@ -824,8 +824,11 @@ show what is actually configured.
 | `redis`  | Upstash Redis REST        | Vercel, AWS, containers |
 | `memory` | in-process `Map` with TTL | local dev, single node  |
 
-Only `/api/quota` and `GET /api/branches` are cached (60 s), keyed by a hash of
-the token, never the token itself. Tokens, prompts, source, generated tests and
-run artifacts are never cached; artifacts already live in the object store. TTL
-is mandatory and writes invalidate, so stale data is bounded. With no cache
-configured the routes are unchanged.
+`/api/quota` and `GET /api/branches` are cached for 60 s, keyed by a hash of the
+token, never the token itself. A scan opts into caching its GitHub tree/file
+reads with `EDGESPEC_SCAN_CACHE_TTL` seconds (empty or `0` = off, capped at
+3600); keys include `repo@ref` and the token hash, and backlog sync still runs
+on every request. Tokens, prompts, source, generated tests and run artifacts are
+never cached; artifacts already live in the object store. TTL is mandatory and
+writes invalidate, so stale data is bounded. With no cache configured the routes
+are unchanged.

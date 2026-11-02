@@ -365,6 +365,28 @@ export async function cached<T>(
 }
 
 /**
+ * Opt-in cache for GitHub reads during a scan. KV is only worthwhile when
+ * `EDGESPEC_SCAN_CACHE_TTL` is set; keys carry a token hash so a private scan
+ * is never served to another token.
+ */
+async function scanGithub(c: AppContext): Promise<GitHub> {
+  const github = githubFor(c);
+  const ttl = Number(c.env.EDGESPEC_SCAN_CACHE_TTL);
+  if (!Number.isFinite(ttl) || ttl <= 0) return github;
+  const seconds = Math.min(3600, Math.max(1, Math.round(ttl)));
+  const fingerprint = await tokenFingerprint(
+    c.req.header(TOKEN_HEADER)?.trim() || c.env.GH_TOKEN || "",
+  );
+  const key = (part: string) => `scan:${fingerprint}:${part}`;
+  return {
+    tree: (repo: string, ref: string) =>
+      cached(c, key(`tree:${repo}@${ref}`), seconds, () => github.tree(repo, ref)),
+    file: (repo: string, path: string, ref?: string) =>
+      cached(c, key(`file:${repo}@${ref}:${path}`), seconds, () => github.file(repo, path, ref)),
+  } as unknown as GitHub;
+}
+
+/**
  * Request telemetry: one `http.request` event per finished response, and
  * `http.error` for the ones the routes could not handle. The observer is
  * chosen by `EDGESPEC_OBSERVABILITY`; the event promise is handed to the host's
@@ -533,7 +555,7 @@ app.post("/api/scan", async (c) => {
     const body = await readJson(c);
     const repo = repoOf(body);
     const ref = parseRef(str(body.ref));
-    const github = githubFor(c);
+    const github = await scanGithub(c);
     const tree = await github.tree(repo, ref);
     const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
     const classification = classifyTree(blobs);

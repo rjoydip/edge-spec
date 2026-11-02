@@ -46,6 +46,8 @@ export interface Env {
   /** Optional read-through cache. */
   CACHE?: CacheStore;
   CACHE_DRIVER?: CacheDriver;
+  /** Opt-in TTL (seconds) for GitHub tree/file reads during scans; 0 is off. */
+  EDGESPEC_SCAN_CACHE_TTL?: string;
   /** Guards POST /api/cron/tick. Absent disables the route. */
   CRON_SECRET?: string;
   /** Optional Slack-compatible webhook for drift notifications. */
