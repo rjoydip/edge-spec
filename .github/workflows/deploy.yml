@@ -2,7 +2,9 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+    # fix/deploy-migration-history is temporary: it lets this branch deploy so
+    # the migration-hash repair is exercised end to end. Remove after merge.
+    branches: [main, fix/deploy-migration-history]
   workflow_dispatch:
     inputs:
       adopt:
