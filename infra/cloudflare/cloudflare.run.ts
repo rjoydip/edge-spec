@@ -137,9 +137,10 @@ export default Alchemy.Stack(
     // The landing page is not an Alchemy resource. Creating a Pages project
     // through Alchemy needs the deploy token to hold Cloudflare Pages
     // permission, which the CI token (Workers, D1, R2, AI, state store) does
-    // not. `bun run www:deploy` runs `wrangler pages deploy`, which creates the
-    // project on first upload, so managing it here only added a permission the
-    // production deploy does not otherwise need.
+    // not. Create the project once with
+    // `bunx wrangler pages project create edge-spec-www --production-branch main --force`
+    // then publish with `bun run www:deploy`; managing it here only added a
+    // permission the production deploy does not otherwise need.
 
     return {
       url: worker.url,
