@@ -3,9 +3,10 @@
  * document. Routes are read from framework calls and Next.js route files; the
  * result is explicitly marked inferred, never presented as a published spec.
  *
- * ponytail: regex route extraction, not an AST. Mounted router prefixes and
- * generated routes are not resolved; the inferred flag and the health matrix
- * keep that honest. Upgrade to a parser only if inference becomes primary.
+ * ponytail: regex route extraction, not an AST. Mounted router prefixes are
+ * composed across files; generated routes and runtime composition are not. The
+ * inferred flag keeps that honest. Upgrade to a parser only if inference
+ * becomes primary.
  */
 import { isSourceFile, parseOpenApiSpec } from "@edge-spec/core/scanner";
 import type { ApiHealthRow, OpenApiEndpoint, OpenApiSpec } from "./types";
@@ -101,21 +102,154 @@ function lineOf(content: string, index: number): number {
   return content.slice(0, index).split("\n").length;
 }
 
+/** Receivers that usually hold a router even when the declaration is indirect. */
+const KNOWN_ROUTERS = new Set([
+  "app",
+  "router",
+  "server",
+  "api",
+  "route",
+  "routes",
+  "fastify",
+  "elysia",
+  "hono",
+  "worker",
+]);
+
 /**
- * Route calls such as `app.get("/x", …)` or `router.post("/x", …)`. The
- * receiver must look like a server object, so a frontend `.get("key")` does not
- * become an endpoint.
+ * Route calls such as `app.get("/x", …)` or `usersRouter.post("/x", …)`. The
+ * receiver is filtered to a declared/imported router, so a frontend
+ * `.get("key")` does not become an endpoint.
  */
 const ROUTE_CALL =
-  /\b(?:app|router|server|api|route|routes|fastify|elysia|hono|worker)\s*\.\s*(get|post|put|patch|delete|options|head)\s*\(\s*(['"`])(\/[^'"`]*)\2/gi;
+  /\b([A-Za-z_$][\w$]*)\s*\.\s*(get|post|put|patch|delete|options|head)\s*\(\s*(['"`])(\/[^'"`]*)\3/gi;
 
 /** Hono's `app.on("GET", "/x", …)`. */
 const ON_CALL =
-  /\b(?:app|router|server)\s*\.\s*on\s*\(\s*(['"])(get|post|put|patch|delete|options|head)\1\s*,\s*(['"`])(\/[^'"`]*)\3/gi;
+  /\b([A-Za-z_$][\w$]*)\s*\.\s*on\s*\(\s*(['"])(get|post|put|patch|delete|options|head)\2\s*,\s*(['"`])(\/[^'"`]*)\4/gi;
 
 /** Elysia chains: `new Elysia().get("/x", …)` or `).post("/x", …)`. */
 const CHAIN_CALL =
   /(?:\bnew\s+[A-Za-z_$][\w$]*\s*\([^)]*\)|\))\s*\.\s*(get|post|put|patch|delete|options|head)\s*\(\s*(['"`])(\/[^'"`]*)\2/gi;
+
+/** `app.route("/api", router)`, `.mount()` and Express's `.use()`. */
+const MOUNT_CALL =
+  /\b([A-Za-z_$][\w$]*)\s*\.\s*(?:route|mount|use)\s*\(\s*(['"`])(\/[^'"`]*)\2\s*,\s*([A-Za-z_$][\w$]*)/gi;
+
+/** `const router = express.Router()` and the equivalent constructors. */
+const ROUTER_DECL =
+  /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:(?:new\s+)?(?:Hono|Elysia|Fastify|Koa|KoaRouter|Router|hono)\s*\(|express\s*(?:\.\s*Router)?\s*\()/gi;
+
+const IMPORT_DEFAULT = /\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+(['"])([^'"]+)\2/g;
+const IMPORT_NAMESPACE = /\bimport\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+(['"])([^'"]+)\2/g;
+const IMPORT_NAMED = /\bimport\s*\{([^}]+)\}\s*from\s*(['"])([^'"]+)\2/g;
+
+interface ParsedFile {
+  path: string;
+  content: string;
+  declared: Set<string>;
+  imports: Map<string, string>;
+}
+
+interface Mount {
+  parent: string;
+  prefix: string;
+  child: string;
+  file: string;
+}
+
+function normalizePath(path: string): string {
+  const parts: string[] = [];
+  for (const part of path.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return parts.join("/");
+}
+
+const dirOf = (path: string): string => {
+  const index = path.lastIndexOf("/");
+  return index === -1 ? "" : path.slice(0, index);
+};
+
+const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+const INDEXES = ["ts", "tsx", "js", "jsx", "mjs", "cjs"].map((ext) => `index.${ext}`);
+
+/** Resolve a relative import to a file in the scanned set, or undefined. */
+function resolveModule(from: string, specifier: string, paths: Set<string>): string | undefined {
+  if (!specifier.startsWith(".")) return undefined;
+  const base = normalizePath(`${dirOf(from)}/${specifier}`);
+  const candidates = [base, ...EXTENSIONS.map((ext) => `${base}${ext}`)];
+  // TypeScript source imported with Node's `.js` extension.
+  if (base.endsWith(".js")) {
+    candidates.push(base.replace(/\.js$/, ".ts"), base.replace(/\.js$/, ".tsx"));
+  }
+  candidates.push(...INDEXES.map((index) => `${base}/${index}`));
+  return candidates.find((candidate) => paths.has(candidate));
+}
+
+function parseFile(file: SourceFile): ParsedFile {
+  const declared = new Set<string>();
+  for (const match of file.content.matchAll(ROUTER_DECL)) {
+    if (match[1]) declared.add(match[1]);
+  }
+  const imports = new Map<string, string>();
+  for (const match of file.content.matchAll(IMPORT_DEFAULT)) {
+    if (match[1] && match[3]) imports.set(match[1], match[3]);
+  }
+  for (const match of file.content.matchAll(IMPORT_NAMESPACE)) {
+    if (match[1] && match[3]) imports.set(match[1], match[3]);
+  }
+  for (const match of file.content.matchAll(IMPORT_NAMED)) {
+    for (const part of (match[1] ?? "").split(",")) {
+      const name = part
+        .trim()
+        .split(/\s+as\s+/)
+        .pop()
+        ?.trim();
+      if (name && match[3]) imports.set(name, match[3]);
+    }
+  }
+  return { path: file.path, content: file.content, declared, imports };
+}
+
+/** Prefix two route paths without doubling the separator. */
+function joinPath(prefix: string, path: string): string {
+  const left = prefix.replace(/\/+$/, "");
+  return `${left}${path.startsWith("/") ? path : `/${path}`}` || "/";
+}
+
+interface ResolvedMount {
+  mount: Mount;
+  target: string;
+  /** Set when the child router lives in the same file. */
+  receiver?: string;
+}
+
+/**
+ * Resolve a mount to a file: a same-file router, a relative import, or the only
+ * file that declares the child name. Ambiguous or external mounts stay
+ * unresolved so a wrong prefix is never invented.
+ */
+function resolveMount(
+  mount: Mount,
+  parsed: Map<string, ParsedFile>,
+  paths: Set<string>,
+): ResolvedMount | undefined {
+  const owner = parsed.get(mount.file);
+  if (owner?.declared.has(mount.child)) {
+    return { mount, target: mount.file, receiver: mount.child };
+  }
+  const imported = owner?.imports.get(mount.child);
+  if (imported) {
+    const target = resolveModule(mount.file, imported, paths);
+    if (target) return { mount, target };
+  }
+  const declaredBy = [...parsed.values()].filter((file) => file.declared.has(mount.child));
+  if (declaredBy.length === 1) return { mount, target: declaredBy[0]!.path };
+  return undefined;
+}
 
 /** Next.js app/pages routes declare methods as exported functions. */
 function nextRoutes(file: SourceFile): Array<{ method: string; path: string; line: number }> {
@@ -152,26 +286,100 @@ export interface InferredRoute {
   line: number;
 }
 
-/** Routes named in the supplied sources, deduplicated by method + path. */
+/**
+ * Routes named in the supplied sources, deduplicated by method + path.
+ *
+ * Mounted routers are composed: a route declared on `router` inherits the
+ * prefix from `app.route("/api", router)`, including nested mounts and routers
+ * imported from another scanned file. Unresolved mounts are ignored rather than
+ * guessed.
+ */
 export function extractRoutes(files: readonly SourceFile[]): InferredRoute[] {
+  const parsed = new Map(files.map((file) => [file.path, parseFile(file)]));
+  const paths = new Set(parsed.keys());
+  const mounts: ResolvedMount[] = [];
+  for (const file of files) {
+    for (const match of file.content.matchAll(MOUNT_CALL)) {
+      const resolved = resolveMount(
+        {
+          parent: match[1] ?? "",
+          prefix: match[3] ?? "",
+          child: match[4] ?? "",
+          file: file.path,
+        },
+        parsed,
+        paths,
+      );
+      if (resolved) mounts.push(resolved);
+    }
+  }
+  const wholeMounts = mounts.filter((mount) => mount.receiver === undefined);
+  const prefixCache = new Map<string, string[]>();
+  const wholePrefixes = (file: string, seen: Set<string> = new Set()): string[] => {
+    const cached = prefixCache.get(file);
+    if (cached) return cached;
+    if (seen.has(file)) return [""];
+    const incoming = wholeMounts.filter((mount) => mount.target === file);
+    if (incoming.length === 0) {
+      prefixCache.set(file, [""]);
+      return [""];
+    }
+    const next = new Set<string>();
+    for (const mount of incoming) {
+      for (const parent of wholePrefixes(mount.mount.file, new Set([...seen, file]))) {
+        next.add(joinPath(parent, mount.mount.prefix));
+      }
+    }
+    const list = next.size > 0 ? [...next] : [""];
+    prefixCache.set(file, list);
+    return list;
+  };
+
   const routes: InferredRoute[] = [];
   const seen = new Set<string>();
-  const add = (method: string, rawPath: string, file: SourceFile, index: number) => {
+  const add = (
+    method: string,
+    rawPath: string,
+    file: SourceFile,
+    index: number,
+    prefixes: string[],
+  ) => {
     const upper = method.toUpperCase();
     if (!METHOD_SET.has(method.toLowerCase()) || !rawPath.startsWith("/")) return;
-    const path = openApiPath(rawPath);
-    const key = `${upper} ${path}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    routes.push({
-      method: upper,
-      path,
-      source: file.path,
-      line: lineOf(file.content, index),
-    });
+    for (const prefix of prefixes) {
+      const path = openApiPath(joinPath(prefix, rawPath));
+      const key = `${upper} ${path}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      routes.push({
+        method: upper,
+        path,
+        source: file.path,
+        line: lineOf(file.content, index),
+      });
+    }
   };
 
   for (const file of files) {
+    const info = parsed.get(file.path)!;
+    const base = wholePrefixes(file.path);
+    const isRouter = (receiver: string) =>
+      info.declared.has(receiver) || info.imports.has(receiver) || KNOWN_ROUTERS.has(receiver);
+    const prefixesFor = (receiver: string): string[] => {
+      const local = mounts.filter(
+        (mount) => mount.target === file.path && mount.receiver === receiver,
+      );
+      if (local.length === 0) return base;
+      // A mounted sub-router lives at the mount prefix, not at the file root.
+      const out = new Set<string>();
+      for (const mount of local) {
+        for (const parent of wholePrefixes(mount.mount.file)) {
+          out.add(joinPath(parent, mount.mount.prefix));
+        }
+      }
+      return [...out];
+    };
+
     for (const route of nextRoutes(file)) {
       const key = `${route.method.toUpperCase()} ${route.path}`;
       if (!seen.has(key)) {
@@ -184,13 +392,19 @@ export function extractRoutes(files: readonly SourceFile[]): InferredRoute[] {
       }
     }
     for (const match of file.content.matchAll(ROUTE_CALL)) {
-      add(match[1] ?? "", match[3] ?? "", file, match.index ?? 0);
+      const receiver = match[1] ?? "";
+      if (isRouter(receiver)) {
+        add(match[2] ?? "", match[4] ?? "", file, match.index ?? 0, prefixesFor(receiver));
+      }
     }
     for (const match of file.content.matchAll(ON_CALL)) {
-      add(match[2] ?? "", match[4] ?? "", file, match.index ?? 0);
+      const receiver = match[1] ?? "";
+      if (isRouter(receiver)) {
+        add(match[3] ?? "", match[5] ?? "", file, match.index ?? 0, prefixesFor(receiver));
+      }
     }
     for (const match of file.content.matchAll(CHAIN_CALL)) {
-      add(match[1] ?? "", match[3] ?? "", file, match.index ?? 0);
+      add(match[1] ?? "", match[3] ?? "", file, match.index ?? 0, base);
     }
   }
   return routes.sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
@@ -284,6 +498,7 @@ export function apiHealthMatrix(
       path: endpoint.path,
       specPath: spec.path,
       ...(spec.inferred ? { inferred: true } : {}),
+      probe: "static" as const,
       status: names.has(`${endpoint.method.toUpperCase()} ${endpoint.path}`)
         ? "covered"
         : "missing-test",

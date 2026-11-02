@@ -194,11 +194,14 @@ When no OpenAPI document exists, the scan checks whether the repository is
 API-based (Hono, Express, Elysia, Fastify, Koa, NestJS, Next.js, or route calls
 in source). If it is, EdgeSpec infers a spec from route declarations, stores it
 as `openapi.inferred.json`, and adds it to `overview.openApiSpecs` with
-`inferred: true`. `overview.apiFramework` names the detected framework and
-`overview.apiHealth` is the static endpoint matrix (`status` is `covered` or
-`missing-test`, plus auth, request-body and parameter facts). The matrix is
-built from the tree, not from live HTTP calls; no app is started by a scan.
-Contract gaps from an inferred spec say so in their reason.
+`inferred: true`. Mounted routers compose across scanned files
+(`app.route("/api", router)`, `.mount()`, Express `.use()`), including nested
+mounts. `overview.apiFramework` names the detected framework and
+`overview.apiHealth` is the endpoint matrix (`status` is `covered` or
+`missing-test`, plus auth, request-body and parameter facts). Each row carries
+`probe: "static"`: the matrix is built from the tree, not from live HTTP calls,
+and executed contract-test results stay separate. Contract gaps from an inferred
+spec say so in their reason.
 
 Response:
 

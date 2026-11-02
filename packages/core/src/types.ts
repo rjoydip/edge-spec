@@ -132,12 +132,16 @@ export interface OpenApiSpec {
   inferred?: boolean;
 }
 
-/** One endpoint row in the static OpenAPI health matrix. */
+/**
+ * One endpoint row in the OpenAPI health matrix. `probe: "static"` means the
+ * status came from route/test names; executed contract results stay separate.
+ */
 export interface ApiHealthRow {
   method: string;
   path: string;
   specPath: string;
   inferred?: boolean;
+  probe: "static" | "live";
   status: "covered" | "missing-test";
   /** Security scheme names only, never a secret. */
   auth: string[];

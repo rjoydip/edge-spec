@@ -5,23 +5,6 @@ behaviour lives in the code, tests and docs, and the previous roadmap was
 retired. Each item names the gap and what "done" means. Nothing here is a
 commitment to a date.
 
-## API inference
-
-- [ ] **Mounted router prefixes.** Route extraction reads direct calls; an
-      Express/Hono `app.route("/api", router)` or `.mount()` prefix is not
-      composed. Add prefix resolution if inferred specs miss real endpoints.
-- [ ] **Live health checks.** `overview.apiHealth` is a static matrix. A live
-      endpoint check would need a booted app and a runner; keep the static
-      matrix as the default and label any live result separately.
-- [ ] **Inference coverage.** Add route patterns only when a real repository
-      misses them; prefer a parser over more regexes if this becomes primary.
-
-## Dashboard
-
-- [x] **Audit pagination.** `GET /api/audit` accepts `before` (a `createdAt`
-      cursor) and the client forwards it, so rows can be paged newest-first
-      instead of stopping at the newest 200.
-
 ## Retention and storage
 
 - [ ] **R2 retention for drift summaries.** The daily purge deletes D1 runs,
