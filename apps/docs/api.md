@@ -742,12 +742,11 @@ changed, one summary is POSTed to the effective webhook (Slack-compatible
 Resolution order:
 
 1. repository schedule override;
-2. workspace drift webhook;
-3. deployment `DRIFT_ALERT_WEBHOOK_URL` fallback.
+2. deployment `DRIFT_ALERT_WEBHOOK_URL` fallback.
 
 A quiet repository sends nothing and opens nothing. The scan never opens a pull
 request: the summary is the action. The audit event records `notified` and
-`webhookSource` (`repository`, `workspace`, `environment`, or `none`).
+`webhookSource` (`repository`, `environment`, or `none`).
 
 ---
 
@@ -774,49 +773,12 @@ returns `status: "blocked"` with the gate reason when it fails.
 
 ---
 
-## `GET | PUT /api/workspace`
-
-One workspace per deployment; there is no multi-user account model. `GET`
-returns `{enabled, workspace}`; without `RUNS_DB` it answers `enabled: false`.
-The record is created lazily on first read.
-
-```json
-{
-  "enabled": true,
-  "workspace": {
-    "id": "default",
-    "name": "Default workspace",
-    "retentionDays": 30,
-    "driftWebhookUrl": "https://hooks.slack.com/services/...",
-    "driftWebhookSecretSet": true,
-    "createdAt": 1760000000000,
-    "updatedAt": 1760000000000
-  }
-}
-```
-
-`PUT` accepts `{name?, retentionDays?, driftWebhookUrl?, driftWebhookSecret?}`.
-The name is trimmed to 100 characters; retention is clamped to 1–365 days.
-
-The drift webhook secret is write-only: it is accepted on `PUT`, never returned,
-and reported only as `driftWebhookSecretSet`. Sending an empty
-`driftWebhookUrl` clears the URL and secret. Sending an empty
-`driftWebhookSecret` clears only the secret. Changing the URL without sending a
-new secret clears the old secret rather than forwarding it to the new endpoint.
-Omitted fields keep their current values. Updating the workspace writes an
-audit event.
-
-Per-repository schedules can override the workspace webhook through
-`PUT /api/schedules`. Resolution order is repository → workspace → deployment
-`DRIFT_ALERT_WEBHOOK_URL`.
-
----
-
-## `GET /api/audit?repo=owner/name&limit=100`
+## `GET /api/audit?repo=owner/name&limit=100&before=<createdAt>`
 
 Recent audit events, newest first. `repo` is optional and filters by
-`owner/name`; `limit` defaults to 100 and is clamped to 200. Without `RUNS_DB`
-the route answers `{enabled: false, events: []}`.
+`owner/name`; `limit` defaults to 100 and is clamped to 200; `before` pages past
+a `createdAt` cursor. Without `RUNS_DB` the route answers
+`{enabled: false, events: []}`.
 
 ```json
 {
@@ -836,7 +798,7 @@ the route answers `{enabled: false, events: []}`.
 
 Actions include `pr_opened`, `pr_blocked`, `pr_check`, `command`,
 `policy_updated`, `memory_updated`, `schedule_updated`, `schedule_deleted`,
-`backlog_updated`, `workspace_updated`, `drift_scan` and `retention_purge`.
+`backlog_updated`, `drift_scan` and `retention_purge`.
 Detail is structural only: keys matching token/key/secret/password/
 authorization/cookie are dropped recursively, so a key or token is never
 stored. Actors are `dashboard`, `github-app`, `cron`, or a GitHub login for PR

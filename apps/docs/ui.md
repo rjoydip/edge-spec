@@ -43,9 +43,9 @@ behind the content and are `pointer-events-none`.
    the audit log and Settings open from the profile menu.
 
 The **Deployment** section in Settings holds the configuration that lives in D1
-and R2, not in this browser: workspace name and retention days, repository
-memory, the stored pull request policy used by webhook runs, and the opt-in
-drift scan. Each block reads its real route and saves explicitly; without the
+and R2, not in this browser: repository memory, the stored pull request policy
+used by webhook runs, and the opt-in drift scan. Each block reads its real route
+and saves explicitly; without the
 optional bindings it says so instead of showing an empty success. Run-history
 rows also download the stored R2 artifact bundle for that run; a 404 means the
 run stored no bundle.
@@ -73,8 +73,8 @@ profile menu; the header keeps the provider and sandbox shortcuts.
 - **Pipeline** — coverage target, retries, files per run, strict TypeScript and
   parallel generation.
 - **Policy** — opt-in PR gates.
-- **Deployment** — workspace name and retention, repository memory, stored PR
-  policy and the drift scan. These save to D1/R2, not `localStorage`.
+- **Deployment** — repository memory, stored PR policy and the drift scan.
+  These save to D1/R2, not `localStorage`.
 - **Appearance** — dark/light and ten accent swatches.
 
 Non-appearance fields are a draft: Cancel, Escape or the backdrop discards them.

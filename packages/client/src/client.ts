@@ -36,7 +36,7 @@ export interface ClientConfig {
 }
 
 export interface GenerateRequest {
-  /** Omitted when `source` is inline (local watch mode). */
+  /** Omitted when `source` is inline. */
   repo?: string;
   /** Inline local source; only a local Worker accepts it. */
   source?: string;

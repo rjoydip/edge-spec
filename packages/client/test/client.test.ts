@@ -82,7 +82,7 @@ describe("EdgeSpecClient", () => {
     });
   });
 
-  it("sends inline source for watch mode without a repository", async () => {
+  it("sends inline source without a repository", async () => {
     const { fetchImpl, calls } = fakeFetch(() =>
       Response.json({ generation, validation, attempts: 1 }),
     );

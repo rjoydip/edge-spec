@@ -62,7 +62,7 @@ lint, `bun check .` across every project, tests). For a UI change, also run
   MCP server. It may import core types but must not call core pipeline code.
 - `packages/ui/src/` — shared React primitives and `theme.css` brand tokens. The
   dashboard imports the components; the VitePress site imports only the tokens.
-- `packages/cli/src/` — `scan`, `generate`, `run`, `watch`, and `catalog` commands.
+- `packages/cli/src/` — `scan`, `generate`, `run`, and `catalog` commands.
 - `packages/mcp/src/` — stdio MCP server wrapping the shared client.
 - `packages/sandbox/src/` — reference self-hosted runner; `bwrap`/Docker/Podman plus
   hosted E2B/Vercel/Daytona SDK drivers, no image build.

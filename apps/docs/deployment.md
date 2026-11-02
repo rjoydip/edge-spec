@@ -50,9 +50,9 @@ Windows can deploy the Worker natively. Containerised sandbox runs
 
 ## 1. D1 (run history and shared state)
 
-D1 stores run summaries, backlog, policies, repository memory, schedules,
-workspace settings, audit events and PR-command rate limits. It never stores
-generated test source, prompts or keys.
+D1 stores run summaries, backlog, policies, repository memory, schedules, audit
+events and PR-command rate limits. It never stores generated test source, prompts
+or keys.
 
 The stack creates the database: `edge-spec-runs` for `--stage prod`, and
 `edge-spec-runs-<stage>` for every other stage. Migrations in `migrations/` run
@@ -475,10 +475,10 @@ stay external. The Vercel stack is a `Command.Exec` around
 ```bash
 curl -s https://<worker>/api/health
 curl -s https://<worker>/api/catalog
-curl -s https://<worker>/api/workspace     # enabled:true when D1 is migrated
+curl -s "https://<worker>/api/audit"        # enabled:true when D1 is migrated
 curl -s https://<worker>/api/runs/01234567-89ab-cdef-0123-456789abcdef/artifacts
 ```
 
-`/api/workspace` answering `enabled:false` means D1 is unbound or unmigrated.
+`/api/audit` answering `enabled:false` means D1 is unbound or unmigrated.
 A `404` from the artifacts route with `enabled:true` only means that run stored
 no bundle.

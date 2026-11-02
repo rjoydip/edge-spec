@@ -5,7 +5,6 @@ import { GitHub } from "@edge-spec/core/github";
 import { InstallationTokenCache, gitHubAppFromEnv } from "@edge-spec/core/github-app";
 import {
   getDriftSnapshot,
-  getWorkspace,
   listScheduledRepos,
   markScheduledRun,
   purgeExpired,
@@ -14,7 +13,6 @@ import {
   runsDb,
   syncBacklog,
   type ScheduledRepo,
-  type Workspace,
 } from "./db";
 import type { Env, SqlDatabase } from "./env";
 import { deleteRunArtifacts } from "./artifacts";
@@ -32,6 +30,8 @@ export interface ScheduledContext {
 
 const tokens = new InstallationTokenCache();
 const OPENAPI_LIKE = /(^|\/)(openapi|swagger|api[-_.]?spec)[^/]*\.(json|ya?ml)$/i;
+/** Fixed retention window: runs, audit events and command rows. */
+const RETENTION_DAYS = 30;
 
 async function operationsOf(
   github: GitHub,
@@ -72,7 +72,6 @@ async function scanRepo(
   env: Env,
   db: SqlDatabase,
   schedule: ScheduledRepo,
-  workspace: Workspace | undefined,
   now: number,
 ): Promise<void> {
   try {
@@ -111,7 +110,7 @@ async function scanRepo(
         ).catch(() => undefined);
       }
       // Store only after the announcement succeeds; a failed webhook retries.
-      delivered = resolveDriftWebhook(env, schedule, workspace);
+      delivered = resolveDriftWebhook(env, schedule);
       if (delivered) await notify(delivered, schedule.repo, summary);
     }
     await syncBacklog(
@@ -167,23 +166,20 @@ export async function runScheduled(
   const db = runsDb(env);
   if (!db) return;
   const now = controller.scheduledTime || Date.now();
-  const workspace = await getWorkspace(db).catch(() => undefined);
-  if (workspace) {
-    // Retention runs daily, before the scans that would otherwise see stale rows.
-    const purged = await purgeExpired(db, workspace.retentionDays, now).catch(() => undefined);
-    if (purged) {
-      const artifacts = await deleteRunArtifacts(env, purged.ids).catch(() => 0);
-      await recordAudit(db, {
-        actor: "cron",
-        action: "retention_purge",
-        detail: {
-          retentionDays: workspace.retentionDays,
-          runs: purged.runs,
-          audit: purged.audit,
-          artifacts,
-        },
-      }).catch(() => undefined);
-    }
+  // Retention runs daily, before the scans that would otherwise see stale rows.
+  const purged = await purgeExpired(db, RETENTION_DAYS, now).catch(() => undefined);
+  if (purged) {
+    const artifacts = await deleteRunArtifacts(env, purged.ids).catch(() => 0);
+    await recordAudit(db, {
+      actor: "cron",
+      action: "retention_purge",
+      detail: {
+        retentionDays: RETENTION_DAYS,
+        runs: purged.runs,
+        audit: purged.audit,
+        artifacts,
+      },
+    }).catch(() => undefined);
   }
   const due = (await listScheduledRepos(db)).filter(
     (schedule) =>
@@ -192,6 +188,6 @@ export async function runScheduled(
         now - schedule.lastRunAt >= schedule.intervalDays * 86_400_000),
   );
   for (const schedule of due.slice(0, 10)) {
-    ctx.waitUntil(scanRepo(env, db, schedule, workspace, now));
+    ctx.waitUntil(scanRepo(env, db, schedule, now));
   }
 }

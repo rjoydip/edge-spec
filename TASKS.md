@@ -16,23 +16,11 @@ commitment to a date.
 - [ ] **Inference coverage.** Add route patterns only when a real repository
       misses them; prefer a parser over more regexes if this becomes primary.
 
-## Dashboard and workspace
+## Dashboard
 
-- [ ] **Audit pagination.** `GET /api/audit` returns the newest N rows with no
-      cursor. Add `before`/cursor paging if rows outgrow one page.
-
-## Workspaces and tenancy
-
-- [ ] **Multi-user workspaces.** The deployment has one lazy `default`
-      workspace and no membership, roles, or invitations. This is deliberate;
-      build auth (users, roles, workspace scoping) before calling it a team
-      product. Until then, protect the whole Worker with an external access
-      layer.
-- [ ] **Per-workspace scoping in D1.** Audit and workspace queries assume the
-      single workspace. Add `workspace_id` filters to every shared query when
-      multi-workspace lands.
-- [ ] **Per-repository retention.** Retention is one workspace window. Add a
-      per-repo override only if repositories need different windows.
+- [x] **Audit pagination.** `GET /api/audit` accepts `before` (a `createdAt`
+      cursor) and the client forwards it, so rows can be paged newest-first
+      instead of stopping at the newest 200.
 
 ## Retention and storage
 
@@ -57,25 +45,10 @@ commitment to a date.
       supported. Add email only if a provider is chosen; keep the webhook path.
 - [ ] **Policy-gated drift pull requests.** Drift scans notify and never open a
       PR. Decide whether a policy may allow one draft PR per drifted repo.
-- [ ] **Scheduled-path tests.** Retention purge and `drift_scan`/`retention_purge`
-      audit writes have no worker test. Extract the pure pieces and cover them
-      without a live D1.
-
-## Watch mode and editor
-
-- [ ] **VS Code extension.** Only `edgespec watch` shipped. The extension is
-      the other half of the editor work; it needs a workspace scan, diff
-      preview, apply or reject, and the local sandbox.
-- [ ] **Remote Worker support for watch.** Watch sends inline source and refuses
-      anything but a local Worker. Add an opt-in path (and its trust model) if
-      remote use is needed.
-- [ ] **Portable recursive watch.** `fs.watch({ recursive: true })` is not
-      available on every platform. Add a polling fallback for Linux setups that
-      lack it.
-- [ ] **Cancel in-flight generation.** Ctrl+C stops new work but does not abort
-      a generation already running. Wire an `AbortSignal` through the client.
-- [ ] **Git hook installer.** There is no `edgespec install-hook`; document that
-      watch is manual until one exists.
+- [x] **Retention purge audit test.** The cron tick test covers the fixed
+      retention purge and its `retention_purge` audit row without a live D1.
+- [ ] **Drift scan audit test.** `scanRepo` still needs a GitHub seam before the
+      `drift_scan` audit row can be covered without a live repository.
 
 ## MCP
 
@@ -92,8 +65,8 @@ commitment to a date.
 ## Quality and evaluation
 
 - [ ] **Eval coverage for new surfaces.** `evals/` covers generation outcomes,
-      not watch, MCP resources, or workspace/audit. Add cases only where the
-      outcome is measurable.
+      not MCP resources or audit. Add cases only where the outcome is
+      measurable.
 - [ ] **Mutation/flaky/eval defaults.** All remain opt-in. Revisit only with
       measured cost and flake data; do not turn them on by default.
 - [ ] **Shared scan cache (KV).** Nothing is cached server-side; repeated scans
@@ -107,34 +80,3 @@ commitment to a date.
       for batch scans and PR commands; the cron and synchronous paths are
       sufficient at current volume. Add Queues when the 10-repo cron cap or
       command latency becomes a real limit.
-
-## Later providers
-
-- [ ] **Second deployment target.** Cloudflare-first is deliberate: the Worker
-      uses `Workflows`, `D1`, `R2`, `AI` and `ASSETS`. Add `infra/aws.run.ts`
-      with its own state and stage only when AWS/Fly/Railway/Docker/K8s is real,
-      and port one seam at a time:
-
-      | Cloudflare        | Replacement              | Seam                           |
-      | ----------------- | ------------------------ | ------------------------------ |
-      | Worker + `ASSETS` | container + CDN          | `apps/worker/src/index.ts`     |
-      | D1                | Postgres                 | `apps/worker/src/db.ts`        |
-      | R2                | S3                       | `apps/worker/src/artifacts.ts` |
-      | Workflows         | queue/worker or Temporal | `packages/adapters/src/cloudflare/workflow.ts`  |
-      | Workers AI        | provider HTTP APIs       | `packages/core/src/ai.ts`      |
-      | `env.ts` bindings | provider config          | `apps/worker/src/env.ts`       |
-
-      `packages/core` stays provider-neutral, so adapters belong in
-      `apps/worker` and the new stack file. Do not abstract the current stack
-      before that port exists.
-
-## Non-goals
-
-Keep these out unless the product direction explicitly changes:
-
-- Editing application source or auto-fixing production bugs.
-- A general code-review bot.
-- Coverage percentages without an executed report.
-- Storing user PATs or AI keys server-side.
-- Autonomous merges; human approval stays for anything that leaves the session.
-- Multi-language test generation before the JS/TS loop is excellent.

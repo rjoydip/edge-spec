@@ -11,10 +11,14 @@ const SECRET = "cron-secret";
 const URL = "https://edge.example/api/cron/tick";
 
 /** Records the SQL the scheduler touches; empty results mean "nothing due". */
-function recordingDb(): { db: SqlDatabase; statements: string[] } {
+function recordingDb(): { db: SqlDatabase; statements: string[]; binds: unknown[][] } {
   const statements: string[] = [];
+  const binds: unknown[][] = [];
   const statement = {
-    bind: () => statement,
+    bind: (...values: unknown[]) => {
+      binds.push(values);
+      return statement;
+    },
     first: async () => null,
     all: async () => ({ results: [] }),
     run: async () => ({ meta: { changes: 0 } }),
@@ -26,7 +30,7 @@ function recordingDb(): { db: SqlDatabase; statements: string[] } {
     },
     batch: async () => [],
   };
-  return { db, statements };
+  return { db, statements, binds };
 }
 
 const tick = async (env: Env, headers: Record<string, string> = {}): Promise<Response> =>
@@ -60,9 +64,17 @@ describe("cron tick", () => {
     const env = { CRON_SECRET: SECRET, DB: db } as Env;
     const response = await tick(env, { "x-cron-secret": SECRET });
     expect(response.status).toBe(200);
-    // The scheduler reads the workspace, then lists due repositories. One call
+    // The scheduler purges retention, then lists due repositories. One call
     // must mean one of each, not zero (a no-op route) or two (a double run).
-    expect(statements.filter((sql) => sql.includes("FROM workspaces")).length).toBe(1);
+    expect(statements.filter((sql) => sql.startsWith("SELECT id FROM runs")).length).toBe(1);
     expect(statements.filter((sql) => sql.includes("FROM scheduled_repos")).length).toBe(1);
+  });
+
+  it("records the retention purge in the audit log", async () => {
+    const { db, binds } = recordingDb();
+    const env = { CRON_SECRET: SECRET, DB: db } as Env;
+    const response = await tick(env, { "x-cron-secret": SECRET });
+    expect(response.status).toBe(200);
+    expect(binds.some((values) => values[3] === "retention_purge")).toBe(true);
   });
 });

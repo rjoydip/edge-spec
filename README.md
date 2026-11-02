@@ -206,3 +206,15 @@ deployment's own Workers AI binding. When the GitHub App secrets are set, each
 workflow mints a repo-scoped installation token that is cached only until just
 before expiry; otherwise it falls back to `GH_TOKEN`. User keys never enter
 Workflow state.
+
+## Future ideas (non-goals for now)
+
+Kept here as enhancement ideas; leave them out unless the product direction
+explicitly changes:
+
+- Editing application source or auto-fixing production bugs.
+- A general code-review bot.
+- Coverage percentages without an executed report.
+- Storing user PATs or AI keys server-side.
+- Autonomous merges; human approval stays for anything that leaves the session.
+- Multi-language test generation before the JS/TS loop is excellent.

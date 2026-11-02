@@ -79,7 +79,6 @@ import {
   getMemory,
   getPolicy,
   getRun,
-  getWorkspace,
   listAudit,
   listBacklog,
   listRuns,
@@ -87,14 +86,12 @@ import {
   putMemory,
   putPolicy,
   putScheduledRepo,
-  putWorkspace,
   recordAudit,
   runsDb,
   scheduledRepoView,
   setBacklogState,
   setRunDecisions,
   syncBacklog,
-  workspaceView,
 } from "./db";
 import type { BacklogState } from "@edge-spec/core/backlog";
 import { impactForChanges } from "./impact";
@@ -1742,59 +1739,18 @@ app.delete("/api/schedules", async (c) => {
   }
 });
 
-app.get("/api/workspace", async (c) => {
-  try {
-    const db = runsDb(c.env);
-    if (!db) return c.json({ enabled: false });
-    return c.json({
-      enabled: true,
-      workspace: workspaceView(await getWorkspace(db)),
-    });
-  } catch (err) {
-    return fail(err, c);
-  }
-});
-
-app.put("/api/workspace", async (c) => {
-  try {
-    const db = runsDb(c.env);
-    if (!db) throw new HttpError(501, "Workspace settings need the RUNS_DB binding.");
-    const body = await readJson(c);
-    const workspace = await putWorkspace(db, {
-      ...(typeof body.name === "string" ? { name: body.name } : {}),
-      ...(body.retentionDays !== undefined ? { retentionDays: Number(body.retentionDays) } : {}),
-      ...(typeof body.driftWebhookUrl === "string"
-        ? { driftWebhookUrl: body.driftWebhookUrl }
-        : {}),
-      ...(typeof body.driftWebhookSecret === "string"
-        ? { driftWebhookSecret: body.driftWebhookSecret }
-        : {}),
-    });
-    await recordAudit(db, {
-      actor: "dashboard",
-      action: "workspace_updated",
-      detail: {
-        retentionDays: workspace.retentionDays,
-        name: workspace.name,
-        driftWebhookConfigured: Boolean(workspace.driftWebhookUrl),
-      },
-    }).catch(() => undefined);
-    return c.json({ enabled: true, workspace: workspaceView(workspace) });
-  } catch (err) {
-    return fail(err, c);
-  }
-});
-
 app.get("/api/audit", async (c) => {
   try {
     const db = runsDb(c.env);
     if (!db) return c.json({ enabled: false, events: [] });
     const parsed = parseRepo(c.req.query("repo"));
     const limit = Number(c.req.query("limit") ?? 100);
+    const before = Number(c.req.query("before"));
     return c.json({
       enabled: true,
       events: await listAudit(db, {
         ...(parsed ? { repo: `${parsed.owner}/${parsed.name}` } : {}),
+        ...(Number.isFinite(before) ? { before } : {}),
         limit,
       }),
     });

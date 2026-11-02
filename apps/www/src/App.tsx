@@ -213,7 +213,7 @@ const FEATURES = [
   {
     icon: Terminal,
     title: "Terminal and agent",
-    body: "scan, generate, run and watch in the CLI, plus a stdio MCP server that wraps the same HTTP client — one behavior everywhere.",
+    body: "scan, generate and run from the CLI, plus a stdio MCP server that wraps the same HTTP client — one behavior everywhere.",
     span: "",
   },
   {

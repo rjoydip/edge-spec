@@ -126,15 +126,12 @@ test(
     const { url } = yield* deployed;
     const origin = String(url).replace(/\/$/, "");
 
-    // The workspace row is created lazily, so a successful read proves the
-    // migrations ran, not just that the binding exists.
-    const workspace = yield* getJson<{
-      enabled?: boolean;
-      workspace?: { retentionDays?: number };
-    }>(`${origin}/api/workspace`);
-    expect(workspace.status).toBe(200);
-    expect(workspace.body.enabled).toBe(true);
-    expect(workspace.body.workspace?.retentionDays).toBeGreaterThan(0);
+    // A successful audit read proves the migrations ran, not just that the
+    // binding exists.
+    const audit = yield* getJson<{ enabled?: boolean; events?: unknown[] }>(`${origin}/api/audit`);
+    expect(audit.status).toBe(200);
+    expect(audit.body.enabled).toBe(true);
+    expect(Array.isArray(audit.body.events)).toBe(true);
 
     const runs = yield* getJson<{ enabled?: boolean; runs?: unknown[] }>(
       `${origin}/api/runs?repo=octocat/Hello-World`,

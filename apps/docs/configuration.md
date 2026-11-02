@@ -280,15 +280,15 @@ data: keep them outside the PR, preferably in R2, and apply retention there.
 
 ## Run history, backlog and D1 (optional)
 
-Run history, the test-debt backlog, policies, repository memory, schedules,
-workspace settings and audit live in one D1 database (`RUNS_DB`). The Alchemy
+Run history, the test-debt backlog, policies, repository memory, schedules and
+audit live in one D1 database (`RUNS_DB`). The Alchemy
 stack creates `edge-spec-runs` for `prod` (and `edge-spec-runs-<stage>`
 elsewhere) and applies `migrations/` on every deploy and again in `alchemy dev`.
 Adopting an existing Wrangler database requires
 `bun run --cwd infra/cloudflare deploy --stage prod --yes --adopt`.
 
 Without the binding the Worker still scans, generates and opens pull requests,
-but `/api/runs`, `/api/backlog`, `/api/workspace` and `/api/audit` answer
+but `/api/runs`, `/api/backlog` and `/api/audit` answer
 `enabled: false` and the cron does nothing. The tables store summaries, not
 source text, prompts or keys.
 
@@ -379,15 +379,14 @@ untested paths and OpenAPI operation names with the stored snapshot:
 The notification target resolves in this order:
 
 1. **Repository schedule override** (`PUT /api/schedules`, or Settings → Drift
-   scans → Override workspace webhook).
-2. **Workspace default** (`PUT /api/workspace`, or Settings → Workspace).
-3. **Deployment fallback** `DRIFT_ALERT_WEBHOOK_URL` / `DRIFT_ALERT_WEBHOOK_SECRET`.
+   scans → Override deployment webhook).
+2. **Deployment fallback** `DRIFT_ALERT_WEBHOOK_URL` / `DRIFT_ALERT_WEBHOOK_SECRET`.
 
-The workspace and repository URLs are returned by their APIs. Secrets are
+The repository URL is returned by the schedules API. Its secret is
 write-only: responses only report `driftWebhookSecretSet`. Changing a webhook
 URL without supplying a new secret clears the old secret. Secrets are stored in
 D1, so protect the deployment and dashboard behind Cloudflare Access if the
-workspace is shared. Migrations run during deploy, so pulling a new migration
+deployment is shared. Migrations run during deploy, so pulling a new migration
 only needs a redeploy.
 
 ```bash
@@ -395,38 +394,31 @@ export DRIFT_ALERT_WEBHOOK_URL=…
 export DRIFT_ALERT_WEBHOOK_SECRET=…   # sent as x-edgespec-secret
 ```
 
-Set these before `bun run deploy` (or in `infra/cloudflare/.env`). The deployment secrets
-remain a fallback for deployments that do not configure a workspace target.
-There is no email adapter yet. Without `RUNS_DB` the cron does nothing. The scan never opens a pull request; PR creation remains the
-explicit next step.
+Set these before `bun run deploy` (or in `infra/cloudflare/.env`). There is no
+email adapter yet. Without `RUNS_DB` the cron does nothing. The scan never opens
+a pull request; PR creation remains the explicit next step.
 
-## Workspace, audit and retention (optional)
-
-A deployment has one workspace record (`GET | PUT /api/workspace`), created
-lazily as `default` on first use. This is deliberately not multi-user auth:
-shared policies, backlog and history live in the same D1 database, and every
-client still supplies its own GitHub and AI credentials per request. The
-workspace stores only a display name and a retention window; it never stores a
-key.
+## Audit and retention (optional)
 
 Actions that change shared state or act autonomously write an audit event:
 pull requests opened or blocked, PR checks and commands, policy/memory/schedule/
-backlog updates, workspace updates, drift scans and retention purges. Read them
-with `GET /api/audit?repo=owner/name`. Detail is redacted recursively for
+backlog updates, drift scans and retention purges. Read them with
+`GET /api/audit?repo=owner/name`; pass `before=<createdAt>` to page past the
+newest rows. Detail is redacted recursively for
 token/key/secret/password/authorization/cookie keys before storage, so audit
 rows are safe to share with the team.
 
-The daily cron applies retention before scanning:
+The daily cron applies retention before scanning, with a fixed 30-day window:
 
-- runs and their `run_files` rows older than `retentionDays` are deleted;
+- runs and their `run_files` rows older than 30 days are deleted;
 - the matching `runs/<id>.json` R2 bundles are deleted;
-- audit events older than `retentionDays` are deleted;
-- `pr_commands` rate-limit rows older than `retentionDays` are deleted.
+- audit events older than 30 days are deleted;
+- `pr_commands` rate-limit rows older than 30 days are deleted.
 
-Retention is clamped to 1–365 days (default 30). A purge writes one
-`retention_purge` event with the deleted run, audit and artifact counts. There is
-no per-repository retention override and no export or archive step. Drift
-summaries (`drift/…`) have no D1 row to age out, so they are not pruned yet.
+A purge writes one `retention_purge` event with the deleted run, audit and
+artifact counts. There is no per-repository retention override and no export or
+archive step. Drift summaries (`drift/…`) have no D1 row to age out, so they are
+not pruned yet.
 
 ## Sandbox runner (optional)
 
