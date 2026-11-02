@@ -80,6 +80,8 @@ import {
   getPolicy,
   getRun,
   listAudit,
+  listRecentRuns,
+  listRepos,
   listBacklog,
   listRuns,
   listScheduledRepos,
@@ -1792,6 +1794,16 @@ app.get("/api/audit", async (c) => {
 const csvCell = (value: string): string =>
   /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 
+app.get("/api/repos", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, repos: [] });
+    return c.json({ enabled: true, repos: await listRepos(db) });
+  } catch (err) {
+    return fail(err, c);
+  }
+});
+
 app.get("/api/audit/export", async (c) => {
   try {
     const db = runsDb(c.env);
@@ -1942,6 +1954,17 @@ app.get("/api/runs", async (c) => {
     const limit = Number(c.req.query("limit") ?? 20);
     const runs = await listRuns(db, `${repo.owner}/${repo.name}`, limit);
     return c.json({ enabled: true, runs });
+  } catch (err) {
+    return fail(err, c);
+  }
+});
+
+app.get("/api/runs/recent", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, runs: [] });
+    const limit = Number(c.req.query("limit") ?? 20);
+    return c.json({ enabled: true, runs: await listRecentRuns(db, limit) });
   } catch (err) {
     return fail(err, c);
   }

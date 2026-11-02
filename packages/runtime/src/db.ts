@@ -157,6 +157,33 @@ export async function listRuns(db: SqlDatabase, repo: string, limit = 20): Promi
   return (result.results ?? []).map(summaryOf);
 }
 
+/** Repos the deployment has seen, across runs, backlog, policies and schedules. */
+export async function listRepos(db: SqlDatabase): Promise<string[]> {
+  const result = await db
+    .prepare(
+      `SELECT repo FROM runs
+       UNION SELECT repo FROM backlog_items
+       UNION SELECT repo FROM policies
+       UNION SELECT repo FROM repo_memory
+       UNION SELECT repo FROM drift_snapshots
+       UNION SELECT repo FROM scheduled_repos
+       ORDER BY repo`,
+    )
+    .all<{ repo: string }>();
+  return (result.results ?? []).map((row) => row.repo).filter(Boolean);
+}
+
+/** Newest runs across every repository, for resource discovery. */
+export async function listRecentRuns(db: SqlDatabase, limit = 20): Promise<RunSummary[]> {
+  const requested = Number.isFinite(limit) ? limit : 20;
+  const capped = Math.min(50, Math.max(1, Math.round(requested)));
+  const result = await db
+    .prepare(`SELECT ${RUN_COLUMNS} FROM runs ORDER BY started_at DESC LIMIT ?`)
+    .bind(capped)
+    .all<RunRow>();
+  return (result.results ?? []).map(summaryOf);
+}
+
 export async function getRun(db: SqlDatabase, id: string): Promise<RunDetail | undefined> {
   const row = await db
     .prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE id = ?`)

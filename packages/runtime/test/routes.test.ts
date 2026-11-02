@@ -224,6 +224,8 @@ describe("optional bindings", () => {
       "/api/runs?repo=acme/api",
       "/api/backlog?repo=acme/api",
       "/api/schedules",
+      "/api/repos",
+      "/api/runs/recent",
       "/api/audit",
       "/api/memory?repo=acme/api",
       "/api/policies?repo=acme/api",

@@ -60,8 +60,14 @@ details. `edgespec_run` also returns the ready source paths and logs.
 
 Opening a pull request is two-step. `edgespec_prepare_pull_request` returns an
 `approvalId`, an expiry and a readable summary; show that to the user. The
-client must then call `edgespec_open_pull_request` with only the token. Tokens
-expire after ten minutes and are consumed on first use.
+client must then call `edgespec_open_pull_request` with only the token. The
+token embeds a digest of the repository, files and flags, so a token cannot be
+reused for a different payload. Tokens expire after ten minutes and are consumed
+on first use.
+
+Approvals are deliberately in memory: restarting the stdio server invalidates
+them. Persisting approvals would let one process approve work another process
+opens, so it needs an explicit trust boundary that the server does not have yet.
 
 ## Resources
 
@@ -73,6 +79,10 @@ expire after ten minutes and are consumed on first use.
 | `edgespec://runs/{id}`               | Durable Workflow status for a webhook run |
 
 Resources are read-only and use the same environment credentials as the tools.
+`resources/list` enumerates concrete instances: repository URIs come from
+`GET /api/repos` (repos seen in runs, backlog, policies, memory, drift and
+schedules), and run URIs from `GET /api/runs/recent`. An unavailable deployment
+lists nothing instead of failing the session.
 
 ## Environment
 

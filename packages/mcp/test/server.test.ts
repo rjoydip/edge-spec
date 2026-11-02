@@ -74,7 +74,8 @@ describe("EdgeSpec MCP server", () => {
       const content = prepared.content as Array<{ text?: string }>;
       const approvalId = (JSON.parse(content[0]?.text ?? "{}") as { approvalId?: string })
         .approvalId;
-      expect(approvalId).toBeDefined();
+      expect(approvalId).toContain(".");
+      expect(approvalId?.split(".")[1]).toHaveLength(64);
 
       const opened = await client.callTool({
         name: "edgespec_open_pull_request",
@@ -88,6 +89,35 @@ describe("EdgeSpec MCP server", () => {
         arguments: { approvalId },
       });
       expect(reused.isError).toBe(true);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("enumerates resource instances from the deployment", async () => {
+    const fetchImpl = (async (url: string | URL | Request) => {
+      const target = String(url);
+      if (target.includes("/api/repos")) {
+        return Response.json({ enabled: true, repos: ["acme/api"] });
+      }
+      if (target.includes("/api/runs/recent")) {
+        return Response.json({
+          enabled: true,
+          runs: [{ id: "run-1", repo: "acme/api" }],
+        });
+      }
+      return Response.json({});
+    }) as unknown as typeof fetch;
+    const { client, server } = await connect({}, { fetchImpl });
+    try {
+      const listed = await client.listResources();
+      expect(listed.resources.map((entry) => entry.uri).sort()).toEqual([
+        "edgespec://coverage/acme/api",
+        "edgespec://gaps/acme/api",
+        "edgespec://runs/run-1",
+        "edgespec://specs/acme/api",
+      ]);
     } finally {
       await client.close();
       await server.close();

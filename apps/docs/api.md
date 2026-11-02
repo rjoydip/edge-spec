@@ -898,6 +898,16 @@ test source is never stored in either.
 
 Lists recent runs for one repository, newest first.
 
+### `GET /api/runs/recent?limit=20`
+
+Newest runs across every repository, for MCP resource discovery.
+
+### `GET /api/repos`
+
+Repos the deployment has seen across run history, backlog, policies, repository
+memory, drift snapshots and schedules, sorted. Without `RUNS_DB` it answers
+`{ enabled: false, repos: [] }`.
+
 ```json
 {
   "enabled": true,
