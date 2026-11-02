@@ -67,6 +67,8 @@ export interface Settings {
   sandboxCoverage: boolean;
   /** Relative working directory inside the sandbox. */
   sandboxCwd: string;
+  /** Sender identity for transactional email; non-secret. */
+  emailFrom: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -74,6 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: DEFAULT_AI.model,
   baseUrl: "",
   accountId: "",
+
   maxRetries: DEFAULT_PIPELINE.maxRetries,
   maxAiRetries: DEFAULT_PIPELINE.maxAiRetries,
   strictTypes: DEFAULT_PIPELINE.strictTypes,
@@ -99,6 +102,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sandboxConcurrency: 2,
   sandboxCoverage: false,
   sandboxCwd: "",
+  emailFrom: "",
 };
 
 /** Repository state is deliberately separate from the Settings model. */
@@ -123,6 +127,7 @@ const PROJECT_KEY = "edgespec:project";
 const GITHUB_KEY = "edgespec:github-token";
 const AI_KEY = "edgespec:ai-key";
 const SANDBOX_KEY = "edgespec:sandbox-key";
+const EMAIL_KEY = "edgespec:email-key";
 
 /** Header names. Keep in sync with `src/worker/index.ts`. */
 export const TOKEN_HEADER = "x-github-token";
@@ -134,6 +139,9 @@ export const SANDBOX_KEY_HEADER = "x-sandbox-key";
 export const SANDBOX_CONFIG_HEADER = "x-sandbox-config";
 /** Asks the Worker for its own Workers AI binding. Local development only. */
 export const DEPLOYMENT_AI_HEADER = "x-deployment-ai";
+/** Email sender credentials (Resend), sent per request like the others. */
+export const EMAIL_KEY_HEADER = "x-email-key";
+export const EMAIL_FROM_HEADER = "x-email-from";
 
 function readRaw(key: string): string {
   try {
@@ -228,6 +236,7 @@ function load(): Settings {
       ),
       sandboxCoverage: parsed.sandboxCoverage === true,
       sandboxCwd: typeof parsed.sandboxCwd === "string" ? parsed.sandboxCwd : "",
+      emailFrom: typeof parsed.emailFrom === "string" ? parsed.emailFrom : "",
       coverageTarget: Math.min(
         100,
         Math.max(0, pickNumber(parsed.coverageTarget, DEFAULT_PIPELINE.coverageTarget)),
@@ -324,12 +333,15 @@ export interface Secrets {
   aiKey: string;
   /** Key for the visitor's own test runner. */
   sandboxKey: string;
+  /** Resend API key for transactional email. */
+  emailKey: string;
 }
 
 let secrets: Secrets = {
   githubToken: readRaw(GITHUB_KEY),
   aiKey: readRaw(AI_KEY),
   sandboxKey: readRaw(SANDBOX_KEY),
+  emailKey: readRaw(EMAIL_KEY),
 };
 const secretListeners = new Set<() => void>();
 
@@ -342,11 +354,12 @@ export function setSecrets(next: Partial<Secrets>): void {
   writeRaw(GITHUB_KEY, secrets.githubToken.trim());
   writeRaw(AI_KEY, secrets.aiKey.trim());
   writeRaw(SANDBOX_KEY, secrets.sandboxKey.trim());
+  writeRaw(EMAIL_KEY, secrets.emailKey.trim());
   for (const listener of secretListeners) listener();
 }
 
 export function clearSecrets(): void {
-  setSecrets({ githubToken: "", aiKey: "", sandboxKey: "" });
+  setSecrets({ githubToken: "", aiKey: "", sandboxKey: "", emailKey: "" });
 }
 
 function subscribeSecrets(listener: () => void): () => void {
@@ -442,5 +455,9 @@ export function requestHeaders(): Record<string, string> {
   }
   const sandboxConfig = sandboxConfigOf(state);
   if (sandboxConfig) headers[SANDBOX_CONFIG_HEADER] = JSON.stringify(sandboxConfig);
+  if (secrets.emailKey.trim()) {
+    headers[EMAIL_KEY_HEADER] = secrets.emailKey.trim();
+    if (state.emailFrom.trim()) headers[EMAIL_FROM_HEADER] = state.emailFrom.trim();
+  }
   return headers;
 }

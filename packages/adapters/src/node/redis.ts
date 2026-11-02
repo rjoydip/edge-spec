@@ -2,7 +2,7 @@
  * Cache over the Upstash Redis REST API. Zero dependencies, works on Workers,
  * Vercel and AWS. Vercel KV is Upstash, so it uses the same variables.
  */
-import type { CacheStore } from "../env";
+import type { CacheStore } from "@edge-spec/runtime/env";
 
 export interface RedisCacheOptions {
   url: string;

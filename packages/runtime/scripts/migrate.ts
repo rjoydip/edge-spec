@@ -52,17 +52,22 @@ if (import.meta.main) {
     process.exit(1);
   }
 
-  const file = "postgres.sql";
-  const sql = readFileSync(
-    fileURLToPath(new URL(`../../../migrations/${file}`, import.meta.url)),
-    "utf8",
-  );
-  const version = schemaVersion(file, sql);
+  // Postgres mirrors the D1 migrations: the base schema, then every forward
+  // migration that ships its own portable DDL. Files applied here must stay
+  // immutable; the ledger records `<file>:<hash>`. New changes go in a new file.
+  const files = ["postgres.sql", "0010_better_auth.sql", "0011_drop_pricing_plan.sql"];
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
-    const applied = await applySchema(client, version, sql);
-    console.log(applied ? `Applied ${file} (${version})` : `${file} is already applied.`);
+    for (const file of files) {
+      const sql = readFileSync(
+        fileURLToPath(new URL(`../../../migrations/${file}`, import.meta.url)),
+        "utf8",
+      );
+      const version = schemaVersion(file, sql);
+      const applied = await applySchema(client, version, sql);
+      console.log(applied ? `Applied ${file} (${version})` : `${file} is already applied.`);
+    }
   } finally {
     await client.end();
   }

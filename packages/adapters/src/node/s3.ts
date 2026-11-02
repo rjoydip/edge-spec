@@ -3,7 +3,7 @@
  * `aws4fetch`. Node/Bun only: never reachable from the Cloudflare entry.
  */
 import { AwsClient } from "aws4fetch";
-import type { ObjectStore } from "../env";
+import type { ObjectStore } from "@edge-spec/runtime/env";
 
 export interface S3Options {
   endpoint: string;

@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "typecheck": "bun check"
+    "typecheck": "bun check",
+    "watch": "vite build --watch"
   },
   "dependencies": {
+    "@edge-spec/adapters": "workspace:*",
     "@edge-spec/runtime": "workspace:*",
     "@edge-spec/core": "workspace:*",
     "hono": "^4.9.6"

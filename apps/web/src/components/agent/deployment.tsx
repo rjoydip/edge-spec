@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { RepoMemory } from "@edge-spec/core/memory";
 import type { PullPolicy } from "@edge-spec/core/policy";
+import { setSecrets, setSettings, useSecrets, useSettings } from "@/lib/settings";
 import {
   Badge,
   Button,
@@ -753,6 +754,8 @@ function SchedulesBlock({ repo }: { repo: string }) {
 export function DeploymentSettings({ repo }: { repo: string }) {
   return (
     <div className="space-y-3">
+      <EmailBlock />
+      <Divider />
       <WorkspaceBlock />
       <Divider />
       {repo ? (
@@ -766,6 +769,38 @@ export function DeploymentSettings({ repo }: { repo: string }) {
       ) : (
         <Notice>Select a repository to edit its memory, policy and drift scan.</Notice>
       )}
+    </div>
+  );
+}
+
+/** Settings → Deployment → Email: the Resend sender for transactional email. */
+function EmailBlock() {
+  const settings = useSettings();
+  const secrets = useSecrets();
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+          Email API key (Resend)
+        </span>
+        <Input
+          type="password"
+          value={secrets.emailKey}
+          onChange={(event) => setSecrets({ emailKey: event.target.value })}
+          placeholder="re_… (sent per request, never stored server-side)"
+        />
+        <span className="text-[10px] text-zinc-500">
+          Sender identity for verification and reset links.
+        </span>
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] uppercase tracking-wide text-zinc-500">From address</span>
+        <Input
+          value={settings.emailFrom}
+          onChange={(event) => setSettings({ emailFrom: event.target.value })}
+          placeholder="EdgeSpec <noreply@you.example>"
+        />
+      </label>
     </div>
   );
 }

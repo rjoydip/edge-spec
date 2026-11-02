@@ -2,7 +2,7 @@
  * In-process cache with a TTL. One process only, cleared on restart: use it for
  * local development and single-node self-hosting, never for a fleet.
  */
-import type { CacheStore } from "../env";
+import type { CacheStore } from "@edge-spec/runtime/env";
 
 export function memoryCache(now: () => number = Date.now): CacheStore {
   const entries = new Map<string, { value: unknown; expiresAt: number }>();

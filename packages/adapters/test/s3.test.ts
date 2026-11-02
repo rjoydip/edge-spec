@@ -3,7 +3,7 @@
  * signing, path encoding and 404 semantics get their own test.
  */
 import { afterEach, describe, expect, it } from "bun:test";
-import { s3Store } from "../src/adapters/s3";
+import { s3Store } from "../src/node/s3";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {

@@ -7,7 +7,7 @@
  * The runner owns durability (Vercel Queues, SQS + ECS, Step Functions, or a
  * small Bun service). This adapter only enqueues and polls.
  */
-import type { JobInstance, JobQueue, JobStatus } from "../env";
+import type { JobInstance, JobQueue, JobStatus } from "@edge-spec/runtime/env";
 
 export interface HttpJobsOptions {
   url: string;

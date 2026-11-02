@@ -1,9 +1,10 @@
 /**
- * AWS target. The app itself runs on the portable Bun entry (`bun run serve`,
- * a container, or any host); this stack owns the AWS resources it consumes.
- * Today that is the artifact bucket for `EDGESPEC_BLOB=s3`; Postgres, the job
+ * AWS target. The Lambda function runs the shared Hono app through
+ * `lambda.ts` (Function URL → Request → app → Response). This stack owns the
+ * function and the artifact bucket for `EDGESPEC_BLOB=s3`; Postgres, the job
  * runner and cron stay external by design (see `apps/docs/deployment.md` §8).
  */
+import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import * as Alchemy from "alchemy";
 import { Stack } from "alchemy/Stack";
@@ -34,9 +35,27 @@ export default Alchemy.Stack(
       },
     });
 
+    // Lambda + public Function URL. `main` is bundled by Alchemy; everything
+    // provider-neutral comes from packages, so this is the deployed app.
+    const api = yield* AWS.Lambda.Function("EdgeSpecApi", {
+      functionName: isProd ? "edge-spec" : `edge-spec-${slug}`,
+      main: fileURLToPath(new URL("lambda.ts", import.meta.url)),
+      handler: "handler",
+      runtime: "nodejs22.x",
+      functionUrl: true,
+      memorySize: 512,
+      env: {
+        EDGESPEC_PROVIDER: "aws",
+        EDGESPEC_BLOB: "s3",
+        EDGESPEC_BLOB_BUCKET: artifacts.bucketName,
+        EDGESPEC_BLOB_REGION: artifacts.region,
+      },
+    });
+
     return {
       bucket: artifacts.bucketName,
       region: artifacts.region,
+      url: api.functionUrl,
       // Copy into the deployment's env; credentials stay deployment-level.
       env: {
         EDGESPEC_PROVIDER: "aws",

@@ -33,21 +33,32 @@ Generated test source, prompts and keys are never written to either store.
 
 ### Ports and adapters
 
-Cloudflare is the reference target, not a requirement. Four ports isolate the
-runtime: `SqlDatabase`, `ObjectStore`, `JobQueue` and `CacheStore`
-(`packages/runtime/src/env.ts`). `packages/runtime/src/platform.ts` resolves each through
-the neutral binding (`DB`, `BLOB`, `JOBS`, `CACHE`) and falls back to the legacy
-Cloudflare names (`RUNS_DB`, `ARTIFACTS`, `TEST_GENERATION_WORKFLOW`).
-`packages/runtime/src/adapters/select.ts` picks an adapter at boot for non-Cloudflare
-targets: Postgres (`pg`), S3-compatible storage (`aws4fetch`), an external HTTP
-job runner, and KV / Upstash Redis / in-memory cache.
+Cloudflare is the reference target, not a requirement. Five ports isolate the
+runtime: `SqlDatabase`, `ObjectStore`, `JobQueue`, `CacheStore` and
+`EmailSender` and `Observer` (`packages/runtime/src/ports.ts`, re-exported by
+`env.ts`).
+`packages/runtime/src/platform.ts` resolves each through the neutral binding
+(`DB`, `BLOB`, `JOBS`, `CACHE`) and falls back to the legacy Cloudflare names
+(`RUNS_DB`, `ARTIFACTS`, `TEST_GENERATION_WORKFLOW`).
+
+Adapters live in `packages/adapters`: `node/select.ts` picks drivers at boot
+for non-Cloudflare targets (Postgres/SQLite via `@edge-spec/db`, S3-compatible
+storage via `aws4fetch`, an external HTTP job runner, KV / Upstash Redis /
+in-memory cache), `cloudflare/` holds the KV cache and Workflows adapters, and
+`aws/lambda.ts` maps Function URL events to the app's `Request`. Resend is the
+one universal HTTP email driver and sits in `runtime/email.ts`; observability
+providers (consola / OTLP / Sentry / Axiom) are plain HTTP or console and live
+in `runtime/observability.ts`. User accounts run on Better Auth
+(`runtime/auth.ts` + `runtime/auth-adapter.ts` over the SQL port).
 
 Orchestration lives in `packages/runtime/src/jobs.ts` behind a `StepRunner`
-interface; `apps/worker/src/workflow.ts` is a thin Cloudflare adapter, and the
-HTTP runner and Bun server can call the same `runGenerationJob`.
-`apps/worker/src/index.ts`, `infra/vercel/handler.ts` and
-`packages/runtime/src/server.ts` are the three entries. Node-only drivers stay
-unreachable from the Cloudflare bundle. See
+interface; `packages/adapters/src/cloudflare/workflow.ts` is a thin Cloudflare
+adapter, and the HTTP runner and Bun server call the same `runGenerationJob`.
+One Hono app (`packages/runtime/src/app.ts`) is served by every entry:
+`apps/worker/src/index.ts` (Cloudflare), `apps/server/src/index.ts` (Bun, the
+shared container image), `infra/vercel/handler.ts` (Vercel function) and
+`infra/aws/lambda.ts` (Lambda Function URL). Node-only drivers stay unreachable
+from the Cloudflare bundle. See
 [Deployment](deployment.md#_8-other-targets-vercel-aws-self-hosted-bun).
 
 ## Frontend bundle
@@ -88,8 +99,10 @@ the app code does not invalidate the cached vendor files.
 | `packages/core/src/api-surface.ts` | Infers OpenAPI from route calls when a spec is missing                         | Explicitly `inferred`; regex, not an AST                 |
 | `packages/core/src/pipeline.ts`    | Async generator for scan → generate → validate → correct → PR                  | Transport-agnostic; bounded pool + channel               |
 | `packages/runtime/src/app.ts`      | Hono routes, header parsing, SSE framing                                       | Portable; no host bindings                               |
-| `apps/worker/src/index.ts`         | Cloudflare entry: bindings, KV cache, scheduled handler                        | Cloudflare-only                                          |
-| `apps/worker/src/workflow.ts`      | Durable webhook automation                                                     | Deployment credentials only                              |
+| `apps/worker/src/index.ts`         | Cloudflare entry: bindings, scheduled handler                                  | Cloudflare-only                                          |
+| `apps/server/src/index.ts`         | Bun/Node entry: static files, socket, interval cron                            | The shared container image                               |
+| `packages/adapters/`               | KV/Redis/S3/HTTP-job drivers, Workflows, Lambda envelope                       | Vendor code; never imported by the app                   |
+| `packages/runtime/src/ports.ts`    | SQL, objects, jobs, cache, email ports                                         | Vendor-free interfaces                                   |
 | `apps/web/src/`                    | Dashboard                                                                      | `App.tsx` owns run state; components are presentational  |
 | `packages/ui/src/`                 | React primitives and brand tokens                                              | Dashboard imports components; docs imports `theme.css`   |
 | `packages/client/src/`             | Worker API client, SSE parsing, env defaults                                   | No pipeline logic; CLI and MCP use it                    |
