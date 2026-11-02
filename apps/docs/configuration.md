@@ -275,8 +275,15 @@ a versioned fixture file. Passing that file as `fixtures` to `/api/run` makes th
 generated contract tests start a tiny in-test mock server from
 `EDGESPEC_FIXTURES`; no live app is required. The mock serves the recorded
 status, headers and body, and the normal status assertion still runs, so a
-deliberate spec status change fails replay. Recorded bodies may contain real
-data: keep them outside the PR, preferably in R2, and apply retention there.
+deliberate spec status change fails replay.
+
+**Fixture storage decision:** EdgeSpec does not upload fixture bytes to R2. The
+fixture file is returned to the caller and travels with the test code (or
+`EDGESPEC_FIXTURES`), so its encryption, retention and access are the
+repository's, exactly like any other committed test asset. Recorded bodies may
+contain real data and are not redacted: keep secrets out of fixtures and review
+them before they enter a pull request. R2 remains for run bundles and
+drift summaries, which the retention job owns.
 
 ## Run history, backlog and D1 (optional)
 
@@ -415,10 +422,16 @@ The daily cron applies retention before scanning, with a fixed 30-day window:
 - audit events older than 30 days are deleted;
 - `pr_commands` rate-limit rows older than 30 days are deleted.
 
-A purge writes one `retention_purge` event with the deleted run, audit and
-artifact counts. There is no per-repository retention override and no export or
-archive step. Drift summaries (`drift/…`) have no D1 row to age out, so they are
-not pruned yet.
+A purge writes one `retention_purge` event with the deleted run, audit, artifact
+and drift counts. Drift summaries (`drift/<repo>/<timestamp>.json`) have no D1
+row, so the purge lists the `drift/` prefix and deletes summaries whose key
+timestamp is older than the window.
+
+Raw runner reports are kept in the R2 run bundle under `files[].reports`
+(`junit` and `lcov`), never in D1 or the SSE stream. Audit history can outlive
+the window with `GET /api/audit/export?format=csv|json` (optionally `&repo=`),
+which downloads up to 10,000 newest events. There is no scheduled export and no
+per-repository retention override.
 
 ## Sandbox runner (optional)
 

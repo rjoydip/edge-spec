@@ -19,6 +19,8 @@ export interface RunArtifact {
     verified: boolean;
     checks: unknown[];
     coverage?: unknown;
+    /** Raw JUnit/LCOV from the runner, when it produced them. */
+    reports?: { junit?: string; lcov?: string };
   }>;
 }
 
@@ -44,6 +46,34 @@ export async function getRunArtifact(env: Env, id: string): Promise<RunArtifact 
   } catch {
     return undefined;
   }
+}
+
+const DRIFT_KEY = /^drift\/.+\/(\d+)\.json$/;
+
+/**
+ * Deletes drift summaries past the retention window. Drift objects have no D1
+ * row to age out, so the key's timestamp is the only clock.
+ */
+export async function purgeDriftArtifacts(
+  env: Env,
+  retentionDays: number,
+  now = Date.now(),
+): Promise<number> {
+  const bucket = artifactsStore(env);
+  if (!bucket?.list) return 0;
+  const cutoff = now - Math.max(1, Math.round(retentionDays)) * 86_400_000;
+  let deleted = 0;
+  for (const key of await bucket.list("drift/")) {
+    const timestamp = Number(DRIFT_KEY.exec(key)?.[1]);
+    if (!Number.isFinite(timestamp) || timestamp >= cutoff) continue;
+    try {
+      await bucket.delete(key);
+      deleted += 1;
+    } catch {
+      // A missing object is fine; one failure must not stop the purge.
+    }
+  }
+  return deleted;
 }
 
 /** Deletes the bundles whose D1 rows expired. Returns how many were present. */

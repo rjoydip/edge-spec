@@ -469,7 +469,7 @@ export async function listAudit(
   db: SqlDatabase,
   input: { repo?: string; limit?: number; before?: number } = {},
 ): Promise<AuditEvent[]> {
-  const limit = Math.min(200, Math.max(1, Math.round(input.limit ?? 100)));
+  const limit = Math.min(10_000, Math.max(1, Math.round(input.limit ?? 100)));
   const where: string[] = [];
   const values: unknown[] = [];
   if (input.repo) {

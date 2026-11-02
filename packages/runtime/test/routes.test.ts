@@ -237,6 +237,21 @@ describe("optional bindings", () => {
     expect(await artifacts.json()).toEqual({ enabled: false });
   });
 
+  it("exports audit rows as CSV or JSON", async () => {
+    const env = { ...baseEnv(), RUNS_DB: fakeDb() };
+    const csv = await fetchApp("/api/audit/export?format=csv", undefined, env);
+    expect(csv.status).toBe(200);
+    expect(csv.headers.get("content-type")).toContain("text/csv");
+    expect(csv.headers.get("content-disposition")).toContain("edgespec-audit-");
+    expect((await csv.text()).split("\n")[0]).toBe("createdAt,actor,action,repo,detail");
+
+    const json = await fetchApp("/api/audit/export", undefined, env);
+    expect(json.status).toBe(200);
+    expect((await json.json()) as { events: unknown[] }).toHaveProperty("events");
+
+    expect((await fetchApp("/api/audit/export")).status).toBe(501);
+  });
+
   it("says job status is unavailable without a job queue", async () => {
     const response = await fetchApp(`/api/runs/${ID}`);
     expect(response.status).toBe(501);

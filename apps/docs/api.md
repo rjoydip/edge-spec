@@ -779,9 +779,13 @@ returns `status: "blocked"` with the gate reason when it fails.
 ## `GET /api/audit?repo=owner/name&limit=100&before=<createdAt>`
 
 Recent audit events, newest first. `repo` is optional and filters by
-`owner/name`; `limit` defaults to 100 and is clamped to 200; `before` pages past
-a `createdAt` cursor. Without `RUNS_DB` the route answers
+`owner/name`; `limit` defaults to 100 and is clamped to 10,000; `before` pages
+past a `createdAt` cursor. Without `RUNS_DB` the route answers
 `{enabled: false, events: []}`.
+
+`GET /api/audit/export?format=csv|json&repo=owner/name` downloads up to 10,000
+newest events as an attachment. It needs `RUNS_DB` and answers 501 without it.
+Use it before the retention window removes old rows.
 
 ```json
 {

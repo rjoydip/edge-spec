@@ -15,7 +15,7 @@ import {
   type ScheduledRepo,
 } from "./db";
 import type { Env, SqlDatabase } from "./env";
-import { deleteRunArtifacts } from "./artifacts";
+import { deleteRunArtifacts, purgeDriftArtifacts } from "./artifacts";
 import { ownerLookup } from "./ownership";
 import { resolveDriftWebhook, type DriftWebhookTarget } from "./drift-webhook";
 
@@ -170,6 +170,7 @@ export async function runScheduled(
   const purged = await purgeExpired(db, RETENTION_DAYS, now).catch(() => undefined);
   if (purged) {
     const artifacts = await deleteRunArtifacts(env, purged.ids).catch(() => 0);
+    const drift = await purgeDriftArtifacts(env, RETENTION_DAYS, now).catch(() => 0);
     await recordAudit(db, {
       actor: "cron",
       action: "retention_purge",
@@ -178,6 +179,7 @@ export async function runScheduled(
         runs: purged.runs,
         audit: purged.audit,
         artifacts,
+        drift,
       },
     }).catch(() => undefined);
   }

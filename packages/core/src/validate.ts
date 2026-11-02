@@ -146,6 +146,11 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
   const coverage = input.measureCoverage
     ? coverageDelta(input.baselineCoverage, run.coverage, input.sourcePath)
     : undefined;
+  const reports = {
+    ...(run.artifacts["junit.xml"] ? { junit: run.artifacts["junit.xml"] } : {}),
+    ...(run.artifacts["coverage/lcov.info"] ? { lcov: run.artifacts["coverage/lcov.info"] } : {}),
+  };
+  const hasReports = Object.keys(reports).length > 0;
 
   if (!run.ok && (run.unreachable || run.environmentError)) {
     return {
@@ -198,6 +203,7 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
         `Ran ${runs} time(s); the suite passed and failed on the same input. Flaky, quarantined.\n${repeatNote}`.trim(),
       durationMs: Date.now() - started,
       ...(coverage ? { coverage } : {}),
+      ...(hasReports ? { reports } : {}),
     };
   }
 
@@ -250,6 +256,7 @@ export async function validateTest(input: ValidateInput): Promise<Validation> {
     durationMs: Date.now() - started,
     ...(coverage ? { coverage } : {}),
     ...(mutation ? { mutation } : {}),
+    ...(hasReports ? { reports } : {}),
   };
 }
 

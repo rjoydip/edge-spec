@@ -5,23 +5,6 @@ behaviour lives in the code, tests and docs, and the previous roadmap was
 retired. Each item names the gap and what "done" means. Nothing here is a
 commitment to a date.
 
-## Retention and storage
-
-- [ ] **R2 retention for drift summaries.** The daily purge deletes D1 runs,
-      `run_files`, audit events, `pr_commands` and the matching `runs/<id>.json`
-      bundles. `drift/<repo>/<time>.json` has no row to age out; add an
-      object-age sweep when drift history grows.
-- [ ] **Upload raw runner reports.** The R2 run bundle holds validation check
-      output and coverage facts. Raw JUnit and LCOV (when a runner produces
-      them) stay in the response; upload them per run if long-lived debugging is
-      needed.
-- [ ] **Export/archive before purge.** There is no export step. Add a JSON/CSV
-      export if audit history must outlive the retention window.
-- [ ] **Fixture storage decision.** Recorded fixtures currently travel as test
-      code. Decide whether any fixture bytes go to R2, at-rest encryption, the
-      retention window, and who may download them. This is the one unresolved
-      decision from the earlier plan.
-
 ## Scheduled scans
 
 - [ ] **Email drift notifications.** Only a Slack-compatible webhook is

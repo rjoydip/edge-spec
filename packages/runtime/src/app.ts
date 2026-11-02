@@ -966,6 +966,7 @@ app.post("/api/run", async (c) => {
       data: JSON.stringify({ type: "run", id: runId, persisted: stored }),
     });
     const files = new Map<string, RunFile>();
+    const reports = new Map<string, { junit?: string; lcov?: string }>();
     let status: RunSummary["status"] = "failed";
     let scannedGaps: Gap[] | undefined;
     try {
@@ -992,6 +993,7 @@ app.post("/api/run", async (c) => {
           });
         }
         if (event.type === "validation" && event.sourcePath) {
+          if (event.validation.reports) reports.set(event.sourcePath, event.validation.reports);
           const current = files.get(event.sourcePath);
           files.set(event.sourcePath, {
             sourcePath: event.sourcePath,
@@ -1003,9 +1005,14 @@ app.post("/api/run", async (c) => {
           });
         }
         if (event.type === "result") status = event.ok ? "ready" : "failed";
+        // Raw reports are for the R2 bundle only; never stream or persist them.
+        const payload =
+          event.type === "validation" && event.validation.reports
+            ? { ...event, validation: { ...event.validation, reports: undefined } }
+            : event;
         await stream.writeSSE({
           event: event.type,
-          data: JSON.stringify(event),
+          data: JSON.stringify(payload),
         });
       }
     } catch (err) {
@@ -1034,6 +1041,7 @@ app.post("/api/run", async (c) => {
           verified: file.verified,
           checks: file.checks,
           ...(file.coverage ? { coverage: file.coverage } : {}),
+          ...(reports.get(file.sourcePath) ? { reports: reports.get(file.sourcePath)! } : {}),
         })),
       }).catch(() => false);
       if (history && scannedGaps) {
@@ -1753,6 +1761,45 @@ app.get("/api/audit", async (c) => {
         ...(Number.isFinite(before) ? { before } : {}),
         limit,
       }),
+    });
+  } catch (err) {
+    return fail(err, c);
+  }
+});
+
+const csvCell = (value: string): string =>
+  /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+
+app.get("/api/audit/export", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Audit export needs the RUNS_DB binding.");
+    const parsed = parseRepo(c.req.query("repo"));
+    const events = await listAudit(db, {
+      ...(parsed ? { repo: `${parsed.owner}/${parsed.name}` } : {}),
+      limit: 10_000,
+    });
+    const date = new Date().toISOString().slice(0, 10);
+    if (c.req.query("format") === "csv") {
+      const rows = events.map((event) =>
+        [
+          new Date(event.createdAt).toISOString(),
+          event.actor,
+          event.action,
+          event.repo ?? "",
+          JSON.stringify(event.detail),
+        ]
+          .map((cell) => csvCell(String(cell)))
+          .join(","),
+      );
+      return c.body(["createdAt,actor,action,repo,detail", ...rows].join("\n"), 200, {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="edgespec-audit-${date}.csv"`,
+      });
+    }
+    return c.body(JSON.stringify({ exportedAt: Date.now(), events }, null, 2), 200, {
+      "content-type": "application/json",
+      "content-disposition": `attachment; filename="edgespec-audit-${date}.json"`,
     });
   } catch (err) {
     return fail(err, c);
