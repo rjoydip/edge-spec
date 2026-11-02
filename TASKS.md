@@ -120,7 +120,7 @@ commitment to a date.
       | Worker + `ASSETS` | container + CDN          | `apps/worker/src/index.ts`     |
       | D1                | Postgres                 | `apps/worker/src/db.ts`        |
       | R2                | S3                       | `apps/worker/src/artifacts.ts` |
-      | Workflows         | queue/worker or Temporal | `apps/worker/src/workflow.ts`  |
+      | Workflows         | queue/worker or Temporal | `packages/adapters/src/cloudflare/workflow.ts`  |
       | Workers AI        | provider HTTP APIs       | `packages/core/src/ai.ts`      |
       | `env.ts` bindings | provider config          | `apps/worker/src/env.ts`       |
 

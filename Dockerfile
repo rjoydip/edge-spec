@@ -12,4 +12,4 @@ ENV NODE_ENV=production
 ENV PORT=8787
 EXPOSE 8787
 
-CMD ["bun", "packages/runtime/src/server.ts"]
+CMD ["bun", "apps/server/src/index.ts"]

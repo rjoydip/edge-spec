@@ -23,7 +23,11 @@ const { test, deploy, destroy, beforeAll, afterAll } = Test.make({
 
 const deployed = beforeAll(
   process.env.SKIP_DEPLOY
-    ? Effect.succeed({ url: process.env.STACK_URL ?? "", docsUrl: process.env.DOCS_URL ?? "" })
+    ? Effect.succeed({
+        url: process.env.STACK_URL ?? "",
+        docsUrl: process.env.DOCS_URL ?? "",
+        wwwUrl: process.env.WWW_URL ?? "",
+      })
     : deploy(Stack),
   { timeout: 300_000 },
 );
@@ -84,6 +88,20 @@ test(
     const docsUrl = process.env.DOCS_URL?.trim();
     if (!docsUrl) return;
     const page = yield* getPage(docsUrl);
+    expect(page.status).toBe(200);
+    expect(page.contentType).toContain("text/html");
+    expect(page.html).toContain("EdgeSpec");
+  }),
+);
+
+test(
+  "landing page is served by Pages",
+  Effect.gen(function* () {
+    // Same rule as the docs project: a fresh stage publishes nothing, so this
+    // only runs when WWW_URL names a deployed landing page.
+    const wwwUrl = process.env.WWW_URL?.trim();
+    if (!wwwUrl) return;
+    const page = yield* getPage(wwwUrl);
     expect(page.status).toBe(200);
     expect(page.contentType).toContain("text/html");
     expect(page.html).toContain("EdgeSpec");

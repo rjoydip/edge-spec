@@ -56,21 +56,26 @@ The stack creates the database: `edge-spec-runs` for `--stage prod`, and
 as part of `alchemy deploy` and `alchemy dev`; there is no separate
 `db:migrate` command.
 
+Node providers resolve SQL through `@edge-spec/db`:
+`EDGESPEC_DB=postgres` + `EDGESPEC_DB_URL` for Postgres (apply
+`migrations/postgres.sql` with `packages/runtime/scripts/migrate.ts`), or
+`EDGESPEC_DB=sqlite` for a single-node deployment backed by Bun's built-in
+sqlite (path from `EDGESPEC_DB_URL`, default `.data/edge-spec.sqlite`).
+The sqlite driver applies the `NNNN_*.sql` migrations in `EDGESPEC_MIGRATIONS`
+(default `migrations/`) at boot, ledger-style, applying each file once per
+content hash.
+
 The Worker still deploys without the binding (for example in a local bundle
 test), but every history/backlog/workspace route then answers `enabled: false`
 and the cron does nothing.
 
-### Alchemy peer dependency errors
-
-`bunx alchemy` failing with `Alchemy could not load the required peer
-dependency "@effect/platform-bun"` means the local install resolved
-`@effect/platform-node-shared@4.1.x` (which needs `effect@4.1`) next to
-`effect@4.0.6`. The root `overrides` pin keeps it on `4.0.6`; run
-`bun install` from the repository root after pulling, then invoke Alchemy from
-`infra/cloudflare` (`bun run --cwd infra/cloudflare deploy …`) so the local CLI
-is used instead of a globally installed one.
-
 ### Repairing migration bookkeeping
+
+A local `alchemy dev` database that applied a migration whose file was later
+edited (possible while a migration was still uncommitted) refuses to start with
+`RewrittenMigrationHistoryError`. Reset the disposable emulator state with
+`rm -rf infra/cloudflare/.alchemy/local/d1` — never rewrite shared history; ship
+a new forward migration instead.
 
 Alchemy records a `sha256` of each migration file in `__alchemy_migrations` and
 refuses to deploy when a recorded hash no longer matches the file
@@ -168,22 +173,23 @@ The names in the stack (`edge-spec`, `edge-spec-runs`, `edge-spec-artifacts`,
 `test-generation-workflow`) are fixed for `prod`, which is what makes adoption
 possible. Do not change them in place.
 
-### Documentation site (Cloudflare Pages)
+### Documentation and landing sites (Cloudflare Pages)
 
-The stack declares one Pages project for the VitePress site, `edge-spec-docs`,
-and only on `prod`. Preview and dev stages reuse the published site instead of
-creating an empty `edge-spec-docs-<stage>` subdomain that serves nothing.
-Alchemy owns the project; the Pages REST API has no public asset-upload
-endpoint, so the static files go up through Wrangler:
+The stack declares two Pages projects, both only on `prod`: `edge-spec-docs` for
+the VitePress site and `edge-spec-www` for the marketing page. Preview and dev
+stages reuse the published sites instead of creating empty per-stage subdomains
+that serve nothing. Alchemy owns the projects; the Pages REST API has no public
+asset-upload endpoint, so the static files go up through Wrangler:
 
 ```bash
 bun run docs:deploy   # docs:build + wrangler pages deploy … --project-name edge-spec-docs
+bun run www:deploy    # build:www + wrangler pages deploy dist/www --project-name edge-spec-www
 ```
 
-Live at `https://edge-spec-docs.pages.dev`. `bun run docs:build` alone still
-only writes `apps/docs/.vitepress/dist`, so CI keeps checking the build without
-publishing. A landing page is not hosted yet — the stack has a placeholder
-comment where its project would go.
+Live at `https://edge-spec-docs.pages.dev` and `https://edge-spec-www.pages.dev`.
+`bun run deploy` uploads the landing page after the Worker, so a normal release
+publishes both. `bun run docs:build` and `bun run build:www` alone still only
+write static output, so CI keeps checking the builds without publishing.
 
 ### Rollback
 
@@ -291,9 +297,11 @@ Do not pass these to `TestGenerationWorkflow`; Workflow params are persisted.
 
 ## 8. Other targets (Vercel, AWS, Fly, Railway, Docker, Kubernetes, Bun)
 
-The app is split into ports (`SqlDatabase`, `ObjectStore`, `JobQueue`,
-`CacheStore`) behind `packages/runtime/src/adapters/select.ts`. Cloudflare keeps its
-bindings; every other target is selected by env:
+The app programs against five ports (`SqlDatabase`, `ObjectStore`, `JobQueue`,
+`CacheStore`, `EmailSender`) declared in `packages/runtime/src/ports.ts`.
+Vendor drivers live in `packages/adapters` (node, cloudflare, aws) and
+`packages/db`; Cloudflare keeps its bindings; every other target is selected by
+env:
 
 ```text
 binding -> EDGESPEC_<CAP> override -> EDGESPEC_PROVIDER default -> off
@@ -306,19 +314,39 @@ Fly, Railway, Docker and Kubernetes all run the Bun entry, so they use the
 `node` defaults (`EDGESPEC_PROVIDER=node`) and keep their configuration in the
 platform's own secret store.
 
-| Capability | Cloudflare                 | Vercel / AWS / Bun                                                                                         |
-| ---------- | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| SQL        | `RUNS_DB` (D1)             | `EDGESPEC_DB_URL=postgres://…`                                                                             |
-| Objects    | `ARTIFACTS` (R2)           | `EDGESPEC_BLOB_ENDPOINT`, `_BUCKET`, `_REGION`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, optional `_PREFIX` |
-| Jobs       | `TEST_GENERATION_WORKFLOW` | `EDGESPEC_JOB_URL`, `EDGESPEC_JOB_KEY`                                                                     |
-| Cache      | `CACHE` (KV)               | `EDGESPEC_REDIS_URL`, `EDGESPEC_REDIS_TOKEN`                                                               |
-| Cron       | `scheduled`                | `CRON_SECRET` + `POST /api/cron/tick`                                                                      |
-| AI         | `AI` binding               | `AI_PROVIDER`, `AI_KEY`, `AI_BASE_URL`, `AI_MODEL`                                                         |
-| Static     | `ASSETS`                   | host CDN, or `EDGESPEC_STATIC_DIR` for the Bun entry                                                       |
+| Capability    | Cloudflare                 | Vercel / AWS / Bun                                                                                         |
+| ------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| SQL           | `RUNS_DB` (D1)             | `EDGESPEC_DB_URL=postgres://…`                                                                             |
+| Objects       | `ARTIFACTS` (R2)           | `EDGESPEC_BLOB_ENDPOINT`, `_BUCKET`, `_REGION`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, optional `_PREFIX` |
+| Jobs          | `TEST_GENERATION_WORKFLOW` | `EDGESPEC_JOB_URL`, `EDGESPEC_JOB_KEY`                                                                     |
+| Cache         | `CACHE` (KV)               | `EDGESPEC_REDIS_URL`, `EDGESPEC_REDIS_TOKEN`                                                               |
+| Cron          | `scheduled`                | `CRON_SECRET` + `POST /api/cron/tick`                                                                      |
+| AI            | `AI` binding               | `AI_PROVIDER`, `AI_KEY`, `AI_BASE_URL`, `AI_MODEL`                                                         |
+| Static        | `ASSETS`                   | host CDN, or `EDGESPEC_STATIC_DIR` for the Bun entry                                                       |
+| Accounts      | D1 (same database)         | same database (`user`/`session`/`account`/`verification`), `BETTER_AUTH_SECRET`                            |
+| Observability | console                    | `EDGESPEC_OBSERVABILITY=consola\|otlp\|sentry\|axiom`, provider env                                        |
 
-Overrides: `EDGESPEC_DB=d1|postgres`, `EDGESPEC_BLOB=r2|s3`,
+Overrides: `EDGESPEC_DB=d1|postgres|sqlite`, `EDGESPEC_BLOB=r2|s3`,
 `EDGESPEC_JOBS=http|workflows`, `EDGESPEC_CACHE=kv|redis|memory`. An explicit
 override whose env is missing fails at boot and names the variable.
+
+**Service or adapter?** A capability is a _service_ (port) when more than one
+target can back it or a deployment may leave it off; the _adapter_ is the
+vendor-specific implementation the entry or selector wires in.
+
+| Capability | Service (port)           | Adapters                                                                           | Selected by                        |
+| ---------- | ------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------- |
+| SQL        | `SqlDatabase`            | D1, Postgres (`pg`), SQLite (Bun) — `packages/db`                                  | binding → `EDGESPEC_DB` → provider |
+| Cache / KV | `CacheStore`             | Cloudflare KV, Upstash Redis REST, in-memory                                       | binding → `EDGESPEC_CACHE`         |
+| Objects    | `ObjectStore`            | S3 API (AWS, R2, MinIO) — `aws4fetch`                                              | binding → `EDGESPEC_BLOB`          |
+| Jobs       | `JobQueue`               | Cloudflare Workflows, external HTTP runner                                         | binding → `EDGESPEC_JOBS`          |
+| Email      | `EmailSender`            | Resend (plain HTTP; works on every target)                                         | request headers → `EMAIL_API_KEY`  |
+| Cron       | inbound hook, not a port | Workers `scheduled`, Bun `setInterval`, any platform cron calling `/api/cron/tick` | the entry                          |
+| AI         | core provider client     | Workers AI binding, HTTP providers                                                 | existing                           |
+| Sandbox    | runner contract          | bwrap/Docker/Podman, E2B/Vercel/Daytona — `packages/sandbox`                       | request headers → deployment env   |
+
+Cron is deliberately not a port: the app never schedules itself, so each entry
+only decides how a tick reaches `runScheduled`.
 
 **Postgres.** Apply the schema once with `bun run migrate`
 (`EDGESPEC_DB_URL=postgres://… bun run migrate`). D1 keeps using
@@ -351,13 +379,25 @@ Cloudflare `scheduled` handler and an HTTP cron never double-run by accident.
 lookups for 60s, keyed by a token fingerprint, never by the raw token. A cache
 error is a miss; the request still succeeds.
 
-**Entries.** `apps/worker/src/index.ts` is Cloudflare,
-`infra/vercel/handler.ts` + `api/index.ts` are Vercel, and
-`packages/runtime/src/server.ts` is Bun/Node (`bun run serve`). Provider glue
-and IaC live under `infra/<provider>/`; `api/index.ts` and `vercel.json` are
-one-line root exceptions because Vercel only reads those at the project root.
-Node-only adapters (`pg`, `aws4fetch`) are imported lazily and are never
-reachable from the Cloudflare entry.
+**Accounts.** Email + password via Better Auth (`packages/runtime/src/auth.ts`)
+over the same SQL port, so the tables are created by the same migrations on
+every target. Set `BETTER_AUTH_SECRET` in the platform's secret store. The
+dashboard requires a session before it renders.
+
+**Observability.** One `Observer` port with four providers selected by
+`EDGESPEC_OBSERVABILITY` (`consola`, `otlp`, `sentry`, `axiom`, `none`) — see
+[Configuration](configuration.md#observability).
+
+**Entries.** One Hono app (`packages/runtime/src/app.ts`) serves every target:
+`apps/worker/src/index.ts` (Cloudflare), `apps/server/src/index.ts` (Bun/Node,
+`bun run serve`), `infra/vercel/handler.ts` + `api/index.ts` (Vercel) and
+`infra/aws/lambda.ts` (Lambda Function URL). Each entry is a thin adapter:
+platform envelope in, `app.fetch` out, plus the platform's scheduler hook.
+Vendor drivers live in `packages/adapters`; provider glue and IaC live under
+`infra/<provider>/`; `api/index.ts` and `vercel.json` are one-line root
+exceptions because Vercel only reads those at the project root. Node-only
+adapters (`pg`, `aws4fetch`) are imported lazily and are never reachable from
+the Cloudflare entry.
 
 **IaC.** One folder and one Alchemy stack per target:
 
@@ -385,16 +425,34 @@ memoized `vercel deploy`; Fly/Railway/Docker/Kubernetes: the deployed URL's
 `/api/health`). Any test supports `SKIP_DEPLOY=1` to run its assertions
 against a live URL you supply through `STACK_URL`.
 
+**Test status by target.** Only Cloudflare is exercised end-to-end today. The
+other Alchemy stacks are maintained but have **not** been run against real
+credentials from this repository; treat their first deploy as unverified work.
+
+| Target     | Alchemy stack | Live-tested                                            | Notes                                                                                        |
+| ---------- | ------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Cloudflare | Yes           | Yes — production deploy workflow + `test:cloudflare`   | The reference stack: D1, R2, KV, Workflows, scheduled cron and assets                        |
+| AWS        | Yes           | No — not run with AWS credentials                      | Defines the Lambda Function URL and the artifact bucket; `plan` stops at missing credentials |
+| Vercel     | Yes           | No — `vercel deploy --prod` never run                  | `Command.Exec` wrapper; needs `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`           |
+| Fly        | Yes           | No — never run (needs Docker + `FLY_API_TOKEN`)        | Builds/pushes the shared image and starts a Machine                                          |
+| Railway    | Yes           | No — never run (needs `RAILWAY_API_TOKEN`)             | Builds the Docker context; variables stay in Railway                                         |
+| Docker     | Yes           | No — Docker is unavailable on this development machine | Local image/container build unverified                                                       |
+| Kubernetes | Yes           | No — `plan` only; no cluster or `kind` run             | Deployment/Service manifests are generated but not applied                                   |
+
+All stacks share the same app, ports and Dockerfile, and every one compiles and
+plans; the gap is live provisioning, not code structure.
+
 The Fly, Railway, Docker and Kubernetes stacks all build the same root
-`Dockerfile` (`oven/bun` running `packages/runtime/src/server.ts`). Fly pushes
+`Dockerfile` (`oven/bun` running `apps/server/src/index.ts`). Fly pushes
 that image to `registry.fly.io`; Railway builds the uploaded context; Docker
 runs it locally; Kubernetes builds it into the cluster's registry (kind for
 `ALCHEMY_DEV=1`). Runtime configuration stays platform-native — Fly secrets,
 Railway variables, Kubernetes ConfigMap/Secret, or `infra/docker/.env` — rather
 than being persisted in Alchemy state.
 
-The AWS stack owns the artifact bucket (`EDGESPEC_BLOB=s3`); Postgres, the job
-runner and cron stay external. The Vercel stack is a `Command.Exec` around
+The AWS stack owns the Lambda function (Function URL → `infra/aws/lambda.ts`)
+and the artifact bucket (`EDGESPEC_BLOB=s3`); Postgres, the job runner and cron
+stay external. The Vercel stack is a `Command.Exec` around
 `vercel deploy --prod` because Alchemy has no Vercel provider; it needs
 `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`.
 

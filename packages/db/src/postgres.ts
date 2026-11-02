@@ -1,8 +1,12 @@
 /**
- * PostgreSQL over `pg`. Node/Bun only: the module is imported lazily and this
- * file must never be reachable from the Cloudflare entry.
+ * PostgreSQL over `pg`. Node providers only: this module is imported lazily
+ * and must never be reachable from the Cloudflare entry.
+ *
+ * Kept as a hand-rolled adapter rather than a db0 connector: the runtime's
+ * `batch` needs a single transaction around mixed prepared statements, which
+ * db0 does not promise. Everything else matches the same structural port.
  */
-import type { SqlDatabase, SqlStatement } from "../env";
+import type { SqlLikeDatabase, SqlLikeStatement } from "./index";
 
 interface PgResult {
   rows: unknown[];
@@ -77,14 +81,14 @@ export function placeholders(sql: string): string {
   return out;
 }
 
-class PostgresStatement implements SqlStatement {
+class PostgresStatement implements SqlLikeStatement {
   constructor(
     private readonly pool: PgPool,
     readonly text: string,
     readonly values: unknown[] = [],
   ) {}
 
-  bind(...values: unknown[]): SqlStatement {
+  bind(...values: unknown[]): SqlLikeStatement {
     return new PostgresStatement(this.pool, this.text, values);
   }
 
@@ -104,14 +108,14 @@ class PostgresStatement implements SqlStatement {
   }
 }
 
-export async function createPostgres(url: string): Promise<SqlDatabase> {
+export async function createPostgres(url: string): Promise<SqlLikeDatabase> {
   const { default: pg } = (await import("pg")) as unknown as PgModule;
   const pool = new pg.Pool({ connectionString: url, max: 5 });
   return {
     prepare(query: string) {
       return new PostgresStatement(pool, query);
     },
-    async batch<T = unknown>(statements: SqlStatement[]): Promise<T[]> {
+    async batch<T = unknown>(statements: SqlLikeStatement[]): Promise<T[]> {
       if (statements.length === 0) return [];
       const client = await pool.connect();
       try {

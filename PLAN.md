@@ -60,7 +60,7 @@ GitHub              ──▶ /webhook ──▶ Workflow ─┘      └─▶ 
 - `packages/runtime/src/*` — portable runtime: routes, ports, adapters, jobs.
 - `packages/client/src/*` — Worker API client shared by the CLI and MCP server.
 - `apps/worker/src/index.ts` — Cloudflare entry: bindings, scheduled handler.
-- `apps/worker/src/workflow.ts` — durable webhook path (deployment-owned credentials).
+- `packages/adapters/src/cloudflare/workflow.ts` — durable webhook path (deployment-owned credentials).
 - `packages/runtime/src/db.ts`, `packages/runtime/src/scheduled.ts` — optional SQL queries and the cron.
 - `apps/web/src/*` — dashboard; talks only to `/api/*`.
 - `packages/cli/src/*` — terminal commands.

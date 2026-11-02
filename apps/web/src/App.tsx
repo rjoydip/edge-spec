@@ -24,6 +24,8 @@ import {
 } from "@/api";
 import { AgentWorkspace } from "@/components/agent/workspace";
 import { DeviceAuthorize } from "@/components/agent/device-authorize";
+import { AuthOverlay, authModeOfPath, type AuthMode } from "@/components/agent/account-overlay";
+import { fetchAccount, type AccountUser } from "@/lib/account";
 import { readDevicePage } from "@/lib/device";
 import { SettingsSheet, type SettingsSection } from "@/components/agent/settings-sheet";
 import { INITIAL_STEPS, type LogEntry, type LogLevel, type Steps } from "@/components/agent/shared";
@@ -423,7 +425,8 @@ export function App() {
 
   /** Retests only the failed contract operations; the scan and unit work stay put. */
   const retest = (operations: RetestOperation[]) => {
-    if (operations.length > 0) void run({ retestOperations: operations });
+    if (operations.length === 0) return;
+    void run({ retestOperations: operations });
   };
 
   const stop = () => {
@@ -714,6 +717,46 @@ export function App() {
   /** `/authorize` deep link from `edge-spec auth login`. */
   const authorizing = useMemo(() => readDevicePage(), []);
 
+  /** Account screens keyed off the URL, and the session on load. */
+  const [authMode, setAuthMode] = useState<AuthMode | undefined>(() =>
+    authModeOfPath(window.location.pathname, window.location.search),
+  );
+  const [account, setAccount] = useState<AccountUser | null>(null);
+  const [accountsEnabled, setAccountsEnabled] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAccount().then((state) => {
+      if (cancelled) return;
+      setAccountsEnabled(state.enabled);
+      setAccount(state.user);
+      setSessionReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authMode]);
+
+  /** Accounts exist and nobody is signed in: the app does not start. */
+  const needsSignIn = sessionReady && accountsEnabled && !account;
+
+  if (!sessionReady) {
+    return <main className="min-h-dvh bg-zinc-950" aria-busy="true" />;
+  }
+
+  if (needsSignIn) {
+    return (
+      <AuthOverlay
+        mode={authMode ?? "login"}
+        onAuthorized={(user) => {
+          setAccount(user);
+          setAuthMode(undefined);
+        }}
+      />
+    );
+  }
+
   return (
     <>
       {authorizing && <DeviceAuthorize page={authorizing} />}
@@ -751,6 +794,9 @@ export function App() {
         onOpenPull={openPullForItems}
         onOpenSettings={openSettings}
         onDismissToast={() => setToast(undefined)}
+        {...(accountsEnabled
+          ? { account, onAccountUpdated: (user: AccountUser) => setAccount(user) }
+          : {})}
       />
       <TooltipProvider delayDuration={180}>
         <SettingsSheet

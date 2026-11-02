@@ -1,7 +1,7 @@
 /**
  * `process.env` -> `Env`. Node/Bun only; the Cloudflare entry never imports it.
  */
-import type { Env } from "../env";
+import type { Env } from "@edge-spec/runtime/env";
 import { createPlatform } from "./select";
 
 export function platformFromEnv(

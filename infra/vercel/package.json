@@ -12,6 +12,7 @@
     "typecheck": "bun check --no-script -p ."
   },
   "dependencies": {
+    "@edge-spec/adapters": "workspace:*",
     "@edge-spec/runtime": "workspace:*"
   },
   "devDependencies": {

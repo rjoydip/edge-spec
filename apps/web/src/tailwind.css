@@ -56,8 +56,6 @@
   --glass-bg: rgb(17 17 19 / 0.66);
   --glass-border: rgb(255 255 255 / 0.07);
   --glass-shadow: rgb(0 0 0 / 0.5);
-  --page-glow: color-mix(in oklab, var(--accent-base) 8%, transparent);
-  --aurora-opacity: 0.22;
 
   /* Stage hues are fixed on purpose: the accent swatches must not recolour a step. */
   --stage-clone: #38bdf8;
@@ -118,8 +116,6 @@ html.light {
   --glass-bg: rgb(255 255 255 / 0.78);
   --glass-border: rgb(9 9 11 / 0.08);
   --glass-shadow: rgb(9 9 11 / 0.12);
-  --page-glow: color-mix(in oklab, var(--accent-base) 6%, transparent);
-  --aurora-opacity: 0.12;
 
   --stage-clone: #0369a1;
   --stage-analyze: #6d28d9;
@@ -284,51 +280,7 @@ html.light {
     height: 0;
   }
 
-  /* Accent-driven backdrop: the palette in Settings recolours the whole page. */
-  .app-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    overflow: hidden;
-    pointer-events: none;
-    background:
-      radial-gradient(60rem 42rem at 12% -12%, var(--page-glow), transparent 68%),
-      radial-gradient(48rem 34rem at 98% 6%, var(--page-glow), transparent 68%),
-      radial-gradient(56rem 38rem at 50% 112%, var(--page-glow), transparent 70%);
-  }
-
-  .app-aurora {
-    position: absolute;
-    border-radius: 9999px;
-    background: var(--accent-base);
-    filter: blur(110px);
-    opacity: var(--aurora-opacity);
-    animation: aurora-drift 24s ease-in-out infinite alternate;
-    will-change: transform;
-  }
-
-  .app-aurora-a {
-    top: -12rem;
-    left: -6rem;
-    width: 36rem;
-    height: 36rem;
-  }
-
-  .app-aurora-b {
-    top: 18%;
-    right: -10rem;
-    width: 32rem;
-    height: 32rem;
-    animation-delay: -8s;
-  }
-
-  .app-aurora-c {
-    bottom: -16rem;
-    left: 35%;
-    width: 34rem;
-    height: 34rem;
-    animation-delay: -16s;
-  }
+  /* Accent-driven backdrop: removed — page stays on the plain surface. */
 
   .brand-mark {
     transition:
@@ -342,6 +294,263 @@ html.light {
   }
 }
 
+/*
+   * Auth screens. Deliberately theme-independent: a dark, colorful entry page in
+   * both light and dark mode, so the zinc remap above does not wash it out.
+   */
+.auth-scene {
+  /* Re-assert the dark zinc ramp inside the auth page: light mode remaps the
+       global ramp, but this screen is intentionally dark in both themes. */
+  --color-zinc-50: #fafafa;
+  --color-zinc-100: #f4f4f5;
+  --color-zinc-200: #e4e4e7;
+  --color-zinc-300: #d4d4d8;
+  --color-zinc-400: #a1a1aa;
+  --color-zinc-500: #71717a;
+  --color-zinc-600: #52525b;
+  --color-zinc-700: #3f3f46;
+  --color-zinc-800: #27272a;
+  --color-zinc-900: #18181b;
+  --color-zinc-950: #09090b;
+  --color-emerald-200: #a7f3d0;
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-400: #34d399;
+  --color-rose-200: #fecdd3;
+  --color-rose-500: #f43f5e;
+
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  overflow: hidden;
+  color: #f4f4f5;
+  background:
+    radial-gradient(
+      70rem 48rem at 8% -12%,
+      color-mix(in oklab, var(--accent-base) 34%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(52rem 38rem at 100% 8%, rgb(217 70 239 / 0.24), transparent 70%),
+    radial-gradient(60rem 44rem at 45% 118%, rgb(16 185 129 / 0.18), transparent 72%), #08080b;
+}
+
+.auth-grid {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(58rem 40rem at 50% 0%, black, transparent 78%);
+}
+
+.auth-blob {
+  position: absolute;
+  z-index: -1;
+  border-radius: 9999px;
+  filter: blur(72px);
+  opacity: 0.55;
+  will-change: transform;
+  animation: auth-drift 22s ease-in-out infinite alternate;
+}
+
+.auth-blob-a {
+  top: -9rem;
+  left: -10rem;
+  width: 34rem;
+  height: 34rem;
+  background: color-mix(in oklab, var(--accent-base) 78%, transparent);
+}
+
+.auth-blob-b {
+  top: 16%;
+  right: -8rem;
+  width: 28rem;
+  height: 28rem;
+  background: rgb(217 70 239 / 0.4);
+  animation-delay: -7s;
+}
+
+.auth-blob-c {
+  bottom: -13rem;
+  left: 30%;
+  width: 30rem;
+  height: 30rem;
+  background: rgb(16 185 129 / 0.3);
+  animation-delay: -14s;
+}
+
+.auth-card {
+  position: relative;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.055), rgb(255 255 255 / 0.015)), rgb(9 9 12 / 0.72);
+  box-shadow:
+    0 30px 80px -30px rgb(0 0 0 / 0.85),
+    0 0 0 1px rgb(255 255 255 / 0.02) inset;
+  backdrop-filter: blur(22px);
+  animation: auth-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.auth-stagger > * {
+  animation: auth-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.auth-stagger > *:nth-child(1) {
+  animation-delay: 40ms;
+}
+.auth-stagger > *:nth-child(2) {
+  animation-delay: 110ms;
+}
+.auth-stagger > *:nth-child(3) {
+  animation-delay: 180ms;
+}
+.auth-stagger > *:nth-child(4) {
+  animation-delay: 250ms;
+}
+.auth-stagger > *:nth-child(5) {
+  animation-delay: 320ms;
+}
+.auth-stagger > *:nth-child(6) {
+  animation-delay: 390ms;
+}
+
+.auth-gradient-text {
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--accent-base) 55%, white),
+    #e879f9 48%,
+    #34d399
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.auth-input {
+  width: 100%;
+  height: 2.6rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.04);
+  padding: 0 2.5rem;
+  font-size: 0.8125rem;
+  color: #f4f4f5;
+  outline: none;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.auth-input::placeholder {
+  color: #71717a;
+}
+
+.auth-input:focus {
+  border-color: color-mix(in oklab, var(--accent-base) 65%, white);
+  background: rgb(255 255 255 / 0.06);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent-base) 22%, transparent);
+}
+
+.auth-cta {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+  height: 2.7rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(
+    110deg,
+    color-mix(in oklab, var(--accent-base) 80%, black) 0%,
+    #c026d3 52%,
+    #059669 100%
+  );
+  background-size: 180% 100%;
+  box-shadow: 0 18px 40px -18px color-mix(in oklab, var(--accent-base) 70%, transparent);
+  transition:
+    background-position 0.5s ease,
+    transform 0.15s ease,
+    box-shadow 0.2s ease;
+}
+
+.auth-cta:hover:not(:disabled) {
+  background-position: 100% 0;
+  transform: translateY(-1px);
+  box-shadow: 0 22px 46px -18px rgb(192 38 211 / 0.55);
+}
+
+.auth-cta:active:not(:disabled) {
+  transform: translateY(0) scale(0.995);
+}
+
+.auth-cta:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.auth-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 20%, rgb(255 255 255 / 0.22), transparent 80%);
+  transform: translateX(-120%);
+  transition: transform 0.6s ease;
+}
+
+.auth-cta:hover::after {
+  transform: translateX(120%);
+}
+
+.auth-divider {
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.14), transparent);
+}
+
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes auth-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2.5rem, 1.6rem, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-2rem, 3rem, 0) scale(0.95);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-blob,
+  .auth-card,
+  .auth-stagger > * {
+    animation: none;
+  }
+
+  .auth-cta,
+  .auth-cta::after {
+    transition: none;
+  }
+}
+
 @keyframes rise-in {
   from {
     opacity: 0;
@@ -350,18 +559,6 @@ html.light {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes aurora-drift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(3rem, 2rem, 0) scale(1.08);
-  }
-  100% {
-    transform: translate3d(-2rem, 4rem, 0) scale(0.96);
   }
 }
 
@@ -764,12 +961,6 @@ html.light {
   }
   to {
     height: 0;
-  }
-}
-
-@media (max-width: 640px) {
-  .app-aurora {
-    filter: blur(80px);
   }
 }
 
