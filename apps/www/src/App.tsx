@@ -3,7 +3,12 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from
 
 // Docs live on a Vite dev server locally (`bun run dev:www` starts it through
 // dev-worker) and on Cloudflare Pages in a build. Anchors stay in-page.
-const DOCS = import.meta.env.DEV ? "http://localhost:5174" : "https://edge-spec-docs.pages.dev";
+const APP =
+  import.meta.env.VITE_APP_URL ??
+  (import.meta.env.DEV ? "http://localhost:5173" : "https://edge-spec.rjoydip.workers.dev");
+const DOCS =
+  import.meta.env.VITE_DOCS_URL ??
+  (import.meta.env.DEV ? "http://localhost:5174" : "https://edge-spec-docs.pages.dev");
 
 /* ------------------------------------------------------------------ icons */
 
@@ -493,9 +498,12 @@ function Hero({ onMove }: { onMove: (event: ReactPointerEvent<HTMLElement>) => v
         </p>
 
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-          <a className="btn btn-primary group" href={DOCS} target="_blank" rel="noreferrer">
-            Get started
+          <a className="btn btn-primary group" href={APP} target="_blank" rel="noreferrer">
+            Open the app
             <Arrow className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />{" "}
+          </a>
+          <a className="btn btn-ghost" href={DOCS} target="_blank" rel="noreferrer">
+            Read the docs
           </a>
           <a className="btn btn-ghost" href="#how">
             See how it works
@@ -717,12 +725,12 @@ function CallToAction() {
           pull request.
         </p>
         <div className="mt-9 flex flex-wrap justify-center gap-3">
-          <a className="btn btn-primary group" href={DOCS} target="_blank" rel="noreferrer">
-            Read the docs
+          <a className="btn btn-primary group" href={APP} target="_blank" rel="noreferrer">
+            Open the app
             <Arrow className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
           </a>
-          <a className="btn btn-ghost" href="#how">
-            Back to the pipeline
+          <a className="btn btn-ghost" href={DOCS} target="_blank" rel="noreferrer">
+            Read the docs
           </a>
         </div>
       </div>
@@ -769,6 +777,16 @@ function Footer() {
         <nav aria-label="Resources">
           <p className="eyebrow mb-4">Resources</p>
           <ul className="space-y-2.5 text-sm text-zinc-400">
+            <li>
+              <a
+                className="transition-colors hover:text-white"
+                href={APP}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open the app
+              </a>
+            </li>
             <li>
               <a
                 className="transition-colors hover:text-white"
@@ -853,15 +871,25 @@ export function App() {
               </a>
             </nav>
 
-            <a
-              className="btn btn-primary ml-auto h-9 px-4 text-[13px] md:ml-0"
-              href={DOCS}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Read the docs
-              <Arrow className="size-3.5" />
-            </a>
+            <div className="ml-auto flex items-center gap-2 md:ml-0">
+              <a
+                className="btn btn-ghost hidden h-9 px-3 text-[13px] sm:inline-flex"
+                href={DOCS}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Docs
+              </a>
+              <a
+                className="btn btn-primary h-9 px-4 text-[13px]"
+                href={APP}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open app
+                <Arrow className="size-3.5" />
+              </a>
+            </div>
           </div>
 
           {/* Progress rides the header rule and shares the nav's gutters. */}

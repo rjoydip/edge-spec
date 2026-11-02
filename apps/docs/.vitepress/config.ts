@@ -1,5 +1,12 @@
 import { defineConfig } from "vitepress";
 
+const dev = process.env.NODE_ENV !== "production";
+const WWW =
+  process.env.VITE_WWW_URL ?? (dev ? "http://localhost:5175" : "https://edge-spec-www.pages.dev");
+const APP =
+  process.env.VITE_APP_URL ??
+  (dev ? "http://localhost:5173" : "https://edge-spec.rjoydip.workers.dev");
+
 export default defineConfig({
   lang: "en-US",
   title: "EdgeSpec",
@@ -24,6 +31,8 @@ export default defineConfig({
     logo: "/favicon.svg",
     siteTitle: "EdgeSpec",
     nav: [
+      { text: "Home", link: WWW },
+      { text: "Open app", link: APP, target: "_blank", rel: "noreferrer" },
       { text: "Architecture", link: "/architecture" },
       { text: "API", link: "/api" },
       { text: "CLI", link: "/cli" },
@@ -35,7 +44,11 @@ export default defineConfig({
     sidebar: [
       {
         text: "Getting started",
-        items: [{ text: "Overview", link: "/" }],
+        items: [
+          { text: "Overview", link: "/" },
+          { text: "Landing page", link: WWW },
+          { text: "Open the app", link: APP },
+        ],
       },
       {
         text: "Guide",
