@@ -16,6 +16,7 @@ import {
 } from "./db";
 import type { Env, SqlDatabase } from "./env";
 import { deleteRunArtifacts, purgeDriftArtifacts } from "./artifacts";
+import { emailConfigOf, sendEmail } from "./email";
 import { ownerLookup } from "./ownership";
 import { resolveDriftWebhook, type DriftWebhookTarget } from "./drift-webhook";
 
@@ -68,20 +69,40 @@ async function notify(target: DriftWebhookTarget, repo: string, summary: string)
   }
 }
 
+const escapeHtml = (value: string): string =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** Sends the summary to DRIFT_ALERT_EMAIL when no webhook is configured. */
+async function notifyEmail(env: Env, repo: string, summary: string): Promise<boolean> {
+  const to = env.DRIFT_ALERT_EMAIL?.trim();
+  const config = emailConfigOf(env);
+  if (!to || !config) return false;
+  const result = await sendEmail(config, {
+    to,
+    subject: `EdgeSpec drift: ${repo}`,
+    text: summary,
+    html: `<pre style="white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:13px;">${escapeHtml(summary)}</pre>`,
+  });
+  if (!result.sent) throw new Error(result.reason);
+  return true;
+}
+
 async function scanRepo(
   env: Env,
   db: SqlDatabase,
   schedule: ScheduledRepo,
   now: number,
+  injected?: GitHub,
 ): Promise<void> {
   try {
     const app = gitHubAppFromEnv(env);
-    const token =
-      app && schedule.installationId
+    const token = injected
+      ? undefined
+      : app && schedule.installationId
         ? await tokens.get(app, schedule.installationId, schedule.repo)
         : env.GH_TOKEN;
-    if (!token) throw new Error("No GitHub credential for the scheduled scan.");
-    const github = new GitHub(token);
+    if (!injected && !token) throw new Error("No GitHub credential for the scheduled scan.");
+    const github = injected ?? new GitHub(token!);
     const base = await github.defaultBranch(schedule.repo);
     const tree = await github.tree(schedule.repo, base);
     const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
@@ -95,6 +116,7 @@ async function scanRepo(
     const drift = detectDrift(previous, current);
 
     let delivered: DriftWebhookTarget | undefined;
+    let emailed = false;
     if (drift.changed) {
       const summary = driftSummary(schedule.repo, drift);
       if (env.ARTIFACTS) {
@@ -112,6 +134,7 @@ async function scanRepo(
       // Store only after the announcement succeeds; a failed webhook retries.
       delivered = resolveDriftWebhook(env, schedule);
       if (delivered) await notify(delivered, schedule.repo, summary);
+      else emailed = await notifyEmail(env, schedule.repo, summary);
     }
     await syncBacklog(
       db,
@@ -138,8 +161,9 @@ async function scanRepo(
       action: "drift_scan",
       detail: {
         changed: drift.changed,
-        notified: Boolean(delivered),
+        notified: Boolean(delivered) || emailed,
         webhookSource: delivered?.source ?? "none",
+        email: emailed,
         newFiles: drift.newFiles.length,
         closedFiles: drift.closedFiles.length,
         apiAdded: drift.apiAdded.length,
@@ -157,11 +181,17 @@ async function scanRepo(
   }
 }
 
+/** Injectable seams for tests; production leaves both unset. */
+export interface ScheduledDeps {
+  github?: GitHub;
+}
+
 /** Runs due repositories; the cron fires daily and each repo has its interval. */
 export async function runScheduled(
   controller: ScheduledController,
   env: Env,
   ctx: ScheduledContext,
+  deps: ScheduledDeps = {},
 ): Promise<void> {
   const db = runsDb(env);
   if (!db) return;
@@ -190,6 +220,6 @@ export async function runScheduled(
         now - schedule.lastRunAt >= schedule.intervalDays * 86_400_000),
   );
   for (const schedule of due.slice(0, 10)) {
-    ctx.waitUntil(scanRepo(env, db, schedule, now));
+    ctx.waitUntil(scanRepo(env, db, schedule, now, deps.github));
   }
 }

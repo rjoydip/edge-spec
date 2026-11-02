@@ -5,17 +5,6 @@ behaviour lives in the code, tests and docs, and the previous roadmap was
 retired. Each item names the gap and what "done" means. Nothing here is a
 commitment to a date.
 
-## Scheduled scans
-
-- [ ] **Email drift notifications.** Only a Slack-compatible webhook is
-      supported. Add email only if a provider is chosen; keep the webhook path.
-- [ ] **Policy-gated drift pull requests.** Drift scans notify and never open a
-      PR. Decide whether a policy may allow one draft PR per drifted repo.
-- [x] **Retention purge audit test.** The cron tick test covers the fixed
-      retention purge and its `retention_purge` audit row without a live D1.
-- [ ] **Drift scan audit test.** `scanRepo` still needs a GitHub seam before the
-      `drift_scan` audit row can be covered without a live repository.
-
 ## MCP
 
 - [ ] **Resource list enumeration.** The four resources are templates only

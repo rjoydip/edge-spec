@@ -381,13 +381,16 @@ untested paths and OpenAPI operation names with the stored snapshot:
 - first run: baseline only;
 - no change: no notification, no pull request;
 - change: one summary to the effective webhook (Slack incoming webhooks accept
-  `text`) and optionally `drift/<repo>/<timestamp>.json` in R2.
+  `text`) or email, and optionally `drift/<repo>/<timestamp>.json` in R2.
 
 The notification target resolves in this order:
 
 1. **Repository schedule override** (`PUT /api/schedules`, or Settings → Drift
    scans → Override deployment webhook).
-2. **Deployment fallback** `DRIFT_ALERT_WEBHOOK_URL` / `DRIFT_ALERT_WEBHOOK_SECRET`.
+2. **Deployment webhook** `DRIFT_ALERT_WEBHOOK_URL` / `DRIFT_ALERT_WEBHOOK_SECRET`.
+3. **Deployment email** `DRIFT_ALERT_EMAIL`, used only when no webhook target is
+   configured. It needs the existing Resend sender (`EMAIL_API_KEY` and
+   `EMAIL_FROM`).
 
 The repository URL is returned by the schedules API. Its secret is
 write-only: responses only report `driftWebhookSecretSet`. Changing a webhook
@@ -399,11 +402,16 @@ only needs a redeploy.
 ```bash
 export DRIFT_ALERT_WEBHOOK_URL=…
 export DRIFT_ALERT_WEBHOOK_SECRET=…   # sent as x-edgespec-secret
+export DRIFT_ALERT_EMAIL=ops@example.com
 ```
 
-Set these before `bun run deploy` (or in `infra/cloudflare/.env`). There is no
-email adapter yet. Without `RUNS_DB` the cron does nothing. The scan never opens
-a pull request; PR creation remains the explicit next step.
+Set these before `bun run deploy` (or in `infra/cloudflare/.env`). Without
+`RUNS_DB` the cron does nothing.
+
+Drift scans never open a pull request, and a policy cannot enable one. A drift
+signal names a gap but has no verified change to submit; use the normal
+scan/run flow to generate tests and open a PR. This keeps the cron from
+publishing unreviewed changes.
 
 ## Audit and retention (optional)
 

@@ -745,7 +745,8 @@ changed, one summary is POSTed to the effective webhook (Slack-compatible
 Resolution order:
 
 1. repository schedule override;
-2. deployment `DRIFT_ALERT_WEBHOOK_URL` fallback.
+2. deployment `DRIFT_ALERT_WEBHOOK_URL` fallback;
+3. deployment `DRIFT_ALERT_EMAIL` fallback (only when no webhook is configured).
 
 A quiet repository sends nothing and opens nothing. The scan never opens a pull
 request: the summary is the action. The audit event records `notified` and

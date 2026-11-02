@@ -51,6 +51,8 @@ export interface Env {
   /** Optional Slack-compatible webhook for drift notifications. */
   DRIFT_ALERT_WEBHOOK_URL?: string;
   DRIFT_ALERT_WEBHOOK_SECRET?: string;
+  /** Recipient for drift email when no webhook target is configured. */
+  DRIFT_ALERT_EMAIL?: string;
   /** Workers AI binding, or provider config for the automation path. */
   AI?: AiBinding;
   AI_PROVIDER?: string;

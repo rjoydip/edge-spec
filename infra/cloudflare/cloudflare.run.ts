@@ -59,6 +59,7 @@ export default Alchemy.Stack(
     const driftAlertWebhookSecret = yield* Config.option(
       Config.Redacted("DRIFT_ALERT_WEBHOOK_SECRET"),
     );
+    const driftAlertEmail = yield* Config.option(Config.Redacted("DRIFT_ALERT_EMAIL"));
     // Accounts and observability are optional: unset means "better-auth
     // derives/uses its default secret" and "consola logs".
     const betterAuthSecret = yield* Config.option(Config.Redacted("BETTER_AUTH_SECRET"));
@@ -111,6 +112,7 @@ export default Alchemy.Stack(
         ...(Option.isSome(driftAlertWebhookSecret)
           ? { DRIFT_ALERT_WEBHOOK_SECRET: driftAlertWebhookSecret.value }
           : {}),
+        ...(Option.isSome(driftAlertEmail) ? { DRIFT_ALERT_EMAIL: driftAlertEmail.value } : {}),
         ...(Option.isSome(betterAuthSecret) ? { BETTER_AUTH_SECRET: betterAuthSecret.value } : {}),
         ...(Option.isSome(emailApiKey) ? { EMAIL_API_KEY: emailApiKey.value } : {}),
         ...(Option.isSome(sentryDsn) ? { SENTRY_DSN: sentryDsn.value } : {}),

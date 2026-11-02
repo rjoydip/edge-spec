@@ -122,14 +122,15 @@ Secrets are deployment-owned. Visitor credentials are request headers and are
 never written to Worker state. The stack reads these through `Config.Redacted`,
 so a missing optional value is simply absent.
 
-| Secret                       | Required              | Used by                             |
-| ---------------------------- | --------------------- | ----------------------------------- |
-| `GH_APP_ID`                  | For App auth          | Mint installation tokens            |
-| `GH_APP_PRIVATE_KEY`         | For App auth          | PKCS#8 PEM used to sign the app JWT |
-| `GH_TOKEN`                   | Fallback for webhooks | Workflow: scan, commit, PR          |
-| `GH_WEBHOOK_SECRET`          | Recommended           | `POST /webhook` HMAC verification   |
-| `DRIFT_ALERT_WEBHOOK_URL`    | Optional              | Drift notifications                 |
-| `DRIFT_ALERT_WEBHOOK_SECRET` | Optional              | Sent as `x-edgespec-secret`         |
+| Secret                       | Required              | Used by                              |
+| ---------------------------- | --------------------- | ------------------------------------ |
+| `GH_APP_ID`                  | For App auth          | Mint installation tokens             |
+| `GH_APP_PRIVATE_KEY`         | For App auth          | PKCS#8 PEM used to sign the app JWT  |
+| `GH_TOKEN`                   | Fallback for webhooks | Workflow: scan, commit, PR           |
+| `GH_WEBHOOK_SECRET`          | Recommended           | `POST /webhook` HMAC verification    |
+| `DRIFT_ALERT_WEBHOOK_URL`    | Optional              | Drift notifications                  |
+| `DRIFT_ALERT_WEBHOOK_SECRET` | Optional              | Sent as `x-edgespec-secret`          |
+| `DRIFT_ALERT_EMAIL`          | Optional              | Drift email fallback (Resend sender) |
 
 For a local deploy, export them or copy `infra/cloudflare/.env.example` to
 `infra/cloudflare/.env` (git-ignored):
