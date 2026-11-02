@@ -707,6 +707,33 @@ app.post("/api/scan", async (c) => {
         undefined,
         ["missing", "api"],
       ).catch(() => undefined);
+
+      // History and audit are scan-based: a scan that never generates tests is
+      // still a record. Both writes are conveniences and never fail the scan.
+      const at = Date.now();
+      await createRun(history, {
+        id: crypto.randomUUID(),
+        repo,
+        ref,
+        status: "scanned",
+        provider: "scan",
+        model: "none",
+        startedAt: at,
+        finishedAt: at,
+        totals,
+      }).catch(() => undefined);
+      await recordAudit(history, {
+        repo,
+        actor: "dashboard",
+        action: "scan",
+        detail: {
+          ref,
+          scanned: blobs.length,
+          missing: totals.missing,
+          api: totals.api,
+          unsupported: totals.unsupported,
+        },
+      }).catch(() => undefined);
     }
 
     return c.json({

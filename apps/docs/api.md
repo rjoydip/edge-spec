@@ -887,7 +887,12 @@ with a readable error.
 
 ---
 
-## Run history
+## Scan history
+
+Every scan is recorded: `POST /api/scan` writes one `runs` row with
+`status: "scanned"`, `provider: "scan"`, no model, and the scan totals, plus an
+audit event with action `scan`. Generating tests later adds a separate `running`
+row, so a repository scanned without generation still has history.
 
 History is optional and lives in D1 (`RUNS_DB`). Without the binding every
 route below answers `{ "enabled": false }` and nothing is stored. Summaries are
@@ -896,11 +901,11 @@ test source is never stored in either.
 
 ### `GET /api/runs?repo=owner/name&limit=20`
 
-Lists recent runs for one repository, newest first.
+Lists recent scans and runs for one repository, newest first.
 
 ### `GET /api/runs/recent?limit=20`
 
-Newest runs across every repository, for MCP resource discovery.
+Newest scans and runs across every repository, for MCP resource discovery.
 
 ### `GET /api/repos`
 

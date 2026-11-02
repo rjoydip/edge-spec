@@ -61,7 +61,7 @@ function json<T>(value: unknown, fallback: T): T {
 }
 
 function statusOf(value: string): RunStatus {
-  return value === "ready" || value === "failed" ? value : "running";
+  return value === "scanned" || value === "ready" || value === "failed" ? value : "running";
 }
 
 function decisionOf(value: string): RunDecision {

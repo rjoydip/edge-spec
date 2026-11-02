@@ -713,6 +713,7 @@ const AUDIT_TONE: Record<string, AuditTone> = {
     dot: "bg-emerald-400",
     badge: "success",
   },
+  scan: { icon: Activity, dot: "bg-sky-400", badge: "accent" },
   drift_scan: { icon: Activity, dot: "bg-amber-400", badge: "warning" },
   retention_purge: { icon: Trash2, dot: "bg-rose-400", badge: "danger" },
 };
@@ -836,7 +837,7 @@ export function AuditDialog({
             </p>
           ) : events.length === 0 ? (
             <p className="flex h-full items-center justify-center px-3 text-center text-[11px] text-zinc-500">
-              No audit events yet. Memory, policy and schedule updates write here.
+              No audit events yet. Scans, memory, policy and schedule updates write here.
             </p>
           ) : (
             Object.entries(groups).map(([day, list]) => (

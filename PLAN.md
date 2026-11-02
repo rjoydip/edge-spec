@@ -226,7 +226,7 @@ Rules:
 | `GET`            | `/api/quota`                         | Provider quota when a key is supplied               |
 | `GET`            | `/api/catalog`                       | Providers, models, defaults (drives Settings)       |
 | `GET`            | `/api/branches`                      | Branch names + default branch for the header        |
-| `POST`           | `/api/scan`                          | Missing/coverage/api/unsupported gaps + totals      |
+| `POST`           | `/api/scan`                          | Gaps + totals; records a scan row and audit event    |
 | `POST`           | `/api/coverage`                      | Run the suite with coverage; coverage gaps + status |
 | `POST`           | `/api/impact`                        | Tests affected by changed files                     |
 | `POST`           | `/api/record`                        | Record a fixture session                            |
@@ -234,8 +234,8 @@ Rules:
 | `POST`           | `/api/generate`                      | Single generation (diff view's Retry)               |
 | `POST`           | `/api/pull-request`                  | Open a PR for already-generated tests               |
 | `GET`            | `/api/pulls`                         | Recent pull requests                                |
-| `GET`            | `/api/runs`                          | Run history for a repo                              |
-| `DELETE`         | `/api/runs`                          | Delete one repo's run history                       |
+| `GET`            | `/api/runs`                          | Scan history for a repo                             |
+| `DELETE`         | `/api/runs`                          | Delete one repo's scan history                      |
 | `GET`            | `/api/runs/:id`                      | D1 run summary, or Workflow status when unknown     |
 | `GET`            | `/api/runs/:id/files`                | Per-file decisions and checks                       |
 | `POST`           | `/api/runs/:id/decisions`            | Accept/reject generated files                       |

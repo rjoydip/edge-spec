@@ -926,7 +926,7 @@ export function Dashboard({
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={() => openFromMenu(() => setHistoryOpen(true))}>
                       <History />
-                      Run history
+                      Scan history
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => openFromMenu(() => setAuditOpen(true))}>
                       <ScrollText />
