@@ -110,6 +110,20 @@ configured (AI model/key, GitHub token, sandbox runner), stored in
 [`apps/docs/cli.md`](apps/docs/cli.md) and [`apps/docs/mcp.md`](apps/docs/mcp.md)
 for commands, environment variables, and MCP client configuration.
 
+## Agent skills
+
+`skills/edge-spec/` is a portable agent skill in the open
+[Agent Skills](https://agentskills.io) format used by
+[skills.sh](https://www.skills.sh). It teaches a coding agent the scan →
+generate → verify → pull request workflow, the environment-only secret rule and
+the "static check only is not a pass" rule.
+
+```bash
+npx skills add rjoydip/edge-spec --agent opencode   # or claude-code, cursor, codex
+```
+
+The skill is documentation only: it is not bundled, built or imported by the app.
+
 ## Repository map
 
 The repository is a Bun workspace monorepo:
@@ -127,6 +141,7 @@ packages/sandbox/ self-hosted sandbox runner (bwrap/Docker/Podman/hosted)
 examples/        local test-generation fixtures and reference tests
 evals/           golden-scan harness and optional provider scoring
 scripts/         combined dev stack
+skills/          portable agent skills (skills.sh format)
 ```
 
 `packages/core` is consumed as `@edge-spec/core/<module>` and the UI primitives
