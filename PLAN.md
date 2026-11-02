@@ -226,7 +226,7 @@ Rules:
 | `GET`            | `/api/quota`                         | Provider quota when a key is supplied               |
 | `GET`            | `/api/catalog`                       | Providers, models, defaults (drives Settings)       |
 | `GET`            | `/api/branches`                      | Branch names + default branch for the header        |
-| `POST`           | `/api/scan`                          | Gaps + totals; records a scan row and audit event    |
+| `POST`           | `/api/scan`                          | Gaps + totals; records a scan row and audit event   |
 | `POST`           | `/api/coverage`                      | Run the suite with coverage; coverage gaps + status |
 | `POST`           | `/api/impact`                        | Tests affected by changed files                     |
 | `POST`           | `/api/record`                        | Record a fixture session                            |
