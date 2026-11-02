@@ -66,11 +66,11 @@ bun run docs:deploy   # build + publish to Cloudflare Pages
 bun run docs:preview  # serve the build locally
 ```
 
-The landing page (`bun run dev:www`, http://localhost:5175), docs
-(http://localhost:5174) and dashboard (http://localhost:5173) cross-link in
-development. Production builds default to https://edge-spec-www.pages.dev,
+The landing page (`bun run dev:www`, http://localhost:5175) links to the docs
+(http://localhost:5174) and dashboard (http://localhost:5173) in development.
+Production builds default to https://edge-spec-www.pages.dev,
 https://edge-spec-docs.pages.dev and https://edge-spec.rjoydip.workers.dev; set
-`VITE_APP_URL`, `VITE_DOCS_URL` and `VITE_WWW_URL` when hosting elsewhere.
+`VITE_APP_URL` and `VITE_DOCS_URL` when hosting elsewhere.
 
 ## Local development
 
