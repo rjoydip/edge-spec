@@ -64,6 +64,9 @@ export default Alchemy.Stack(
     // Accounts and observability are optional: unset means "better-auth
     // derives/uses its default secret" and "consola logs".
     const betterAuthSecret = yield* Config.option(Config.Redacted("BETTER_AUTH_SECRET"));
+    const betterAuthTrustedOrigins = yield* Config.option(
+      Config.Redacted("BETTER_AUTH_TRUSTED_ORIGINS"),
+    );
     const emailApiKey = yield* Config.option(Config.Redacted("EMAIL_API_KEY"));
     const sentryDsn = yield* Config.option(Config.Redacted("SENTRY_DSN"));
     const axiomToken = yield* Config.option(Config.Redacted("AXIOM_TOKEN"));
@@ -116,6 +119,9 @@ export default Alchemy.Stack(
         ...(Option.isSome(driftAlertEmail) ? { DRIFT_ALERT_EMAIL: driftAlertEmail.value } : {}),
         ...(Option.isSome(scanCacheTtl) ? { EDGESPEC_SCAN_CACHE_TTL: scanCacheTtl.value } : {}),
         ...(Option.isSome(betterAuthSecret) ? { BETTER_AUTH_SECRET: betterAuthSecret.value } : {}),
+        ...(Option.isSome(betterAuthTrustedOrigins)
+          ? { BETTER_AUTH_TRUSTED_ORIGINS: betterAuthTrustedOrigins.value }
+          : {}),
         ...(Option.isSome(emailApiKey) ? { EMAIL_API_KEY: emailApiKey.value } : {}),
         ...(Option.isSome(sentryDsn) ? { SENTRY_DSN: sentryDsn.value } : {}),
         ...(Option.isSome(axiomToken) ? { AXIOM_TOKEN: axiomToken.value } : {}),

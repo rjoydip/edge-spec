@@ -22,14 +22,37 @@ export function authFor(env: Env): ReturnType<typeof betterAuth> {
   const db = env.DB;
   if (!db) throw new Error("Accounts need a database.");
 
+  // Canonical origin: set BETTER_AUTH_URL (or EDGESPEC_WORKSPACE_URL) to
+  // silence Better Auth's per-request inference warning and get stable links.
+  const baseUrl = (env.EDGESPEC_WORKSPACE_URL ?? env.BETTER_AUTH_URL)?.trim();
+  const loopback =
+    !baseUrl || /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(baseUrl);
+  const configuredOrigins = (env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  // The dashboard runs on Vite's localhost origin and proxies /api to the
+  // Worker; the browser Origin never becomes 127.0.0.1, so trust both.
+  const localOrigins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:5175",
+    "http://127.0.0.1:5175",
+    "http://localhost:8787",
+    "http://127.0.0.1:8787",
+  ];
+
   const auth = betterAuth({
     appName: "EdgeSpec",
     basePath: "/api/auth",
-    // Canonical origin: set BETTER_AUTH_URL (or EDGESPEC_WORKSPACE_URL) to
-    // silence Better Auth's per-request inference warning and get stable links.
-    ...((env.EDGESPEC_WORKSPACE_URL ?? env.BETTER_AUTH_URL)?.trim()
-      ? { baseURL: (env.EDGESPEC_WORKSPACE_URL ?? env.BETTER_AUTH_URL)?.trim() }
-      : {}),
+    ...(baseUrl ? { baseURL: baseUrl } : {}),
+    trustedOrigins: [
+      ...(loopback ? localOrigins : []),
+      ...(baseUrl ? [baseUrl] : []),
+      ...configuredOrigins,
+    ],
     ...(env.BETTER_AUTH_SECRET?.trim() ? { secret: env.BETTER_AUTH_SECRET.trim() } : {}),
     database: sqlAuthAdapter(db),
     emailAndPassword: {

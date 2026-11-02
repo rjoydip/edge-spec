@@ -811,6 +811,12 @@ exists. Set `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) in production;
 email links are sent from the visitor's Resend key in Settings (or
 `EMAIL_API_KEY`/`EMAIL_FROM`).
 
+Set `BETTER_AUTH_URL` to the canonical dashboard origin. When it is loopback,
+the local Vite origins (`localhost`/`127.0.0.1`, ports 5173–5175 and 8787) are
+trusted automatically. For any additional origin — a custom domain, preview
+URL, or a dashboard behind a proxy — add it to `BETTER_AUTH_TRUSTED_ORIGINS`
+(comma-separated), otherwise auth requests fail with `Invalid origin`.
+
 ## Cache
 
 The cache is read-through and never authoritative. A miss loads the real value;

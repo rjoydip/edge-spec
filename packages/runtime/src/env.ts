@@ -94,6 +94,8 @@ export interface Env {
   BETTER_AUTH_SECRET?: string;
   /** Canonical origin for auth callbacks; inferred per request when unset. */
   BETTER_AUTH_URL?: string;
+  /** Extra comma-separated origins accepted by Better Auth (custom domains). */
+  BETTER_AUTH_TRUSTED_ORIGINS?: string;
   /** Set to 1 only when serving over plain HTTP (local Docker). */
   EDGESPEC_INSECURE_COOKIES?: string;
 }
