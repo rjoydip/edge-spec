@@ -134,16 +134,12 @@ export default Alchemy.Stack(
         })
       : undefined;
 
-    // Marketing landing page. Same split as the docs: Alchemy owns the Pages
-    // project; `bun run www:deploy` uploads the static build because the Pages
-    // REST API has no public asset-upload endpoint. Prod-only for the same
-    // reason: a preview project would be empty until someone uploaded to it.
-    const www = isProd
-      ? yield* Cloudflare.Pages.Project("EdgeSpecWww", {
-          name: "edge-spec-www",
-          productionBranch: "main",
-        })
-      : undefined;
+    // The landing page is not an Alchemy resource. Creating a Pages project
+    // through Alchemy needs the deploy token to hold Cloudflare Pages
+    // permission, which the CI token (Workers, D1, R2, AI, state store) does
+    // not. `bun run www:deploy` runs `wrangler pages deploy`, which creates the
+    // project on first upload, so managing it here only added a permission the
+    // production deploy does not otherwise need.
 
     return {
       url: worker.url,
@@ -156,11 +152,7 @@ export default Alchemy.Stack(
           ? Output.interpolate`https://${docs.subdomain}`
           : "https://edge-spec-docs.pages.dev",
       // The landing page; `dev-worker` serves it locally on this port.
-      wwwUrl: localDev
-        ? "http://localhost:5175"
-        : www
-          ? Output.interpolate`https://${www.subdomain}`
-          : "https://edge-spec-www.pages.dev",
+      wwwUrl: localDev ? "http://localhost:5175" : "https://edge-spec-www.pages.dev",
     };
   }),
 );
