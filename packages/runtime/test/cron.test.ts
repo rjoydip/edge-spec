@@ -75,6 +75,6 @@ describe("cron tick", () => {
     const env = { CRON_SECRET: SECRET, DB: db } as Env;
     const response = await tick(env, { "x-cron-secret": SECRET });
     expect(response.status).toBe(200);
-    expect(binds.some((values) => values[3] === "retention_purge")).toBe(true);
+    expect(binds.some((values) => values[2] === "retention_purge")).toBe(true);
   });
 });

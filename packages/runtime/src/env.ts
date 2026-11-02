@@ -76,8 +76,6 @@ export interface Env {
   /** Email sender fallback (Resend). Requests normally carry it as a header. */
   EMAIL_API_KEY?: string;
   EMAIL_FROM?: string;
-  /** The public origin used in emails; defaults to the request origin. */
-  EDGESPEC_WORKSPACE_URL?: string;
   /** Observability: consola (default), otlp, sentry, axiom or none. */
   EDGESPEC_OBSERVABILITY?: string;
   EDGESPEC_LOG_LEVEL?: ObserverLevel;

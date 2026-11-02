@@ -69,8 +69,8 @@ The sqlite driver applies the `NNNN_*.sql` migrations in `EDGESPEC_MIGRATIONS`
 content hash.
 
 The Worker still deploys without the binding (for example in a local bundle
-test), but every history/backlog/workspace route then answers `enabled: false`
-and the cron does nothing.
+test), but every history and backlog route then answers `enabled: false` and the
+cron does nothing.
 
 ### Repairing migration bookkeeping
 
@@ -235,7 +235,7 @@ bun run --cwd infra/cloudflare destroy --stage staging --yes
 ```
 
 The automated test covers `/api/health`, `/api/catalog`, the dashboard root and
-a deep link, and D1 (workspace + run history). The same assertions run locally
+a deep link, and D1 (run history and audit). The same assertions run locally
 against the emulators; stop `bun run dev:worker` first, because both bind 8787:
 
 ```bash

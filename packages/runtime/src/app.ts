@@ -1509,17 +1509,17 @@ app.post("/api/cli/device/approve", async (c) => {
     return c.json({ error: "Not enabled: this deployment has no cache store." }, 501);
   }
   const rawBody: unknown = await c.req.json().catch(() => ({}));
-  const body = (rawBody ?? {}) as { userCode?: unknown; profile?: unknown; workspace?: unknown };
+  const body = (rawBody ?? {}) as { userCode?: unknown; profile?: unknown; server?: unknown };
   const userCode = typeof body.userCode === "string" ? body.userCode.trim().toUpperCase() : "";
   const profile = typeof body.profile === "string" ? body.profile : "";
-  const workspace = typeof body.workspace === "string" ? body.workspace.trim() : "";
-  if (!userCode || !profile || !workspace) {
-    return c.json({ error: "userCode, profile and workspace are required." }, 400);
+  const server = typeof body.server === "string" ? body.server.trim() : "";
+  if (!userCode || !profile || !server) {
+    return c.json({ error: "userCode, profile and server are required." }, 400);
   }
   if (profile.length > PROFILE_LIMIT) {
     return c.json({ error: `profile is too large (limit ${PROFILE_LIMIT} bytes).` }, 413);
   }
-  const decision = await approveDevice(store, { userCode, profile, workspace });
+  const decision = await approveDevice(store, { userCode, profile, server });
   if (!decision.ok) {
     return c.json({ error: "Code is unknown or already used." }, 404);
   }

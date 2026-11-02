@@ -22,9 +22,9 @@ export function authFor(env: Env): ReturnType<typeof betterAuth> {
   const db = env.DB;
   if (!db) throw new Error("Accounts need a database.");
 
-  // Canonical origin: set BETTER_AUTH_URL (or EDGESPEC_WORKSPACE_URL) to
-  // silence Better Auth's per-request inference warning and get stable links.
-  const baseUrl = (env.EDGESPEC_WORKSPACE_URL ?? env.BETTER_AUTH_URL)?.trim();
+  // Canonical origin: set BETTER_AUTH_URL to silence Better Auth's per-request
+  // inference warning and get stable links.
+  const baseUrl = env.BETTER_AUTH_URL?.trim();
   const loopback =
     !baseUrl || /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(baseUrl);
   const configuredOrigins = (env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")

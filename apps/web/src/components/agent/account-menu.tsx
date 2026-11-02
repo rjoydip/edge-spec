@@ -24,18 +24,17 @@ const initialsOf = (user: AccountUser): string => {
 };
 
 /**
- * Profile block for the header's existing account dropdown: identity and
- * profile editing. No extra trigger button.
+ * Profile block for the header's existing account dropdown: identity and a
+ * trigger for the edit dialog. The dialog itself lives outside the dropdown,
+ * which unmounts when it closes.
  */
 export function AccountSection({
   account,
-  onUpdated,
+  onEditProfile,
 }: {
   account: AccountUser;
-  onUpdated: (user: AccountUser) => void;
+  onEditProfile: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-
   return (
     <>
       <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-[9px] tracking-wide text-zinc-500 uppercase">
@@ -57,7 +56,7 @@ export function AccountSection({
           )}
         </div>
       </div>
-      <DropdownMenuItem onSelect={() => window.setTimeout(() => setEditing(true), 0)}>
+      <DropdownMenuItem onSelect={onEditProfile}>
         <Pencil />
         Edit profile
       </DropdownMenuItem>
@@ -71,18 +70,11 @@ export function AccountSection({
         Sign out
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-
-      <ProfileDialog
-        open={editing}
-        onOpenChange={setEditing}
-        account={account}
-        onUpdated={onUpdated}
-      />
     </>
   );
 }
 
-function ProfileDialog({
+export function ProfileDialog({
   open,
   onOpenChange,
   account,

@@ -55,7 +55,12 @@ if (import.meta.main) {
   // Postgres mirrors the D1 migrations: the base schema, then every forward
   // migration that ships its own portable DDL. Files applied here must stay
   // immutable; the ledger records `<file>:<hash>`. New changes go in a new file.
-  const files = ["postgres.sql", "0010_better_auth.sql", "0011_drop_pricing_plan.sql"];
+  const files = [
+    "postgres.sql",
+    "0010_better_auth.sql",
+    "0011_drop_pricing_plan.sql",
+    "0012_drop_workspace.sql",
+  ];
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {

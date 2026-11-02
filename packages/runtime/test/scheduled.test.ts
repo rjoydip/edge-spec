@@ -77,7 +77,7 @@ async function run(env: Env, previousSnapshot = false) {
 describe("scheduled drift", () => {
   it("records the drift scan in the audit log", async () => {
     const { binds } = await run({});
-    expect(binds.some((values) => values[3] === "drift_scan")).toBe(true);
+    expect(binds.some((values) => values[2] === "drift_scan")).toBe(true);
   });
 
   it("emails the summary when no webhook is configured", async () => {
@@ -98,8 +98,8 @@ describe("scheduled drift", () => {
       );
       expect(body?.to).toEqual(["ops@example.com"]);
       expect(body?.subject).toContain("acme/api");
-      const audit = binds.find((values) => values[3] === "drift_scan");
-      expect(JSON.parse(String(audit?.[4]))).toMatchObject({ notified: true, email: true });
+      const audit = binds.find((values) => values[2] === "drift_scan");
+      expect(JSON.parse(String(audit?.[3]))).toMatchObject({ notified: true, email: true });
     } finally {
       globalThis.fetch = original;
     }

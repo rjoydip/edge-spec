@@ -231,11 +231,11 @@ function auditDb() {
         if (sql.startsWith("INSERT INTO audit_events")) {
           events.unshift({
             id: events.length + 1,
-            repo: values[1],
-            actor: values[2],
-            action: values[3],
-            detail_json: values[4],
-            created_at: values[5],
+            repo: values[0],
+            actor: values[1],
+            action: values[2],
+            detail_json: values[3],
+            created_at: values[4],
           });
         }
         return {};

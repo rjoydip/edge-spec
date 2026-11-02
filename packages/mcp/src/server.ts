@@ -379,7 +379,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
         writePendingAuth({
           deviceCode: start.deviceCode,
           userCode: start.userCode,
-          workspace: baseUrl,
+          server: baseUrl,
           payloadKey,
           startedAt: Date.now(),
         });
@@ -410,7 +410,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
         if (!pending) {
           return fail("No login in progress. Call edgespec_auth_login first.");
         }
-        const poll = await pollDeviceFlow(pending.workspace, pending.deviceCode, options.fetchImpl);
+        const poll = await pollDeviceFlow(pending.server, pending.deviceCode, options.fetchImpl);
         if (poll.status === "pending") {
           return ok({
             status: "pending",
@@ -426,13 +426,13 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
           pending.payloadKey,
         )) as AuthFile["profile"];
         writeCredentials({
-          workspace: poll.workspace || pending.workspace,
+          server: poll.server || pending.server,
           token: poll.token ?? "",
           authorizedAt: Date.now(),
           profile,
         });
         clearPendingAuth();
-        return ok({ status: "authorized", workspace: poll.workspace || pending.workspace });
+        return ok({ status: "authorized", server: poll.server || pending.server });
       } catch (error) {
         return fail(error);
       }
@@ -443,7 +443,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
     "edgespec_auth_status",
     {
       title: "Show stored authorization",
-      description: "Reports the workspace the server last logged into and what it stores.",
+      description: "Reports the server the client last logged into and what it stores.",
       inputSchema: {},
     },
     async () => {
@@ -451,7 +451,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
       if (!stored) return ok({ status: "signed-out" });
       return ok({
         status: "authorized",
-        workspace: stored.workspace,
+        server: stored.server,
         authorizedAt: stored.authorizedAt,
         stores: Object.keys(stored.profile ?? {}),
       });

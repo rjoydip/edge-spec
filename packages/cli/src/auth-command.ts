@@ -37,9 +37,9 @@ const login = async (env: Env, options: { url?: string; json: boolean }): Promis
   const defaults = envDefaults(env);
   const baseUrl = (options.url ?? defaults.baseUrl).replace(/\/+$/, "");
   const existing = readCredentials();
-  if (existing && existing.workspace === baseUrl) {
+  if (existing && existing.server === baseUrl) {
     stderr(`Already authorized with ${baseUrl}. Run "edge-spec auth logout" to reset.`);
-    if (options.json) stdout(JSON.stringify({ status: "authorized", workspace: baseUrl }));
+    if (options.json) stdout(JSON.stringify({ status: "authorized", server: baseUrl }));
     return true;
   }
 
@@ -77,7 +77,7 @@ const login = async (env: Env, options: { url?: string; json: boolean }): Promis
   }
   const profile = (await decryptProfile(last.profile ?? "", payloadKey)) as AuthFile["profile"];
   writeCredentials({
-    workspace: last.workspace || baseUrl,
+    server: last.server || baseUrl,
     token: last.token ?? "",
     authorizedAt: Date.now(),
     profile,
@@ -86,7 +86,7 @@ const login = async (env: Env, options: { url?: string; json: boolean }): Promis
     stdout(
       JSON.stringify({
         status: "authorized",
-        workspace: last.workspace || baseUrl,
+        server: last.server || baseUrl,
         token: mask(last.token ?? ""),
       }),
     );
@@ -94,7 +94,7 @@ const login = async (env: Env, options: { url?: string; json: boolean }): Promis
   }
   stderr(
     [
-      `Authorized ${last.workspace || baseUrl}.`,
+      `Authorized ${last.server || baseUrl}.`,
       "Stored secrets stay request headers; your shell env always wins.",
     ].join("\n"),
   );
@@ -111,7 +111,7 @@ const status = (json: boolean): boolean => {
     const profile = stored.profile;
     stderr(
       [
-        `Workspace: ${stored.workspace}`,
+        `Server: ${stored.server}`,
         `Authorized: ${new Date(stored.authorizedAt).toISOString()}`,
         `Token: ${mask(stored.token)}`,
         `GitHub token: ${profile.githubToken ? mask(profile.githubToken) : "—"}`,
@@ -124,7 +124,7 @@ const status = (json: boolean): boolean => {
   stdout(
     JSON.stringify({
       status: stored ? "authorized" : "signed-out",
-      ...(stored ? { workspace: stored.workspace, authorizedAt: stored.authorizedAt } : {}),
+      ...(stored ? { server: stored.server, authorizedAt: stored.authorizedAt } : {}),
     }),
   );
   return Boolean(stored);

@@ -30,14 +30,14 @@ describe("device flow", () => {
     const decision = await approveDevice(store, {
       userCode: record.userCode,
       profile: "encrypted-blob",
-      workspace: "https://edgespec.example",
+      server: "https://edgespec.example",
     });
     expect(decision.ok).toBe(true);
     const poll = await pollDevice(store, record.deviceCode);
     expect(poll.status).toBe("approved");
     if (poll.status === "approved") {
       expect(poll.profile).toBe("encrypted-blob");
-      expect(poll.workspace).toBe("https://edgespec.example");
+      expect(poll.server).toBe("https://edgespec.example");
       expect(poll.token.startsWith("edgespec_")).toBe(true);
     }
     // The approved record is consumed on first poll: no replays.
@@ -50,7 +50,7 @@ describe("device flow", () => {
     const decision = await approveDevice(store, {
       userCode: "ZZZZ-ZZZZ",
       profile: "x",
-      workspace: "w",
+      server: "w",
     });
     expect(decision.ok).toBe(false);
   });
@@ -61,13 +61,13 @@ describe("device flow", () => {
     const approved = await approveDevice(store, {
       userCode: first.userCode,
       profile: "one",
-      workspace: "w",
+      server: "w",
     });
     expect(approved.ok).toBe(true);
     const reused = await approveDevice(store, {
       userCode: first.userCode,
       profile: "two",
-      workspace: "w",
+      server: "w",
     });
     expect(reused.ok).toBe(false);
   });
@@ -100,7 +100,7 @@ describe("device routes", () => {
       {
         userCode: started.userCode,
         profile: "cipher",
-        workspace: "https://edge.example",
+        server: "https://edge.example",
       },
       env(store),
     );

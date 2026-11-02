@@ -1,4 +1,4 @@
-/** Every modal the agent workspace opens. Real data only. */
+/** Every modal the dashboard opens. Real data only. */
 import { useEffect, useState, type ReactNode } from "react";
 import {
   AlignLeft,

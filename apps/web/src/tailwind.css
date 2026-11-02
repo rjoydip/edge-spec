@@ -728,11 +728,10 @@ html.light {
   animation: tab-in 0.24s ease-out;
 }
 
-/* ── Agent workspace ─────────────────────────────────────────────────────
- * Motion is CSS only, staggered with inline animation delays, and collapses
- * under the reduced-motion override below.
- */
-.progress-indicator {
+/* ── Dashboard ─────────────────────────────────────────────────────────── */
+* Motion is CSS only,
+staggered with inline animation delays,
+and collapses * under the reduced-motion override below. */ .progress-indicator {
   position: relative;
   overflow: hidden;
 }

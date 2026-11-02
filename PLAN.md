@@ -27,20 +27,20 @@ These corrections to the first mockup are part of the definition of done.
 
 ## 2. Technology decisions
 
-| Area             | Decision                                                                                                                        | Why                                                              |
-| :--------------- | :------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------- |
-| Runtime          | Cloudflare Workers (TypeScript)                                                                                                 | Request API + static assets                                      |
-| HTTP             | `hono`                                                                                                                          | Small router, SSE helper, typed bindings                         |
-| Orchestration    | Cloudflare Workflows (`TestGenerationWorkflow`)                                                                                 | Durable webhook automation path                                  |
-| Interactive path | `POST /api/run` (SSE)                                                                                                           | Live step logs; BYO keys never enter durable workflow state      |
-| LLM              | Workers AI binding, or any OpenAI-compatible / Anthropic / Gemini endpoint                                                      | User's choice; key stays client-side                             |
-| GitHub           | REST via `fetch`                                                                                                                | No SDK, no bundle weight; token per request                      |
-| Test validation  | Optional user-configured sandbox runner, else static check                                                                      | Honest `verified` flag instead of pretending tests ran           |
-| State            | Optional D1 for history, backlog, policies, memory, schedules, workspace and audit; browser local storage for per-user settings | Stateless by default; shared data is opt-in and never holds keys |
-| Dashboard        | React 19 + Tailwind v4 + Vite                                                                                                   | Same stack as the reference project                              |
-| Icons            | `lucide-react`                                                                                                                  | Matches the mockup                                               |
-| Tests            | `bun test` for the pure core                                                                                                    | One runnable check per non-trivial rule                          |
-| Deploy           | Alchemy (Worker + assets + D1 + R2 + Workflow)                                                                                  | One deployable unit                                              |
+| Area             | Decision                                                                                                             | Why                                                              |
+| :--------------- | :------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------- |
+| Runtime          | Cloudflare Workers (TypeScript)                                                                                      | Request API + static assets                                      |
+| HTTP             | `hono`                                                                                                               | Small router, SSE helper, typed bindings                         |
+| Orchestration    | Cloudflare Workflows (`TestGenerationWorkflow`)                                                                      | Durable webhook automation path                                  |
+| Interactive path | `POST /api/run` (SSE)                                                                                                | Live step logs; BYO keys never enter durable workflow state      |
+| LLM              | Workers AI binding, or any OpenAI-compatible / Anthropic / Gemini endpoint                                           | User's choice; key stays client-side                             |
+| GitHub           | REST via `fetch`                                                                                                     | No SDK, no bundle weight; token per request                      |
+| Test validation  | Optional user-configured sandbox runner, else static check                                                           | Honest `verified` flag instead of pretending tests ran           |
+| State            | Optional D1 for history, backlog, policies, memory, schedules and audit; browser local storage for per-user settings | Stateless by default; shared data is opt-in and never holds keys |
+| Dashboard        | React 19 + Tailwind v4 + Vite                                                                                        | Same stack as the reference project                              |
+| Icons            | `lucide-react`                                                                                                       | Matches the mockup                                               |
+| Tests            | `bun test` for the pure core                                                                                         | One runnable check per non-trivial rule                          |
+| Deploy           | Alchemy (Worker + assets + D1 + R2 + Workflow)                                                                       | One deployable unit                                              |
 
 **Design principle.** Pure functions (`scanner`, `ai` prompt/parse, `validate`)
 know nothing about HTTP. The Worker and the Workflow are thin adapters over the
@@ -86,7 +86,7 @@ edge-spec/
 ├── infra/shared/             # stageSlug shared by the stacks
 ├── Dockerfile                # Bun runtime image used by Fly/Railway/K8s/Docker
 ├── migrations/               # 0001–0007: runs, policies, commands, drift,
-│                             # backlog, repo memory, workspace/audit
+│                             # backlog, repo memory and audit
 ├── evals/                    # golden cases and the eval runner
 ├── examples/                 # scenario apps and reference tests
 ├── .github/workflows/{ci.yml,deploy.yml}
@@ -97,7 +97,7 @@ edge-spec/
 │   │       ├── main.tsx, App.tsx, api.ts
 │   │       ├── tailwind.css
 │   │       ├── lib/{theme.ts,settings.ts,utils.ts}
-│   │       └── components/agent/{workspace.tsx,dialogs.tsx,settings-sheet.tsx,...}
+│   │       └── components/agent/{dashboard.tsx,dialogs.tsx,settings-sheet.tsx,...}
 │   ├── worker/
 │   │   ├── vite.config.ts
 │   │   └── src/
@@ -152,16 +152,15 @@ migrations in `migrations/` run on deploy and in `alchemy dev`. There is no
 `wrangler.toml`.
 
 - Without `RUNS_DB` the Worker still scans, generates and opens pull requests;
-  history, backlog, policies, memory, workspace and audit answer disabled, and
-  the cron does nothing.
+  history, backlog, policies, memory and audit answer disabled, and the cron
+  does nothing.
 - Secrets are for the automation path only: `GH_APP_ID` +
   `GH_APP_PRIVATE_KEY` (or `GH_TOKEN`), `GH_WEBHOOK_SECRET`,
   `DRIFT_ALERT_WEBHOOK_URL`, `DRIFT_ALERT_WEBHOOK_SECRET`. The sandbox runner is configured
   per user in the dashboard.
 - The interactive path uses headers: `x-github-token`, `x-ai-key`,
   `x-ai-base-url`, `x-sandbox-url`, `x-sandbox-key`, `x-sandbox-config`.
-- No KV and no Queue binding. Workspace records hold a name, a retention
-  window and non-secret shared settings, not keys.
+- No KV and no Queue binding. Retention is a fixed 30-day window.
 
 ---
 
@@ -184,8 +183,6 @@ migrations in `migrations/` run on deploy and in `alchemy dev`. There is no
 - `Project` (browser) — repo and ref, stored separately from Settings.
 - `RunSummary` / `RunFile` (D1, optional) — totals, cost, provider/model,
   decisions, verification, checks and coverage per file. No prompts or source.
-- `Workspace` (D1, optional) — `id`, `name`, `retentionDays`, timestamps. One
-  lazy `default` record per deployment; not a user account.
 - `AuditEvent` (D1, optional) — `repo`, `actor`, `action`, redacted `detail`,
   `createdAt`.
 - `Policy`, `RepoMemory`, `ScheduledRepo`, `BacklogItem`, `DriftSnapshot` (D1,
@@ -246,7 +243,6 @@ Rules:
 | `GET/PUT/DELETE` | `/api/schedules`                     | Per-repo drift schedule                             |
 | `GET/PUT/DELETE` | `/api/memory`                        | Repository conventions for prompts                  |
 | `GET/PUT/DELETE` | `/api/policies`                      | Per-repo pull-request policy                        |
-| `GET/PUT`        | `/api/workspace`                     | Workspace name and retention window                 |
 | `GET`            | `/api/audit`                         | Redacted audit events, optionally by repo           |
 | `POST`           | `/api/sandbox/health`                | Runner capability check                             |
 | `POST`           | `/webhook`                           | GitHub push / PR / comment → durable Workflow       |
@@ -341,8 +337,8 @@ their runner did not execute.
   GitHub URLs.
 - Generated test content is committed as-is; no execution on the Worker.
 - The webhook path verifies `x-hub-signature-256` when a secret is configured.
-- Shared D1 data is non-secret: policies, memory, backlog, schedules and the
-  workspace record never hold a key. Audit detail is redacted recursively for
+- Shared D1 data is non-secret: policies, memory, backlog and schedules never
+  hold a key. Audit detail is redacted recursively for
   token/key/secret/password/authorization/cookie keys, and retention deletes old
   rows on the daily cron.
 - GitHub App installation tokens are scoped to one repository and cached only
@@ -373,9 +369,9 @@ work is tracked in `TASKS.md`, not here.
 
 Deliberately not built:
 
-- Authenticated user accounts and multi-user workspaces — there is one lazy
-  `default` workspace, no membership or roles.
-- A VS Code extension — only `edgespec watch` shipped.
+- Multi-user tenancy — one deployment serves one team, with no membership or
+  roles.
+- A VS Code extension — only the CLI and MCP server ship.
 - Coverage percentages — coverage is only a fact from an executable LCOV
   report, never inferred from the path heuristic.
 - KV caching — add it only if repeated scans of the same commit become a cost

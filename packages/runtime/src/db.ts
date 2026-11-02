@@ -478,11 +478,9 @@ export async function recordAudit(
 ): Promise<void> {
   await db
     .prepare(
-      // workspace_id is a legacy NOT NULL column; one deployment is "default".
-      "INSERT INTO audit_events (workspace_id, repo, actor, action, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO audit_events (repo, actor, action, detail_json, created_at) VALUES (?, ?, ?, ?, ?)",
     )
     .bind(
-      "default",
       event.repo ?? null,
       event.actor.slice(0, 120),
       event.action.slice(0, 120),

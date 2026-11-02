@@ -1,8 +1,8 @@
 # @edge-spec/web
 
 React 19 + Vite dashboard served by the Worker from `dist/web`. `App.tsx` owns
-run state; components under `src/components/` are presentational. The workspace
-itself lives in `src/components/agent/workspace.tsx`.
+run state; components under `src/components/` are presentational. The dashboard
+shell lives in `src/components/agent/dashboard.tsx`.
 
 ```bash
 bun run dev            # http://127.0.0.1:5173, proxies /api and /local-api

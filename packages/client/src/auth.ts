@@ -1,7 +1,7 @@
 /**
  * Device-flow login for the CLI and MCP server, shared through packages/client.
  *
- * The client displays a user code, opens `<workspace>/authorize` (payload key
+ * The client displays a user code, opens `<server>/authorize` (payload key
  * in the URL fragment, so the server never sees it), polls
  * `/api/cli/device/poll`, and decrypts the approved profile.
  *
@@ -19,7 +19,7 @@ export interface DevicePollResult {
   status: "pending" | "expired" | "approved";
   token?: string;
   profile?: string;
-  workspace?: string;
+  server?: string;
 }
 
 const base = (baseUrl: string): string => baseUrl.trim().replace(/\/+$/, "");

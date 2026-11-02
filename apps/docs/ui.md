@@ -1,11 +1,10 @@
 # UI guide
 
-The dashboard is a single agent workspace at `/`: **Repository → Agent
-Activity → Gap Analysis → Review Queue**. It reads only from a scan, a run or
-the D1 history, and every number shown comes from one of those; there is no
-invented metric. The implementation lives in
-`apps/web/src/components/agent/workspace.tsx`; `App.tsx` owns run state and the
-components are presentational.
+The dashboard is a single page at `/`: **Repository → Agent Activity → Gap
+Analysis → Review Queue**. It reads only from a scan, a run or the D1 history,
+and every number shown comes from one of those; there is no invented metric. The
+implementation lives in `apps/web/src/components/agent/dashboard.tsx`; `App.tsx`
+owns run state and the components are presentational.
 
 The reusable primitives live in `packages/ui`; this site consumes the same brand
 tokens through `@edge-spec/ui/theme.css`.
@@ -54,7 +53,7 @@ run stored no bundle.
 
 Panels rise in with a short stagger and the aurora drifts. Working nodes blink;
 status text always accompanies the colour. Everything is disabled by
-`prefers-reduced-motion: reduce`. While a run is active the workspace shows a
+`prefers-reduced-motion: reduce`. While a run is active the dashboard shows a
 live badge and a pulsing dot on the brand mark.
 
 ## Settings

@@ -549,7 +549,7 @@ and their key in the runner's environment. Install the SDK first
 `VERCEL_PROJECT_ID`; Daytona reads `DAYTONA_API_KEY` (plus optional
 `DAYTONA_API_URL`, `DAYTONA_TARGET`, `DAYTONA_SNAPSHOT`). Keys are never part of
 the request, the dashboard config or the Worker. These providers own the
-filesystem, so the runner uploads the workspace and downloads the requested
+filesystem, so the runner uploads the checkout and downloads the requested
 files; `isolation` is reported as `vm`.
 
 Point the dashboard at it with `http://127.0.0.1:8788` in
@@ -572,7 +572,7 @@ Settings and give its URL and key. Two routes are enough:
 
 `packages/sandbox` is the reference implementation of both routes;
 `packages/sandbox/custom-runner.example.ts` is a small runnable one that shells out
-to `docker run` and mounts the workspace. Copy either, or put a queue, a CI
+to `docker run` and mounts the checkout. Copy either, or put a queue, a CI
 job or a hosted API behind the same two endpoints. Report `isolation` truthfully
 (`namespace`, `container`, `vm` or `none`): it is shown next to the result, so a
 runner without a boundary must say `none`. Generated code is untrusted — run it
