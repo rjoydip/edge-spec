@@ -27,7 +27,13 @@ function columns(body: string): string[] {
     .filter((name) => name && !/^(PRIMARY|UNIQUE|FOREIGN|CONSTRAINT|CHECK)$/i.test(name));
 }
 
-/** `CREATE TABLE` plus any later `ALTER TABLE … ADD COLUMN`. */
+/**
+ * `CREATE TABLE`, later `ALTER TABLE … ADD COLUMN`, then `DROP TABLE`.
+ *
+ * ponytail: drops are applied after all creates, so a table that is dropped
+ * and later recreated would still be considered dropped. No migration in this
+ * repo does that; process statements in order if one ever does.
+ */
 function schema(sql: string): Map<string, string[]> {
   const tables = new Map<string, string[]>();
   for (const match of sql.matchAll(/CREATE TABLE IF NOT EXISTS (\w+)\s*\(([\s\S]*?)\);/g)) {
@@ -36,6 +42,9 @@ function schema(sql: string): Map<string, string[]> {
   for (const match of sql.matchAll(/ALTER TABLE (\w+) ADD COLUMN (\w+)/g)) {
     const table = match[1] ?? "";
     tables.set(table, [...(tables.get(table) ?? []), match[2] ?? ""]);
+  }
+  for (const match of sql.matchAll(/DROP TABLE (?:IF EXISTS )?(\w+)/g)) {
+    tables.delete(match[1] ?? "");
   }
   return tables;
 }
