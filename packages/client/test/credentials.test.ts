@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 const authFile = (overrides: Partial<AuthFile["profile"]> = {}): AuthFile => ({
-  workspace: "https://edgespec.example",
+  server: "https://edgespec.example",
   token: "edgespec_testtoken1234567890",
   authorizedAt: Date.now(),
   profile: {

@@ -50,9 +50,9 @@ Windows can deploy the Worker natively. Containerised sandbox runs
 
 ## 1. D1 (run history and shared state)
 
-D1 stores run summaries, backlog, policies, repository memory, schedules,
-workspace settings, audit events and PR-command rate limits. It never stores
-generated test source, prompts or keys.
+D1 stores run summaries, backlog, policies, repository memory, schedules, audit
+events and PR-command rate limits. It never stores generated test source, prompts
+or keys.
 
 The stack creates the database: `edge-spec-runs` for `--stage prod`, and
 `edge-spec-runs-<stage>` for every other stage. Migrations in `migrations/` run
@@ -69,8 +69,8 @@ The sqlite driver applies the `NNNN_*.sql` migrations in `EDGESPEC_MIGRATIONS`
 content hash.
 
 The Worker still deploys without the binding (for example in a local bundle
-test), but every history/backlog/workspace route then answers `enabled: false`
-and the cron does nothing.
+test), but every history and backlog route then answers `enabled: false` and the
+cron does nothing.
 
 ### Repairing migration bookkeeping
 
@@ -122,14 +122,15 @@ Secrets are deployment-owned. Visitor credentials are request headers and are
 never written to Worker state. The stack reads these through `Config.Redacted`,
 so a missing optional value is simply absent.
 
-| Secret                       | Required              | Used by                             |
-| ---------------------------- | --------------------- | ----------------------------------- |
-| `GH_APP_ID`                  | For App auth          | Mint installation tokens            |
-| `GH_APP_PRIVATE_KEY`         | For App auth          | PKCS#8 PEM used to sign the app JWT |
-| `GH_TOKEN`                   | Fallback for webhooks | Workflow: scan, commit, PR          |
-| `GH_WEBHOOK_SECRET`          | Recommended           | `POST /webhook` HMAC verification   |
-| `DRIFT_ALERT_WEBHOOK_URL`    | Optional              | Drift notifications                 |
-| `DRIFT_ALERT_WEBHOOK_SECRET` | Optional              | Sent as `x-edgespec-secret`         |
+| Secret                       | Required              | Used by                              |
+| ---------------------------- | --------------------- | ------------------------------------ |
+| `GH_APP_ID`                  | For App auth          | Mint installation tokens             |
+| `GH_APP_PRIVATE_KEY`         | For App auth          | PKCS#8 PEM used to sign the app JWT  |
+| `GH_TOKEN`                   | Fallback for webhooks | Workflow: scan, commit, PR           |
+| `GH_WEBHOOK_SECRET`          | Recommended           | `POST /webhook` HMAC verification    |
+| `DRIFT_ALERT_WEBHOOK_URL`    | Optional              | Drift notifications                  |
+| `DRIFT_ALERT_WEBHOOK_SECRET` | Optional              | Sent as `x-edgespec-secret`          |
+| `DRIFT_ALERT_EMAIL`          | Optional              | Drift email fallback (Resend sender) |
 
 For a local deploy, export them or copy `infra/cloudflare/.env.example` to
 `infra/cloudflare/.env` (git-ignored):
@@ -234,7 +235,7 @@ bun run --cwd infra/cloudflare destroy --stage staging --yes
 ```
 
 The automated test covers `/api/health`, `/api/catalog`, the dashboard root and
-a deep link, and D1 (workspace + run history). The same assertions run locally
+a deep link, and D1 (run history and audit). The same assertions run locally
 against the emulators; stop `bun run dev:worker` first, because both bind 8787:
 
 ```bash
@@ -475,10 +476,10 @@ stay external. The Vercel stack is a `Command.Exec` around
 ```bash
 curl -s https://<worker>/api/health
 curl -s https://<worker>/api/catalog
-curl -s https://<worker>/api/workspace     # enabled:true when D1 is migrated
+curl -s "https://<worker>/api/audit"        # enabled:true when D1 is migrated
 curl -s https://<worker>/api/runs/01234567-89ab-cdef-0123-456789abcdef/artifacts
 ```
 
-`/api/workspace` answering `enabled:false` means D1 is unbound or unmigrated.
+`/api/audit` answering `enabled:false` means D1 is unbound or unmigrated.
 A `404` from the artifacts route with `enabled:true` only means that run stored
 no bundle.

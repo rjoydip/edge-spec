@@ -1,4 +1,4 @@
-/** Every modal the agent workspace opens. Real data only. */
+/** Every modal the dashboard opens. Real data only. */
 import { useEffect, useState, type ReactNode } from "react";
 import {
   AlignLeft,
@@ -1558,6 +1558,12 @@ type RunTone = {
 };
 
 const RUN_TONE: Record<string, RunTone> = {
+  scanned: {
+    badge: "neutral",
+    bar: "border-l-zinc-400/70",
+    tint: "bg-zinc-500/[0.04]",
+    dot: "bg-zinc-400",
+  },
   ready: {
     badge: "success",
     bar: "border-l-emerald-400/70",
@@ -1654,7 +1660,7 @@ export function HistoryDialog({
   };
 
   const remove = async () => {
-    if (!repo || !window.confirm(`Delete all run history for ${repo}?`)) return;
+    if (!repo || !window.confirm(`Delete all scan history for ${repo}?`)) return;
     setDeleting(true);
     try {
       await deleteRuns(repo);
@@ -1695,13 +1701,14 @@ export function HistoryDialog({
   const readyCount = runs.filter((run) => run.status === "ready").length;
   const failedCount = runs.filter((run) => run.status === "failed").length;
   const runningCount = runs.filter((run) => run.status === "running").length;
+  const scannedCount = runs.filter((run) => run.status === "scanned").length;
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      title="Run history"
-      description={`${repo} · select two runs to compare`}
+      title="Scan history"
+      description={`${repo} · select two scans to compare`}
       className="max-w-4xl"
       footer={
         <Button
@@ -1718,22 +1725,26 @@ export function HistoryDialog({
     >
       {!enabled ? (
         <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
-          Run history is not enabled on this deployment. Add the optional D1 binding in the Alchemy
+          Scan history is not enabled on this deployment. Add the optional D1 binding in the Alchemy
           stack and apply migrations/0001_runs.sql.
         </p>
       ) : loading ? (
         <p className="flex items-center justify-center gap-2 py-8 text-[11px] text-zinc-500">
-          <Loader2 className="size-3.5 animate-spin" /> Loading runs…
+          <Loader2 className="size-3.5 animate-spin" /> Loading scans…
         </p>
       ) : runs.length === 0 ? (
         <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 px-3 py-8 text-center text-[11px] text-zinc-500">
-          No stored runs yet. Complete a run to record one.
+          No stored scans yet. Scan a repository to record one.
         </p>
       ) : (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-indigo-500/20 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-emerald-500/10 px-3 py-2">
             <span className="text-[10px] font-semibold tracking-wide text-zinc-400 uppercase">
-              Runs
+              Scans
+            </span>
+            <span className="flex items-center gap-1.5 text-[10px] text-zinc-300">
+              <span className="size-1.5 rounded-full bg-zinc-400" />
+              {scannedCount} scanned
             </span>
             <span className="flex items-center gap-1.5 text-[10px] text-zinc-300">
               <span className="size-1.5 rounded-full bg-emerald-400" />
@@ -1775,7 +1786,7 @@ export function HistoryDialog({
                       )}
                       <span className="text-[11px] text-zinc-300">{when(run.startedAt)}</span>
                       <span className="ml-auto font-mono text-[10px] text-zinc-500">
-                        {run.provider} · {run.model}
+                        {run.status === "scanned" ? run.ref : `${run.provider} · ${run.model}`}
                       </span>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-500">

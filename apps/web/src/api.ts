@@ -310,39 +310,6 @@ export function fetchRunDetail(id: string): Promise<{ enabled: boolean } & RunDe
   return apiJson<{ enabled: boolean } & RunDetail>(`/api/runs/${encodeURIComponent(id)}/files`);
 }
 
-export interface Workspace {
-  id: string;
-  name: string;
-  /** Days to keep runs, audit events and command rate-limit rows. */
-  retentionDays: number;
-  /** Optional workspace-wide drift notification target. */
-  driftWebhookUrl?: string;
-  /** The secret is write-only; this only says whether one is stored. */
-  driftWebhookSecretSet: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
-
-/** One workspace per deployment; `enabled: false` means no RUNS_DB. */
-export function fetchWorkspace(): Promise<{
-  enabled: boolean;
-  workspace?: Workspace;
-}> {
-  return apiJson<{ enabled: boolean; workspace?: Workspace }>("/api/workspace");
-}
-
-export function updateWorkspace(input: {
-  name?: string;
-  retentionDays?: number;
-  driftWebhookUrl?: string;
-  driftWebhookSecret?: string;
-}): Promise<{ enabled: boolean; workspace: Workspace }> {
-  return apiJson<{ enabled: boolean; workspace: Workspace }>("/api/workspace", {
-    method: "PUT",
-    body: JSON.stringify(input),
-  });
-}
-
 export interface AuditEvent {
   id?: number;
   repo?: string;
@@ -352,13 +319,18 @@ export interface AuditEvent {
   createdAt: number;
 }
 
-/** Newest first. `repo` filters by `owner/name`; the Worker clamps the limit. */
+/**
+ * Newest first. `repo` filters by `owner/name`; `before` pages by `createdAt`.
+ * The Worker clamps the limit.
+ */
 export function fetchAudit(
   repo?: string,
   limit = 100,
+  before?: number,
 ): Promise<{ enabled: boolean; events: AuditEvent[] }> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (repo) params.set("repo", repo);
+  if (before !== undefined) params.set("before", String(before));
   return apiJson<{ enabled: boolean; events: AuditEvent[] }>(`/api/audit?${params}`);
 }
 

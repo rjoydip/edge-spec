@@ -3,6 +3,7 @@
  * exercise the same scan/generate/run/PR code as the dashboard.
  */
 import type { Provider } from "@edge-spec/core/catalog";
+import type { RunSummary } from "@edge-spec/core/history";
 import type {
   Generation,
   RateLimitInfo,
@@ -36,7 +37,7 @@ export interface ClientConfig {
 }
 
 export interface GenerateRequest {
-  /** Omitted when `source` is inline (local watch mode). */
+  /** Omitted when `source` is inline. */
   repo?: string;
   /** Inline local source; only a local Worker accepts it. */
   source?: string;
@@ -178,6 +179,16 @@ export class EdgeSpecClient {
   /** Workflow status for a webhook run. */
   runStatus(id: string): Promise<unknown> {
     return this.request(`/api/runs/${encodeURIComponent(id)}`);
+  }
+
+  /** Repos the deployment has seen, used for resource discovery. */
+  repos(): Promise<{ enabled: boolean; repos: string[] }> {
+    return this.request("/api/repos");
+  }
+
+  /** Newest runs across repositories, used for resource discovery. */
+  recentRuns(limit = 20): Promise<{ enabled: boolean; runs: RunSummary[] }> {
+    return this.request(`/api/runs/recent?limit=${limit}`);
   }
 
   scan(input: { repo: string; ref?: string }): Promise<ScanResult> {

@@ -4,6 +4,8 @@ export interface GoldenCase {
   id: string;
   path: string;
   expectedGaps: string[];
+  /** Inferred `METHOD /path` routes, when this case measures API inference. */
+  expectedEndpoints?: string[];
 }
 
 export interface GoldenResult {
@@ -11,26 +13,41 @@ export interface GoldenResult {
   pass: boolean;
   missing: string[];
   unexpected: string[];
+  endpointMissing?: string[];
+  endpointUnexpected?: string[];
 }
 
 const sorted = (values: readonly string[]): string[] =>
   [...new Set(values)].sort((left, right) => left.localeCompare(right));
 
-/** Compares a scan's gap paths with the golden expectation. */
+/** Compares a scan's gap paths and, when supplied, inferred API routes. */
 export function compareGolden(
   caseId: string,
   actualGaps: readonly string[],
   expectedGaps: readonly string[],
+  actualEndpoints: readonly string[] = [],
+  expectedEndpoints: readonly string[] = [],
 ): GoldenResult {
   const actual = new Set(sorted(actualGaps));
   const expected = new Set(sorted(expectedGaps));
   const missing = [...expected].filter((path) => !actual.has(path));
   const unexpected = [...actual].filter((path) => !expected.has(path));
+  const actualApi = new Set(sorted(actualEndpoints));
+  const expectedApi = new Set(sorted(expectedEndpoints));
+  const endpointMissing = [...expectedApi].filter((path) => !actualApi.has(path));
+  const endpointUnexpected = [...actualApi].filter((path) => !expectedApi.has(path));
   return {
     caseId,
-    pass: missing.length === 0 && unexpected.length === 0,
+    pass:
+      missing.length === 0 &&
+      unexpected.length === 0 &&
+      endpointMissing.length === 0 &&
+      endpointUnexpected.length === 0,
     missing,
     unexpected,
+    ...(expectedEndpoints.length > 0 || actualEndpoints.length > 0
+      ? { endpointMissing, endpointUnexpected }
+      : {}),
   };
 }
 

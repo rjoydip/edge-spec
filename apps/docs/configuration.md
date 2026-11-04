@@ -275,20 +275,27 @@ a versioned fixture file. Passing that file as `fixtures` to `/api/run` makes th
 generated contract tests start a tiny in-test mock server from
 `EDGESPEC_FIXTURES`; no live app is required. The mock serves the recorded
 status, headers and body, and the normal status assertion still runs, so a
-deliberate spec status change fails replay. Recorded bodies may contain real
-data: keep them outside the PR, preferably in R2, and apply retention there.
+deliberate spec status change fails replay.
+
+**Fixture storage decision:** EdgeSpec does not upload fixture bytes to R2. The
+fixture file is returned to the caller and travels with the test code (or
+`EDGESPEC_FIXTURES`), so its encryption, retention and access are the
+repository's, exactly like any other committed test asset. Recorded bodies may
+contain real data and are not redacted: keep secrets out of fixtures and review
+them before they enter a pull request. R2 remains for run bundles and
+drift summaries, which the retention job owns.
 
 ## Run history, backlog and D1 (optional)
 
-Run history, the test-debt backlog, policies, repository memory, schedules,
-workspace settings and audit live in one D1 database (`RUNS_DB`). The Alchemy
+Run history, the test-debt backlog, policies, repository memory, schedules and
+audit live in one D1 database (`RUNS_DB`). The Alchemy
 stack creates `edge-spec-runs` for `prod` (and `edge-spec-runs-<stage>`
 elsewhere) and applies `migrations/` on every deploy and again in `alchemy dev`.
 Adopting an existing Wrangler database requires
 `bun run --cwd infra/cloudflare deploy --stage prod --yes --adopt`.
 
 Without the binding the Worker still scans, generates and opens pull requests,
-but `/api/runs`, `/api/backlog`, `/api/workspace` and `/api/audit` answer
+but `/api/runs`, `/api/backlog` and `/api/audit` answer
 `enabled: false` and the cron does nothing. The tables store summaries, not
 source text, prompts or keys.
 
@@ -374,59 +381,65 @@ untested paths and OpenAPI operation names with the stored snapshot:
 - first run: baseline only;
 - no change: no notification, no pull request;
 - change: one summary to the effective webhook (Slack incoming webhooks accept
-  `text`) and optionally `drift/<repo>/<timestamp>.json` in R2.
+  `text`) or email, and optionally `drift/<repo>/<timestamp>.json` in R2.
 
 The notification target resolves in this order:
 
 1. **Repository schedule override** (`PUT /api/schedules`, or Settings → Drift
-   scans → Override workspace webhook).
-2. **Workspace default** (`PUT /api/workspace`, or Settings → Workspace).
-3. **Deployment fallback** `DRIFT_ALERT_WEBHOOK_URL` / `DRIFT_ALERT_WEBHOOK_SECRET`.
+   scans → Override deployment webhook).
+2. **Deployment webhook** `DRIFT_ALERT_WEBHOOK_URL` / `DRIFT_ALERT_WEBHOOK_SECRET`.
+3. **Deployment email** `DRIFT_ALERT_EMAIL`, used only when no webhook target is
+   configured. It needs the existing Resend sender (`EMAIL_API_KEY` and
+   `EMAIL_FROM`).
 
-The workspace and repository URLs are returned by their APIs. Secrets are
+The repository URL is returned by the schedules API. Its secret is
 write-only: responses only report `driftWebhookSecretSet`. Changing a webhook
 URL without supplying a new secret clears the old secret. Secrets are stored in
 D1, so protect the deployment and dashboard behind Cloudflare Access if the
-workspace is shared. Migrations run during deploy, so pulling a new migration
+deployment is shared. Migrations run during deploy, so pulling a new migration
 only needs a redeploy.
 
 ```bash
 export DRIFT_ALERT_WEBHOOK_URL=…
 export DRIFT_ALERT_WEBHOOK_SECRET=…   # sent as x-edgespec-secret
+export DRIFT_ALERT_EMAIL=ops@example.com
 ```
 
-Set these before `bun run deploy` (or in `infra/cloudflare/.env`). The deployment secrets
-remain a fallback for deployments that do not configure a workspace target.
-There is no email adapter yet. Without `RUNS_DB` the cron does nothing. The scan never opens a pull request; PR creation remains the
-explicit next step.
+Set these before `bun run deploy` (or in `infra/cloudflare/.env`). Without
+`RUNS_DB` the cron does nothing.
 
-## Workspace, audit and retention (optional)
+Drift scans never open a pull request, and a policy cannot enable one. A drift
+signal names a gap but has no verified change to submit; use the normal
+scan/run flow to generate tests and open a PR. This keeps the cron from
+publishing unreviewed changes.
 
-A deployment has one workspace record (`GET | PUT /api/workspace`), created
-lazily as `default` on first use. This is deliberately not multi-user auth:
-shared policies, backlog and history live in the same D1 database, and every
-client still supplies its own GitHub and AI credentials per request. The
-workspace stores only a display name and a retention window; it never stores a
-key.
+## Audit and retention (optional)
 
 Actions that change shared state or act autonomously write an audit event:
 pull requests opened or blocked, PR checks and commands, policy/memory/schedule/
-backlog updates, workspace updates, drift scans and retention purges. Read them
-with `GET /api/audit?repo=owner/name`. Detail is redacted recursively for
+backlog updates, drift scans and retention purges. Read them with
+`GET /api/audit?repo=owner/name`; pass `before=<createdAt>` to page past the
+newest rows. Detail is redacted recursively for
 token/key/secret/password/authorization/cookie keys before storage, so audit
 rows are safe to share with the team.
 
-The daily cron applies retention before scanning:
+The daily cron applies retention before scanning, with a fixed 30-day window:
 
-- runs and their `run_files` rows older than `retentionDays` are deleted;
+- runs and their `run_files` rows older than 30 days are deleted;
 - the matching `runs/<id>.json` R2 bundles are deleted;
-- audit events older than `retentionDays` are deleted;
-- `pr_commands` rate-limit rows older than `retentionDays` are deleted.
+- audit events older than 30 days are deleted;
+- `pr_commands` rate-limit rows older than 30 days are deleted.
 
-Retention is clamped to 1–365 days (default 30). A purge writes one
-`retention_purge` event with the deleted run, audit and artifact counts. There is
-no per-repository retention override and no export or archive step. Drift
-summaries (`drift/…`) have no D1 row to age out, so they are not pruned yet.
+A purge writes one `retention_purge` event with the deleted run, audit, artifact
+and drift counts. Drift summaries (`drift/<repo>/<timestamp>.json`) have no D1
+row, so the purge lists the `drift/` prefix and deletes summaries whose key
+timestamp is older than the window.
+
+Raw runner reports are kept in the R2 run bundle under `files[].reports`
+(`junit` and `lcov`), never in D1 or the SSE stream. Audit history can outlive
+the window with `GET /api/audit/export?format=csv|json` (optionally `&repo=`),
+which downloads up to 10,000 newest events. There is no scheduled export and no
+per-repository retention override.
 
 ## Sandbox runner (optional)
 
@@ -536,7 +549,7 @@ and their key in the runner's environment. Install the SDK first
 `VERCEL_PROJECT_ID`; Daytona reads `DAYTONA_API_KEY` (plus optional
 `DAYTONA_API_URL`, `DAYTONA_TARGET`, `DAYTONA_SNAPSHOT`). Keys are never part of
 the request, the dashboard config or the Worker. These providers own the
-filesystem, so the runner uploads the workspace and downloads the requested
+filesystem, so the runner uploads the checkout and downloads the requested
 files; `isolation` is reported as `vm`.
 
 Point the dashboard at it with `http://127.0.0.1:8788` in
@@ -559,7 +572,7 @@ Settings and give its URL and key. Two routes are enough:
 
 `packages/sandbox` is the reference implementation of both routes;
 `packages/sandbox/custom-runner.example.ts` is a small runnable one that shells out
-to `docker run` and mounts the workspace. Copy either, or put a queue, a CI
+to `docker run` and mounts the checkout. Copy either, or put a queue, a CI
 job or a hosted API behind the same two endpoints. Report `isolation` truthfully
 (`namespace`, `container`, `vm` or `none`): it is shown next to the result, so a
 runner without a boundary must say `none`. Generated code is untrusted — run it
@@ -798,6 +811,12 @@ exists. Set `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) in production;
 email links are sent from the visitor's Resend key in Settings (or
 `EMAIL_API_KEY`/`EMAIL_FROM`).
 
+Set `BETTER_AUTH_URL` to the canonical dashboard origin. When it is loopback,
+the local Vite origins (`localhost`/`127.0.0.1`, ports 5173–5175 and 8787) are
+trusted automatically. For any additional origin — a custom domain, preview
+URL, or a dashboard behind a proxy — add it to `BETTER_AUTH_TRUSTED_ORIGINS`
+(comma-separated), otherwise auth requests fail with `Invalid origin`.
+
 ## Cache
 
 The cache is read-through and never authoritative. A miss loads the real value;
@@ -811,8 +830,11 @@ show what is actually configured.
 | `redis`  | Upstash Redis REST        | Vercel, AWS, containers |
 | `memory` | in-process `Map` with TTL | local dev, single node  |
 
-Only `/api/quota` and `GET /api/branches` are cached (60 s), keyed by a hash of
-the token, never the token itself. Tokens, prompts, source, generated tests and
-run artifacts are never cached; artifacts already live in the object store. TTL
-is mandatory and writes invalidate, so stale data is bounded. With no cache
-configured the routes are unchanged.
+`/api/quota` and `GET /api/branches` are cached for 60 s, keyed by a hash of the
+token, never the token itself. A scan opts into caching its GitHub tree/file
+reads with `EDGESPEC_SCAN_CACHE_TTL` seconds (empty or `0` = off, capped at
+3600); keys include `repo@ref` and the token hash, and backlog sync still runs
+on every request. Tokens, prompts, source, generated tests and run artifacts are
+never cached; artifacts already live in the object store. TTL is mandatory and
+writes invalidate, so stale data is bounded. With no cache configured the routes
+are unchanged.

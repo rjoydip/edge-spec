@@ -1,11 +1,10 @@
 # UI guide
 
-The dashboard is a single agent workspace at `/`: **Repository → Agent
-Activity → Gap Analysis → Review Queue**. It reads only from a scan, a run or
-the D1 history, and every number shown comes from one of those; there is no
-invented metric. The implementation lives in
-`apps/web/src/components/agent/workspace.tsx`; `App.tsx` owns run state and the
-components are presentational.
+The dashboard is a single page at `/`: **Repository → Agent Activity → Gap
+Analysis → Review Queue**. It reads only from a scan, a run or the D1 history,
+and every number shown comes from one of those; there is no invented metric. The
+implementation lives in `apps/web/src/components/agent/dashboard.tsx`; `App.tsx`
+owns run state and the components are presentational.
 
 The reusable primitives live in `packages/ui`; this site consumes the same brand
 tokens through `@edge-spec/ui/theme.css`.
@@ -43,9 +42,9 @@ behind the content and are `pointer-events-none`.
    the audit log and Settings open from the profile menu.
 
 The **Deployment** section in Settings holds the configuration that lives in D1
-and R2, not in this browser: workspace name and retention days, repository
-memory, the stored pull request policy used by webhook runs, and the opt-in
-drift scan. Each block reads its real route and saves explicitly; without the
+and R2, not in this browser: repository memory, the stored pull request policy
+used by webhook runs, and the opt-in drift scan. Each block reads its real route
+and saves explicitly; without the
 optional bindings it says so instead of showing an empty success. Run-history
 rows also download the stored R2 artifact bundle for that run; a 404 means the
 run stored no bundle.
@@ -54,7 +53,7 @@ run stored no bundle.
 
 Panels rise in with a short stagger and the aurora drifts. Working nodes blink;
 status text always accompanies the colour. Everything is disabled by
-`prefers-reduced-motion: reduce`. While a run is active the workspace shows a
+`prefers-reduced-motion: reduce`. While a run is active the dashboard shows a
 live badge and a pulsing dot on the brand mark.
 
 ## Settings
@@ -73,8 +72,8 @@ profile menu; the header keeps the provider and sandbox shortcuts.
 - **Pipeline** — coverage target, retries, files per run, strict TypeScript and
   parallel generation.
 - **Policy** — opt-in PR gates.
-- **Deployment** — workspace name and retention, repository memory, stored PR
-  policy and the drift scan. These save to D1/R2, not `localStorage`.
+- **Deployment** — repository memory, stored PR policy and the drift scan.
+  These save to D1/R2, not `localStorage`.
 - **Appearance** — dark/light and ten accent swatches.
 
 Non-appearance fields are a draft: Cancel, Escape or the backdrop discards them.

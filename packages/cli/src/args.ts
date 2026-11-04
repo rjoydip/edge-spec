@@ -53,17 +53,6 @@ export type ParsedArgs =
       json: boolean;
     }
   | {
-      command: "watch";
-      path: string;
-      url?: string;
-      provider?: string;
-      model?: string;
-      accountId?: string;
-      sandboxUrl?: string;
-      write: boolean;
-      json: boolean;
-    }
-  | {
       command: "catalog";
       url?: string;
       json: boolean;
@@ -228,29 +217,6 @@ export function parseCliArgs(argv: string[]): ParsedArgs {
     };
   }
 
-  if (command === "watch") {
-    const { values, positionals } = parse(rest, {
-      ...common,
-      "sandbox-url": { type: "string" as const },
-      "strict-types": { type: "boolean" as const, default: true },
-      "no-strict-types": { type: "boolean" as const, default: false },
-      write: { type: "boolean" as const, default: false },
-    });
-    if (values.help) return { command: "help", topic: "watch" };
-    if (positionals.length !== 1) throw new UsageError("watch needs one workspace directory.");
-    return {
-      command: "watch",
-      path: positionals[0]!,
-      ...(text(values.url) ? { url: text(values.url) } : {}),
-      ...(text(values.provider) ? { provider: text(values.provider) } : {}),
-      ...(text(values.model) ? { model: text(values.model) } : {}),
-      ...(text(values["account-id"]) ? { accountId: text(values["account-id"]) } : {}),
-      ...(text(values["sandbox-url"]) ? { sandboxUrl: text(values["sandbox-url"]) } : {}),
-      write: values.write === true,
-      json: values.json === true,
-    };
-  }
-
   if (command === "catalog") {
     const { values, positionals } = parse(rest, common);
     if (values.help) return { command: "help", topic: "catalog" };
@@ -290,13 +256,8 @@ Usage:
   edge-spec scan <owner/name> [options]
   edge-spec generate <owner/name> <path> [options]
   edge-spec run <owner/name> [options]
-  edge-spec watch <directory> [options]
   edge-spec catalog [options]
   edge-spec auth login | status | logout
-  edge-spec generate <owner/name> <path> [options]
-  edge-spec run <owner/name> [options]
-  edge-spec watch <directory> [options]
-  edge-spec catalog [options]
 
 Options:
   --url <url>                EdgeSpec Worker URL (default: EDGESPEC_URL or localhost:8787)
@@ -313,13 +274,6 @@ Options:
   --folder <path>            Prioritize this folder when scanning
   --limit <n>                Limit scan results, 1-100
   --out <file>               Write generated code to a file
-  --write                    Watch mode: apply generated tests without asking
-  --pr                       Open a pull request for passing tests
-  --json                     Print machine-readable JSON
-  -h, --help                 Show this help
-  -v, --version              Show the version
-
-  --write                    Watch mode: apply generated tests without asking
   --pr                       Open a pull request for passing tests
   --json                     Print machine-readable JSON
   -h, --help                 Show this help

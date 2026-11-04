@@ -1,5 +1,5 @@
 /**
- * The EdgeSpec agent workspace: Repository → Agent Activity → Gap Analysis →
+ * The EdgeSpec dashboard: Repository → Agent Activity → Gap Analysis →
  * Review Queue. Every number here comes from a scan or a run event.
  */
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
@@ -118,7 +118,7 @@ import {
 } from "@edge-spec/ui";
 import { fetchBranches, recordRunDecision, type PullMeta } from "@/api";
 import type { AccountUser } from "@/lib/account";
-import { AccountSection, Avatar as AccountAvatar } from "./account-menu";
+import { AccountSection, Avatar as AccountAvatar, ProfileDialog } from "./account-menu";
 import { isLocalPathInput } from "@/lib/local-path";
 import { setProject, type Project, type Settings as SettingsValue } from "@/lib/settings";
 import { toggleMode, useAppearance } from "@/lib/theme";
@@ -183,7 +183,7 @@ const GAP_KINDS: Array<{ id: GapKind; label: string }> = [
   { id: "unsupported", label: "Unsupported" },
 ];
 
-export interface AgentWorkspaceProps {
+export interface DashboardProps {
   project: Project;
   settings: SettingsValue;
   quota?: RateLimitInfo;
@@ -229,7 +229,7 @@ export interface AgentWorkspaceProps {
   onAccountUpdated?: (user: AccountUser) => void;
 }
 
-export function AgentWorkspace({
+export function Dashboard({
   project,
   settings,
   quota,
@@ -265,7 +265,7 @@ export function AgentWorkspace({
   onDismissToast,
   account,
   onAccountUpdated,
-}: AgentWorkspaceProps) {
+}: DashboardProps) {
   const appearance = useAppearance();
   const provider = providerById(settings.provider);
   const isLocalDev = import.meta.env.DEV;
@@ -302,6 +302,7 @@ export function AgentWorkspace({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [backlogOpen, setBacklogOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [prOpen, setPrOpen] = useState(false);
   const [prDraft, setPrDraft] = useState<PrDraft>({
     title: "",
@@ -781,11 +782,11 @@ export function AgentWorkspace({
         <div className="relative z-10 mx-auto max-w-7xl space-y-3 px-3 pt-3 pb-28 sm:px-6">
           <header className="app-reveal glass-panel sticky top-0 z-30 rounded-2xl px-3 py-2.5 sm:px-4">
             <div className="flex items-center gap-2.5">
-              <Hint label="Reset this workspace">
+              <Hint label="Reset this run">
                 <button
                   type="button"
                   onClick={onReset}
-                  aria-label="Reset this workspace"
+                  aria-label="Reset this run"
                   className="relative shrink-0 rounded-xl transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-indigo-500/60 focus-visible:outline-none"
                 >
                   <img
@@ -867,7 +868,7 @@ export function AgentWorkspace({
                     {account && (
                       <AccountSection
                         account={account}
-                        onUpdated={(user) => onAccountUpdated?.(user)}
+                        onEditProfile={() => openFromMenu(() => setProfileOpen(true))}
                       />
                     )}
                     <DropdownMenuLabel className="px-2 pt-1 pb-0.5 text-[9px] tracking-wide text-zinc-500 uppercase">
@@ -925,7 +926,7 @@ export function AgentWorkspace({
                     </DropdownMenuLabel>
                     <DropdownMenuItem onSelect={() => openFromMenu(() => setHistoryOpen(true))}>
                       <History />
-                      Run history
+                      Scan history
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => openFromMenu(() => setAuditOpen(true))}>
                       <ScrollText />
@@ -934,7 +935,7 @@ export function AgentWorkspace({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onSelect={onReset}>
                       <RefreshCw />
-                      Reset workspace
+                      Reset run
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -2186,6 +2187,14 @@ export function AgentWorkspace({
           repo={project.repo}
         />
         <AuditDialog open={auditOpen} onClose={() => setAuditOpen(false)} repo={project.repo} />
+        {account && (
+          <ProfileDialog
+            open={profileOpen}
+            onOpenChange={setProfileOpen}
+            account={account}
+            onUpdated={(user) => onAccountUpdated?.(user)}
+          />
+        )}
         <PrDialog
           open={prOpen}
           onClose={() => setPrOpen(false)}

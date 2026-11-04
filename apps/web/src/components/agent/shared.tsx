@@ -1,4 +1,4 @@
-/** Shared atoms for the agent workspace: stage tones, badges, checks, downloads. */
+/** Shared atoms for the dashboard: stage tones, badges, checks, downloads. */
 import { Check, TriangleAlert, X } from "lucide-react";
 import { Badge, Hint, cn } from "@edge-spec/ui";
 import type {

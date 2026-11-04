@@ -55,6 +55,60 @@ describe("API surface inference", () => {
     expect(routes[0]?.source).toBe("src/server.ts");
   });
 
+  it("composes mounted router prefixes across files", () => {
+    const routes = extractRoutes([
+      {
+        path: "src/index.ts",
+        content: [
+          'import { Hono } from "hono";',
+          'import users from "./users";',
+          "const app = new Hono();",
+          'app.route("/api", users);',
+        ].join("\n"),
+      },
+      {
+        path: "src/users.ts",
+        content: [
+          'import { Hono } from "hono";',
+          'import comments from "./comments";',
+          "const router = new Hono();",
+          'router.get("/", handler);',
+          'router.get("/:id", handler);',
+          'router.route("/:id/comments", comments);',
+        ].join("\n"),
+      },
+      {
+        path: "src/comments.ts",
+        content: [
+          'import { Hono } from "hono";',
+          "const router = new Hono();",
+          'router.get("/", handler);',
+        ].join("\n"),
+      },
+    ]);
+    expect(routes.map((route) => `${route.method} ${route.path}`)).toEqual([
+      "GET /api",
+      "GET /api/{id}",
+      "GET /api/{id}/comments",
+    ]);
+  });
+
+  it("applies a same-file mount to a custom router name", () => {
+    const routes = extractRoutes([
+      {
+        path: "src/app.ts",
+        content: [
+          'import express from "express";',
+          "const app = express();",
+          "const accounts = express.Router();",
+          'accounts.get("/accounts", handler);',
+          'app.use("/v1", accounts);',
+        ].join("\n"),
+      },
+    ]);
+    expect(routes.map((route) => `${route.method} ${route.path}`)).toEqual(["GET /v1/accounts"]);
+  });
+
   it("reads Next.js route files", () => {
     const routes = extractRoutes([
       {
@@ -106,6 +160,7 @@ describe("API surface inference", () => {
       method: "GET",
       path: "/health",
       inferred: true,
+      probe: "static",
       status: "missing-test",
     });
     expect(apiHealthMatrix([spec], ["GET /health"])[0]?.status).toBe("covered");

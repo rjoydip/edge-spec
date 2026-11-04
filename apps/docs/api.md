@@ -194,11 +194,14 @@ When no OpenAPI document exists, the scan checks whether the repository is
 API-based (Hono, Express, Elysia, Fastify, Koa, NestJS, Next.js, or route calls
 in source). If it is, EdgeSpec infers a spec from route declarations, stores it
 as `openapi.inferred.json`, and adds it to `overview.openApiSpecs` with
-`inferred: true`. `overview.apiFramework` names the detected framework and
-`overview.apiHealth` is the static endpoint matrix (`status` is `covered` or
-`missing-test`, plus auth, request-body and parameter facts). The matrix is
-built from the tree, not from live HTTP calls; no app is started by a scan.
-Contract gaps from an inferred spec say so in their reason.
+`inferred: true`. Mounted routers compose across scanned files
+(`app.route("/api", router)`, `.mount()`, Express `.use()`), including nested
+mounts. `overview.apiFramework` names the detected framework and
+`overview.apiHealth` is the endpoint matrix (`status` is `covered` or
+`missing-test`, plus auth, request-body and parameter facts). Each row carries
+`probe: "static"`: the matrix is built from the tree, not from live HTTP calls,
+and executed contract-test results stay separate. Contract gaps from an inferred
+spec say so in their reason.
 
 Response:
 
@@ -742,12 +745,12 @@ changed, one summary is POSTed to the effective webhook (Slack-compatible
 Resolution order:
 
 1. repository schedule override;
-2. workspace drift webhook;
-3. deployment `DRIFT_ALERT_WEBHOOK_URL` fallback.
+2. deployment `DRIFT_ALERT_WEBHOOK_URL` fallback;
+3. deployment `DRIFT_ALERT_EMAIL` fallback (only when no webhook is configured).
 
 A quiet repository sends nothing and opens nothing. The scan never opens a pull
 request: the summary is the action. The audit event records `notified` and
-`webhookSource` (`repository`, `workspace`, `environment`, or `none`).
+`webhookSource` (`repository`, `environment`, or `none`).
 
 ---
 
@@ -774,49 +777,16 @@ returns `status: "blocked"` with the gate reason when it fails.
 
 ---
 
-## `GET | PUT /api/workspace`
-
-One workspace per deployment; there is no multi-user account model. `GET`
-returns `{enabled, workspace}`; without `RUNS_DB` it answers `enabled: false`.
-The record is created lazily on first read.
-
-```json
-{
-  "enabled": true,
-  "workspace": {
-    "id": "default",
-    "name": "Default workspace",
-    "retentionDays": 30,
-    "driftWebhookUrl": "https://hooks.slack.com/services/...",
-    "driftWebhookSecretSet": true,
-    "createdAt": 1760000000000,
-    "updatedAt": 1760000000000
-  }
-}
-```
-
-`PUT` accepts `{name?, retentionDays?, driftWebhookUrl?, driftWebhookSecret?}`.
-The name is trimmed to 100 characters; retention is clamped to 1–365 days.
-
-The drift webhook secret is write-only: it is accepted on `PUT`, never returned,
-and reported only as `driftWebhookSecretSet`. Sending an empty
-`driftWebhookUrl` clears the URL and secret. Sending an empty
-`driftWebhookSecret` clears only the secret. Changing the URL without sending a
-new secret clears the old secret rather than forwarding it to the new endpoint.
-Omitted fields keep their current values. Updating the workspace writes an
-audit event.
-
-Per-repository schedules can override the workspace webhook through
-`PUT /api/schedules`. Resolution order is repository → workspace → deployment
-`DRIFT_ALERT_WEBHOOK_URL`.
-
----
-
-## `GET /api/audit?repo=owner/name&limit=100`
+## `GET /api/audit?repo=owner/name&limit=100&before=<createdAt>`
 
 Recent audit events, newest first. `repo` is optional and filters by
-`owner/name`; `limit` defaults to 100 and is clamped to 200. Without `RUNS_DB`
-the route answers `{enabled: false, events: []}`.
+`owner/name`; `limit` defaults to 100 and is clamped to 10,000; `before` pages
+past a `createdAt` cursor. Without `RUNS_DB` the route answers
+`{enabled: false, events: []}`.
+
+`GET /api/audit/export?format=csv|json&repo=owner/name` downloads up to 10,000
+newest events as an attachment. It needs `RUNS_DB` and answers 501 without it.
+Use it before the retention window removes old rows.
 
 ```json
 {
@@ -836,7 +806,7 @@ the route answers `{enabled: false, events: []}`.
 
 Actions include `pr_opened`, `pr_blocked`, `pr_check`, `command`,
 `policy_updated`, `memory_updated`, `schedule_updated`, `schedule_deleted`,
-`backlog_updated`, `workspace_updated`, `drift_scan` and `retention_purge`.
+`backlog_updated`, `drift_scan` and `retention_purge`.
 Detail is structural only: keys matching token/key/secret/password/
 authorization/cookie are dropped recursively, so a key or token is never
 stored. Actors are `dashboard`, `github-app`, `cron`, or a GitHub login for PR
@@ -917,7 +887,12 @@ with a readable error.
 
 ---
 
-## Run history
+## Scan history
+
+Every scan is recorded: `POST /api/scan` writes one `runs` row with
+`status: "scanned"`, `provider: "scan"`, no model, and the scan totals, plus an
+audit event with action `scan`. Generating tests later adds a separate `running`
+row, so a repository scanned without generation still has history.
 
 History is optional and lives in D1 (`RUNS_DB`). Without the binding every
 route below answers `{ "enabled": false }` and nothing is stored. Summaries are
@@ -926,7 +901,17 @@ test source is never stored in either.
 
 ### `GET /api/runs?repo=owner/name&limit=20`
 
-Lists recent runs for one repository, newest first.
+Lists recent scans and runs for one repository, newest first.
+
+### `GET /api/runs/recent?limit=20`
+
+Newest scans and runs across every repository, for MCP resource discovery.
+
+### `GET /api/repos`
+
+Repos the deployment has seen across run history, backlog, policies, repository
+memory, drift snapshots and schedules, sorted. Without `RUNS_DB` it answers
+`{ enabled: false, repos: [] }`.
 
 ```json
 {

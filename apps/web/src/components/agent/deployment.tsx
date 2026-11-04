@@ -6,7 +6,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Activity,
-  Building2,
   CalendarClock,
   CheckCircle2,
   Database,
@@ -47,11 +46,9 @@ import {
   fetchMemory,
   fetchPolicy,
   fetchSchedules,
-  fetchWorkspace,
   updateMemory,
   updatePolicy,
   updateSchedule,
-  updateWorkspace,
   type AuditEvent,
   type DeploymentCapabilities,
   type ScheduledRepo,
@@ -147,121 +144,6 @@ function Loading() {
 
 function SaveState({ saved }: { saved: boolean }) {
   return saved ? <span className="text-[10px] text-emerald-300">Saved.</span> : null;
-}
-
-function WorkspaceBlock() {
-  const [enabled, setEnabled] = useState(true);
-  const [name, setName] = useState("");
-  const [retentionDays, setRetentionDays] = useState(30);
-  const [driftWebhookUrl, setDriftWebhookUrl] = useState("");
-  const [driftWebhookSecret, setDriftWebhookSecret] = useState("");
-  const [driftWebhookSecretSet, setDriftWebhookSecretSet] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchWorkspace()
-      .then((result) => {
-        if (cancelled) return;
-        setEnabled(result.enabled);
-        if (result.workspace) {
-          setName(result.workspace.name);
-          setRetentionDays(result.workspace.retentionDays);
-          setDriftWebhookUrl(result.workspace.driftWebhookUrl ?? "");
-          setDriftWebhookSecretSet(result.workspace.driftWebhookSecretSet);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const save = async () => {
-    setBusy(true);
-    setError(undefined);
-    setSaved(false);
-    try {
-      const result = await updateWorkspace({
-        name,
-        retentionDays,
-        driftWebhookUrl,
-        ...(driftWebhookSecret.trim() ? { driftWebhookSecret } : {}),
-      });
-      setDriftWebhookUrl(result.workspace.driftWebhookUrl ?? "");
-      setDriftWebhookSecret("");
-      setDriftWebhookSecretSet(result.workspace.driftWebhookSecretSet);
-      setSaved(true);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (loading) return <Loading />;
-  if (!enabled) return <HistoryNotice />;
-
-  return (
-    <div className="space-y-2.5">
-      <SubHead icon={Building2} title="Workspace" hint="deployment-wide" />
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Name" hint="Trimmed to 100 characters.">
-          <Input value={name} onChange={(event) => setName(event.target.value)} />
-        </Field>
-        <Field label="Retention (days)" hint="Runs, audit and rate limits.">
-          <Input
-            type="number"
-            min={1}
-            max={365}
-            value={retentionDays}
-            onChange={(event) => setRetentionDays(Number(event.target.value))}
-          />
-        </Field>
-      </div>
-      <Field
-        label="Drift webhook URL"
-        hint="Workspace default. A repository schedule can override it. Empty clears the setting."
-      >
-        <Input
-          value={driftWebhookUrl}
-          placeholder="https://hooks.slack.com/services/..."
-          onChange={(event) => setDriftWebhookUrl(event.target.value)}
-        />
-      </Field>
-      <Field
-        label="Drift webhook secret"
-        hint={
-          driftWebhookSecretSet
-            ? "Stored. Leave blank to keep it; typing replaces it."
-            : "Optional; sent as x-edgespec-secret."
-        }
-      >
-        <Input
-          type="password"
-          value={driftWebhookSecret}
-          placeholder={driftWebhookSecretSet ? "Stored" : "Optional shared secret"}
-          onChange={(event) => setDriftWebhookSecret(event.target.value)}
-        />
-      </Field>
-      <div className="flex items-center gap-2">
-        <Button size="sm" onClick={save} disabled={busy}>
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-          Save
-        </Button>
-        <SaveState saved={saved} />
-      </div>
-      {error && <p className="text-[10px] text-rose-300">{error}</p>}
-    </div>
-  );
 }
 
 function MemoryBlock({ repo }: { repo: string }) {
@@ -664,18 +546,18 @@ function SchedulesBlock({ repo }: { repo: string }) {
           </Field>
         </div>
         <div className="mt-2 flex items-center gap-2">
-          <span className="text-[10px] text-zinc-400">Override workspace webhook</span>
+          <span className="text-[10px] text-zinc-400">Override deployment webhook</span>
           <Switch
             size="sm"
             className="ml-auto"
             checked={overrideWebhook}
             onCheckedChange={setOverrideWebhook}
-            aria-label="Override the workspace drift webhook for this repository"
+            aria-label="Override the deployment drift webhook for this repository"
           />
         </div>
         {overrideWebhook && (
           <div className="mt-2 space-y-2">
-            <Field label="Repository webhook URL" hint="Used before the workspace and environment.">
+            <Field label="Repository webhook URL" hint="Used before the deployment environment.">
               <Input
                 value={driftWebhookUrl}
                 placeholder="https://hooks.slack.com/services/..."
@@ -756,8 +638,6 @@ export function DeploymentSettings({ repo }: { repo: string }) {
     <div className="space-y-3">
       <EmailBlock />
       <Divider />
-      <WorkspaceBlock />
-      <Divider />
       {repo ? (
         <>
           <MemoryBlock repo={repo} />
@@ -833,7 +713,7 @@ const AUDIT_TONE: Record<string, AuditTone> = {
     dot: "bg-emerald-400",
     badge: "success",
   },
-  workspace_updated: { icon: Database, dot: "bg-indigo-400", badge: "accent" },
+  scan: { icon: Activity, dot: "bg-sky-400", badge: "accent" },
   drift_scan: { icon: Activity, dot: "bg-amber-400", badge: "warning" },
   retention_purge: { icon: Trash2, dot: "bg-rose-400", badge: "danger" },
 };
@@ -957,7 +837,7 @@ export function AuditDialog({
             </p>
           ) : events.length === 0 ? (
             <p className="flex h-full items-center justify-center px-3 text-center text-[11px] text-zinc-500">
-              No audit events yet. Workspace, memory, policy and schedule updates write here.
+              No audit events yet. Scans, memory, policy and schedule updates write here.
             </p>
           ) : (
             Object.entries(groups).map(([day, list]) => (

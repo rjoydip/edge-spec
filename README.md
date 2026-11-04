@@ -66,6 +66,14 @@ bun run docs:deploy   # build + publish to Cloudflare Pages
 bun run docs:preview  # serve the build locally
 ```
 
+The landing page (`bun run dev:www`, http://localhost:5175) links to the docs
+(http://localhost:5174) and the Worker dashboard (http://localhost:8787) in
+development. `bun run dev:all` additionally serves the live dashboard at
+http://localhost:5173. Production builds default to
+https://edge-spec-www.pages.dev, https://edge-spec-docs.pages.dev and
+https://edge-spec.rjoydip.workers.dev; set `VITE_APP_URL` and `VITE_DOCS_URL`
+when hosting elsewhere.
+
 ## Local development
 
 ```bash
@@ -221,3 +229,21 @@ deployment's own Workers AI binding. When the GitHub App secrets are set, each
 workflow mints a repo-scoped installation token that is cached only until just
 before expiry; otherwise it falls back to `GH_TOKEN`. User keys never enter
 Workflow state.
+
+## Future ideas (non-goals for now)
+
+Kept here as enhancement ideas; leave them out unless the product direction
+explicitly changes:
+
+- Editing application source or auto-fixing production bugs.
+- A general code-review bot.
+- Coverage percentages without an executed report.
+- Storing user PATs or AI keys server-side.
+- Autonomous merges; human approval stays for anything that leaves the session.
+- Multi-language test generation before the JS/TS loop is excellent.
+- Turning mutation, flaky detection, or evaluation defaults on without measured
+  cost and flake data.
+- Queue-backed batch scans until the 10-repo cron cap or command latency is a
+  measured limit; the cron and synchronous paths cover current volume.
+- Changing prompt targeting, model routing, draft-PR, or commit-on-PR defaults
+  before the four product experiments have recorded outcomes.

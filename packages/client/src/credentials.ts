@@ -15,7 +15,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 export interface AuthFile {
-  workspace: string;
+  server: string;
   token: string;
   authorizedAt: number;
   /** The approved settings, in exactly the shape `defaultsWithCredentials` merges. */
@@ -38,7 +38,7 @@ export const readCredentials = (home?: string): AuthFile | undefined => {
   try {
     const raw = readFileSync(credentialsPath(home), "utf8");
     const parsed = JSON.parse(raw) as Partial<AuthFile>;
-    if (typeof parsed.token !== "string" || typeof parsed.workspace !== "string") return undefined;
+    if (typeof parsed.token !== "string" || typeof parsed.server !== "string") return undefined;
     return parsed as AuthFile;
   } catch {
     return undefined;
@@ -73,7 +73,7 @@ export const clearCredentials = (home?: string): void => {
 export interface PendingAuth {
   deviceCode: string;
   userCode: string;
-  workspace: string;
+  server: string;
   /** Only the CLI host holds this: it decrypts the approved profile locally. */
   payloadKey: string;
   startedAt: number;
@@ -123,7 +123,7 @@ export const effectiveEnv = (
     current?.trim() || next?.trim() || undefined;
   return {
     ...env,
-    EDGESPEC_URL: filled(env.EDGESPEC_URL, stored.workspace),
+    EDGESPEC_URL: filled(env.EDGESPEC_URL, stored.server),
     GH_TOKEN: filled(env.GH_TOKEN, profile.githubToken),
     GITHUB_TOKEN: filled(env.GITHUB_TOKEN, profile.githubToken),
     EDGESPEC_AI_KEY: filled(env.EDGESPEC_AI_KEY, profile.aiKey),

@@ -61,7 +61,7 @@ function json<T>(value: unknown, fallback: T): T {
 }
 
 function statusOf(value: string): RunStatus {
-  return value === "ready" || value === "failed" ? value : "running";
+  return value === "scanned" || value === "ready" || value === "failed" ? value : "running";
 }
 
 function decisionOf(value: string): RunDecision {
@@ -153,6 +153,33 @@ export async function listRuns(db: SqlDatabase, repo: string, limit = 20): Promi
   const result = await db
     .prepare(`SELECT ${RUN_COLUMNS} FROM runs WHERE repo = ? ORDER BY started_at DESC LIMIT ?`)
     .bind(repo, capped)
+    .all<RunRow>();
+  return (result.results ?? []).map(summaryOf);
+}
+
+/** Repos the deployment has seen, across runs, backlog, policies and schedules. */
+export async function listRepos(db: SqlDatabase): Promise<string[]> {
+  const result = await db
+    .prepare(
+      `SELECT repo FROM runs
+       UNION SELECT repo FROM backlog_items
+       UNION SELECT repo FROM policies
+       UNION SELECT repo FROM repo_memory
+       UNION SELECT repo FROM drift_snapshots
+       UNION SELECT repo FROM scheduled_repos
+       ORDER BY repo`,
+    )
+    .all<{ repo: string }>();
+  return (result.results ?? []).map((row) => row.repo).filter(Boolean);
+}
+
+/** Newest runs across every repository, for resource discovery. */
+export async function listRecentRuns(db: SqlDatabase, limit = 20): Promise<RunSummary[]> {
+  const requested = Number.isFinite(limit) ? limit : 20;
+  const capped = Math.min(50, Math.max(1, Math.round(requested)));
+  const result = await db
+    .prepare(`SELECT ${RUN_COLUMNS} FROM runs ORDER BY started_at DESC LIMIT ?`)
+    .bind(capped)
     .all<RunRow>();
   return (result.results ?? []).map(summaryOf);
 }
@@ -412,29 +439,6 @@ export async function setBacklogState(
     .run();
 }
 
-export interface Workspace {
-  id: string;
-  name: string;
-  /** Days to keep runs, audit events and command rate-limit rows. */
-  retentionDays: number;
-  /** Optional workspace-wide drift notification target. */
-  driftWebhookUrl?: string;
-  /** Write-only secret; never return this from an HTTP route. */
-  driftWebhookSecret?: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-/** Public workspace shape: the webhook secret is never serialized. */
-export type WorkspaceView = Omit<Workspace, "driftWebhookSecret"> & {
-  driftWebhookSecretSet: boolean;
-};
-
-export function workspaceView(workspace: Workspace): WorkspaceView {
-  const { driftWebhookSecret, ...rest } = workspace;
-  return { ...rest, driftWebhookSecretSet: Boolean(driftWebhookSecret) };
-}
-
 export interface AuditEvent {
   id?: number;
   repo?: string;
@@ -463,95 +467,6 @@ function redact(value: unknown, depth = 0): unknown {
   return undefined;
 }
 
-export async function getWorkspace(db: SqlDatabase, id = "default"): Promise<Workspace> {
-  const row = await db
-    .prepare(
-      "SELECT id, name, retention_days, drift_webhook_url, drift_webhook_secret, created_at, updated_at FROM workspaces WHERE id = ?",
-    )
-    .bind(id)
-    .first<{
-      id: string;
-      name: string;
-      retention_days: number;
-      drift_webhook_url: string | null;
-      drift_webhook_secret: string | null;
-      created_at: number;
-      updated_at: number;
-    }>();
-  if (row) {
-    return {
-      id: row.id,
-      name: row.name,
-      retentionDays: row.retention_days,
-      ...(row.drift_webhook_url ? { driftWebhookUrl: row.drift_webhook_url } : {}),
-      ...(row.drift_webhook_secret ? { driftWebhookSecret: row.drift_webhook_secret } : {}),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-  }
-  const now = Date.now();
-  await db
-    .prepare(
-      "INSERT INTO workspaces (id, name, retention_days, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(id, "Default workspace", 30, now, now)
-    .run();
-  return {
-    id,
-    name: "Default workspace",
-    retentionDays: 30,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-export async function putWorkspace(
-  db: SqlDatabase,
-  input: {
-    name?: string;
-    retentionDays?: number;
-    driftWebhookUrl?: string;
-    driftWebhookSecret?: string;
-  },
-  id = "default",
-): Promise<Workspace> {
-  const current = await getWorkspace(db, id);
-  const name = input.name?.trim().slice(0, 100) || current.name;
-  const days = Number(input.retentionDays);
-  const retentionDays = Number.isFinite(days)
-    ? Math.min(365, Math.max(1, Math.round(days)))
-    : current.retentionDays;
-  const requestedUrl = input.driftWebhookUrl?.trim();
-  const urlChanged = requestedUrl !== undefined && requestedUrl !== (current.driftWebhookUrl ?? "");
-  const driftWebhookUrl =
-    input.driftWebhookUrl === undefined ? current.driftWebhookUrl : requestedUrl || undefined;
-  const driftWebhookSecret =
-    driftWebhookUrl === undefined
-      ? undefined
-      : input.driftWebhookSecret !== undefined
-        ? input.driftWebhookSecret.trim() || undefined
-        : urlChanged
-          ? undefined
-          : current.driftWebhookSecret;
-  const updatedAt = Date.now();
-  await db
-    .prepare(
-      "UPDATE workspaces SET name = ?, retention_days = ?, drift_webhook_url = ?, drift_webhook_secret = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(name, retentionDays, driftWebhookUrl ?? null, driftWebhookSecret ?? null, updatedAt, id)
-    .run();
-  const next: Workspace = {
-    id: current.id,
-    name,
-    retentionDays,
-    createdAt: current.createdAt,
-    updatedAt,
-  };
-  if (driftWebhookUrl) next.driftWebhookUrl = driftWebhookUrl;
-  if (driftWebhookSecret) next.driftWebhookSecret = driftWebhookSecret;
-  return next;
-}
-
 export async function recordAudit(
   db: SqlDatabase,
   event: {
@@ -559,15 +474,13 @@ export async function recordAudit(
     action: string;
     repo?: string;
     detail?: Record<string, unknown>;
-    workspaceId?: string;
   },
 ): Promise<void> {
   await db
     .prepare(
-      "INSERT INTO audit_events (workspace_id, repo, actor, action, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO audit_events (repo, actor, action, detail_json, created_at) VALUES (?, ?, ?, ?, ?)",
     )
     .bind(
-      event.workspaceId ?? "default",
       event.repo ?? null,
       event.actor.slice(0, 120),
       event.action.slice(0, 120),
@@ -579,36 +492,34 @@ export async function recordAudit(
 
 export async function listAudit(
   db: SqlDatabase,
-  input: { repo?: string; limit?: number } = {},
+  input: { repo?: string; limit?: number; before?: number } = {},
 ): Promise<AuditEvent[]> {
-  const limit = Math.min(200, Math.max(1, Math.round(input.limit ?? 100)));
-  const rows = input.repo
-    ? await db
-        .prepare(
-          "SELECT id, repo, actor, action, detail_json, created_at FROM audit_events WHERE repo = ? ORDER BY created_at DESC, id DESC LIMIT ?",
-        )
-        .bind(input.repo, limit)
-        .all<{
-          id: number;
-          repo: string | null;
-          actor: string;
-          action: string;
-          detail_json: string;
-          created_at: number;
-        }>()
-    : await db
-        .prepare(
-          "SELECT id, repo, actor, action, detail_json, created_at FROM audit_events ORDER BY created_at DESC, id DESC LIMIT ?",
-        )
-        .bind(limit)
-        .all<{
-          id: number;
-          repo: string | null;
-          actor: string;
-          action: string;
-          detail_json: string;
-          created_at: number;
-        }>();
+  const limit = Math.min(10_000, Math.max(1, Math.round(input.limit ?? 100)));
+  const where: string[] = [];
+  const values: unknown[] = [];
+  if (input.repo) {
+    where.push("repo = ?");
+    values.push(input.repo);
+  }
+  if (Number.isFinite(input.before)) {
+    where.push("created_at < ?");
+    values.push(Math.round(input.before!));
+  }
+  const rows = await db
+    .prepare(
+      `SELECT id, repo, actor, action, detail_json, created_at FROM audit_events${
+        where.length > 0 ? ` WHERE ${where.join(" AND ")}` : ""
+      } ORDER BY created_at DESC, id DESC LIMIT ?`,
+    )
+    .bind(...values, limit)
+    .all<{
+      id: number;
+      repo: string | null;
+      actor: string;
+      action: string;
+      detail_json: string;
+      created_at: number;
+    }>();
   return (rows.results ?? []).map((row) => ({
     id: row.id,
     ...(row.repo ? { repo: row.repo } : {}),
@@ -658,7 +569,7 @@ export interface ScheduledRepo {
   enabled: boolean;
   installationId?: number;
   lastRunAt?: number;
-  /** Optional per-repository override; takes precedence over the workspace. */
+  /** Optional per-repository override; takes precedence over the environment. */
   driftWebhookUrl?: string;
   /** Write-only secret; never return this from an HTTP route. */
   driftWebhookSecret?: string;

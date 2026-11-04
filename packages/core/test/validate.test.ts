@@ -96,6 +96,48 @@ describe("validateTest", () => {
     expect(called).toBe(false);
   });
 
+  it("keeps flaky repeats, mutation and coverage opt-in", async () => {
+    let calls = 0;
+    const fakeFetch = (async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ exitCode: 0, stdout: "1 pass" }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example" },
+      fetchImpl: fakeFetch,
+    });
+    expect(calls).toBe(1);
+    expect(result.runs).toBe(1);
+    expect(result.mutation).toBeUndefined();
+    expect(result.coverage).toBeUndefined();
+  });
+
+  it("keeps raw JUnit and LCOV from the runner for the run bundle", async () => {
+    const fakeFetch = (async () =>
+      new Response(
+        JSON.stringify({
+          exitCode: 0,
+          stdout: "2 pass",
+          artifacts: {
+            "junit.xml": '<testsuite tests="2"/>',
+            "coverage/lcov.info": "SF:src/math.ts\nDA:1,1\nend_of_record",
+          },
+        }),
+        { status: 200 },
+      )) as unknown as typeof fetch;
+
+    const result = await validateTest({
+      ...base,
+      sandbox: { url: "https://runner.example" },
+      fetchImpl: fakeFetch,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.reports?.junit).toContain("testsuite");
+    expect(result.reports?.lcov).toContain("SF:src/math.ts");
+  });
+
   it("runs the sandbox contract and reports real coverage of the result", async () => {
     let body: unknown;
     const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {

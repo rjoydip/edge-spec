@@ -9,6 +9,7 @@ import { app } from "../src/app";
 import { applySqliteMigrations, createSqlite, type SqlLikeDatabase } from "@edge-spec/db";
 import type { Env, SqlDatabase } from "../src/env";
 import { whereSql } from "../src/auth-adapter";
+import { authFor } from "../src/auth";
 
 let db: SqlLikeDatabase;
 
@@ -102,6 +103,28 @@ describe("better auth routes", () => {
     expect(out.status).toBe(200);
     const after = await call("GET", "/api/auth/get-session", { headers: { cookie } });
     expect(await after.json()).toBeNull();
+  });
+
+  test("trusts the local dashboard origin and configured extras", () => {
+    // Better Auth disables the origin check under NODE_ENV=test, so assert the
+    // configured allowlist rather than a 403.
+    const local = authFor({
+      DB: db as unknown as SqlDatabase,
+      BETTER_AUTH_URL: "http://127.0.0.1:8787",
+    } as Env);
+    expect(local.options.trustedOrigins).toEqual(
+      expect.arrayContaining(["http://localhost:5173", "http://127.0.0.1:8787"]),
+    );
+
+    const custom = authFor({
+      DB: db as unknown as SqlDatabase,
+      BETTER_AUTH_URL: "https://edge.example",
+      BETTER_AUTH_TRUSTED_ORIGINS: "https://custom.example, https://preview.example",
+    } as Env);
+    expect(custom.options.trustedOrigins).toEqual(
+      expect.arrayContaining(["https://edge.example", "https://custom.example"]),
+    );
+    expect(custom.options.trustedOrigins).not.toContain("http://localhost:5173");
   });
 
   test("login accepts the password and rejects the wrong one", async () => {

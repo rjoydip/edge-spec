@@ -46,11 +46,15 @@ export interface Env {
   /** Optional read-through cache. */
   CACHE?: CacheStore;
   CACHE_DRIVER?: CacheDriver;
+  /** Opt-in TTL (seconds) for GitHub tree/file reads during scans; 0 is off. */
+  EDGESPEC_SCAN_CACHE_TTL?: string;
   /** Guards POST /api/cron/tick. Absent disables the route. */
   CRON_SECRET?: string;
   /** Optional Slack-compatible webhook for drift notifications. */
   DRIFT_ALERT_WEBHOOK_URL?: string;
   DRIFT_ALERT_WEBHOOK_SECRET?: string;
+  /** Recipient for drift email when no webhook target is configured. */
+  DRIFT_ALERT_EMAIL?: string;
   /** Workers AI binding, or provider config for the automation path. */
   AI?: AiBinding;
   AI_PROVIDER?: string;
@@ -72,8 +76,6 @@ export interface Env {
   /** Email sender fallback (Resend). Requests normally carry it as a header. */
   EMAIL_API_KEY?: string;
   EMAIL_FROM?: string;
-  /** The public origin used in emails; defaults to the request origin. */
-  EDGESPEC_WORKSPACE_URL?: string;
   /** Observability: consola (default), otlp, sentry, axiom or none. */
   EDGESPEC_OBSERVABILITY?: string;
   EDGESPEC_LOG_LEVEL?: ObserverLevel;
@@ -90,6 +92,8 @@ export interface Env {
   BETTER_AUTH_SECRET?: string;
   /** Canonical origin for auth callbacks; inferred per request when unset. */
   BETTER_AUTH_URL?: string;
+  /** Extra comma-separated origins accepted by Better Auth (custom domains). */
+  BETTER_AUTH_TRUSTED_ORIGINS?: string;
   /** Set to 1 only when serving over plain HTTP (local Docker). */
   EDGESPEC_INSECURE_COOKIES?: string;
 }

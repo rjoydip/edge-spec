@@ -12,15 +12,23 @@ import {
   type ScheduledController,
 } from "@edge-spec/runtime/scheduled";
 import { kvCache, type KvBinding } from "@edge-spec/adapters/cloudflare/cache";
+import { r2Store, type R2Binding } from "@edge-spec/adapters/cloudflare/r2";
 
 export { TestGenerationWorkflow } from "@edge-spec/adapters/cloudflare/workflow";
 
-/** Bindings as Cloudflare hands them over: `CACHE` is raw KV, not a CacheStore. */
-type CloudflareEnv = Omit<Env, "CACHE"> & { CACHE?: KvBinding };
+/** Bindings as Cloudflare hands them over: KV and R2 are raw, not ports. */
+type CloudflareEnv = Omit<Env, "CACHE" | "ARTIFACTS"> & {
+  CACHE?: KvBinding;
+  ARTIFACTS?: R2Binding;
+};
 
 function platform(env: CloudflareEnv): Env {
-  if (!env.CACHE) return env as Env;
-  return { ...env, CACHE: kvCache(env.CACHE), CACHE_DRIVER: "kv" };
+  const { CACHE, ARTIFACTS, ...rest } = env;
+  return {
+    ...rest,
+    ...(CACHE ? { CACHE: kvCache(CACHE), CACHE_DRIVER: "kv" as const } : {}),
+    ...(ARTIFACTS ? { ARTIFACTS: r2Store(ARTIFACTS) } : {}),
+  };
 }
 
 export default {

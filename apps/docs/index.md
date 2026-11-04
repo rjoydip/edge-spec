@@ -32,7 +32,7 @@ features:
 | [MCP server](/mcp)              | Expose EdgeSpec tools to Claude Desktop, Cursor and other agents                 |
 | [Configuration](/configuration) | Browser settings, providers, pipeline knobs, sandbox runner, deployment secrets  |
 | [Deployment](/deployment)       | D1, R2, secrets, Worker deployment, CI                                           |
-| [UI](/ui)                       | Workspace steps, pipeline states, settings, theme and layout rules               |
+| [UI](/ui)                       | Dashboard steps, pipeline states, settings, theme and layout rules               |
 
 The repository also carries `README.md` for setup, `PLAN.md` for requirements and
 `AGENTS.md` for conventions.

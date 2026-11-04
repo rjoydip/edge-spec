@@ -1,7 +1,7 @@
-import type { ScheduledRepo, Workspace } from "./db";
+import type { ScheduledRepo } from "./db";
 import type { Env } from "./env";
 
-export type DriftWebhookSource = "repository" | "workspace" | "environment";
+export type DriftWebhookSource = "repository" | "environment";
 
 export interface DriftWebhookTarget {
   url: string;
@@ -12,13 +12,12 @@ export interface DriftWebhookTarget {
 /**
  * Resolve the effective drift notification target.
  *
- * A repository override wins over the workspace setting, which wins over the
- * deployment environment. Empty values are ignored.
+ * A repository override wins over the deployment environment. Empty values
+ * are ignored.
  */
 export function resolveDriftWebhook(
   env: Pick<Env, "DRIFT_ALERT_WEBHOOK_URL" | "DRIFT_ALERT_WEBHOOK_SECRET">,
   schedule: Pick<ScheduledRepo, "driftWebhookUrl" | "driftWebhookSecret">,
-  workspace?: Pick<Workspace, "driftWebhookUrl" | "driftWebhookSecret">,
 ): DriftWebhookTarget | undefined {
   const repositoryUrl = schedule.driftWebhookUrl?.trim();
   if (repositoryUrl) {
@@ -28,17 +27,6 @@ export function resolveDriftWebhook(
         ? { secret: schedule.driftWebhookSecret.trim() }
         : {}),
       source: "repository",
-    };
-  }
-
-  const workspaceUrl = workspace?.driftWebhookUrl?.trim();
-  if (workspaceUrl) {
-    return {
-      url: workspaceUrl,
-      ...(workspace?.driftWebhookSecret?.trim()
-        ? { secret: workspace.driftWebhookSecret.trim() }
-        : {}),
-      source: "workspace",
     };
   }
 

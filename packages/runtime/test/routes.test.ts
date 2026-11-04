@@ -3,7 +3,7 @@
  * or a runner: every case either validates input, checks a missing binding, or
  * reads from a fake D1/R2.
  */
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { app } from "../src/app";
 import type {
   CacheStore,
@@ -224,7 +224,8 @@ describe("optional bindings", () => {
       "/api/runs?repo=acme/api",
       "/api/backlog?repo=acme/api",
       "/api/schedules",
-      "/api/workspace",
+      "/api/repos",
+      "/api/runs/recent",
       "/api/audit",
       "/api/memory?repo=acme/api",
       "/api/policies?repo=acme/api",
@@ -236,6 +237,21 @@ describe("optional bindings", () => {
 
     const artifacts = await fetchApp(`/api/runs/${ID}/artifacts`);
     expect(await artifacts.json()).toEqual({ enabled: false });
+  });
+
+  it("exports audit rows as CSV or JSON", async () => {
+    const env = { ...baseEnv(), RUNS_DB: fakeDb() };
+    const csv = await fetchApp("/api/audit/export?format=csv", undefined, env);
+    expect(csv.status).toBe(200);
+    expect(csv.headers.get("content-type")).toContain("text/csv");
+    expect(csv.headers.get("content-disposition")).toContain("edgespec-audit-");
+    expect((await csv.text()).split("\n")[0]).toBe("createdAt,actor,action,repo,detail");
+
+    const json = await fetchApp("/api/audit/export", undefined, env);
+    expect(json.status).toBe(200);
+    expect((await json.json()) as { events: unknown[] }).toHaveProperty("events");
+
+    expect((await fetchApp("/api/audit/export")).status).toBe(501);
   });
 
   it("says job status is unavailable without a job queue", async () => {
@@ -252,7 +268,6 @@ describe("optional bindings", () => {
       ["/api/backlog?repo=acme/api", "PATCH"],
       ["/api/schedules?repo=acme/api", "PUT"],
       ["/api/schedules?repo=acme/api", "DELETE"],
-      ["/api/workspace", "PUT"],
       ["/api/memory?repo=acme/api", "PUT"],
       ["/api/memory?repo=acme/api", "DELETE"],
       ["/api/policies?repo=acme/api", "PUT"],
@@ -414,5 +429,65 @@ describe("webhooks", () => {
       expect(response.status).toBe(202);
       expect(((await response.json()) as { ignored: string }).ignored).toBe(ignored);
     }
+  });
+});
+
+/** A D1 stand-in that records the SQL and bound values of every write. */
+function recordingDb(): { db: D1Database; calls: Array<{ sql: string; values: unknown[] }> } {
+  const calls: Array<{ sql: string; values: unknown[] }> = [];
+  const prepare = (sql: string): D1PreparedStatement => {
+    let values: unknown[] = [];
+    const statement = {
+      bind: (...next: unknown[]) => {
+        values = next;
+        return statement;
+      },
+      first: async () => null,
+      all: async () => ({ results: [] }),
+      run: async () => {
+        calls.push({ sql, values });
+        return {};
+      },
+    } as unknown as D1PreparedStatement;
+    return statement;
+  };
+  return { db: { prepare, batch: async () => [] } as D1Database, calls };
+}
+
+describe("scan history", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it("records one scanned run and one audit event per scan", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("/git/trees/")) {
+        return new Response(JSON.stringify({ tree: [{ path: "src/a.ts", type: "blob" }] }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+
+    const { db, calls } = recordingDb();
+    const response = await fetchApp(
+      "/api/scan",
+      { method: "POST", body: JSON.stringify({ repo: "acme/api" }) },
+      { ...baseEnv(), DB: db },
+    );
+    expect(response.status).toBe(200);
+
+    const run = calls.find((call) => call.sql.startsWith("INSERT INTO runs"));
+    expect(run).toBeDefined();
+    expect(run?.values).toContain("scanned");
+    expect(run?.values).toContain("scan");
+
+    const audit = calls.find((call) => call.sql.includes("INSERT INTO audit_events"));
+    expect(audit).toBeDefined();
+    expect(audit?.values[2]).toBe("scan");
+    expect(JSON.parse(String(audit?.values[3]))).toMatchObject({ ref: "main", scanned: 1 });
   });
 });

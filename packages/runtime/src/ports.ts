@@ -50,6 +50,8 @@ export interface ObjectStore {
   ): Promise<unknown>;
   get(key: string): Promise<{ text(): Promise<string> } | null>;
   delete(key: string): Promise<void>;
+  /** Keys under a prefix, for the retention sweep. Optional on simple stores. */
+  list?(prefix: string): Promise<string[]>;
 }
 
 /** Optional read-through cache. Never the source of truth. */

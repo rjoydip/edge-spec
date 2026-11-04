@@ -89,7 +89,7 @@ export const approveDeviceCode = async (
   const response = await fetch("/api/cli/device/approve", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ userCode, profile, workspace: window.location.origin }),
+    body: JSON.stringify({ userCode, profile, server: window.location.origin }),
   });
   const body = (await response.json().catch(() => ({}))) as { error?: unknown; token?: unknown };
   if (!response.ok) {

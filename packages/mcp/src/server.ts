@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
@@ -59,6 +60,19 @@ interface PendingPull {
   files: Array<{ path: string; code: string; sourcePath?: string }>;
   strictTypes?: boolean;
   expiresAt: number;
+}
+
+/** Binds an approval token to the exact repository and file payload. */
+function approvalDigest(input: Pick<PendingPull, "repo" | "files" | "strictTypes">): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        repo: input.repo,
+        strictTypes: input.strictTypes ?? null,
+        files: input.files.map((file) => [file.path, file.code, file.sourcePath ?? null]),
+      }),
+    )
+    .digest("hex");
 }
 
 export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {}): McpServer {
@@ -317,14 +331,15 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
     },
     async (args) => {
       try {
-        const approvalId = crypto.randomUUID();
-        const expiresAt = Date.now() + 10 * 60_000;
-        approvals.set(approvalId, {
+        const pending = {
           repo: args.repo,
           files: args.files,
           ...(args.strictTypes !== undefined ? { strictTypes: args.strictTypes } : {}),
-          expiresAt,
-        });
+          expiresAt: Date.now() + 10 * 60_000,
+        };
+        const approvalId = `${crypto.randomUUID()}.${approvalDigest(pending)}`;
+        const expiresAt = pending.expiresAt;
+        approvals.set(approvalId, pending);
         // Old approvals must not accumulate in a long-lived stdio session.
         for (const [id, pending] of approvals) {
           if (pending.expiresAt <= Date.now()) approvals.delete(id);
@@ -364,7 +379,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
         writePendingAuth({
           deviceCode: start.deviceCode,
           userCode: start.userCode,
-          workspace: baseUrl,
+          server: baseUrl,
           payloadKey,
           startedAt: Date.now(),
         });
@@ -395,7 +410,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
         if (!pending) {
           return fail("No login in progress. Call edgespec_auth_login first.");
         }
-        const poll = await pollDeviceFlow(pending.workspace, pending.deviceCode, options.fetchImpl);
+        const poll = await pollDeviceFlow(pending.server, pending.deviceCode, options.fetchImpl);
         if (poll.status === "pending") {
           return ok({
             status: "pending",
@@ -411,13 +426,13 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
           pending.payloadKey,
         )) as AuthFile["profile"];
         writeCredentials({
-          workspace: poll.workspace || pending.workspace,
+          server: poll.server || pending.server,
           token: poll.token ?? "",
           authorizedAt: Date.now(),
           profile,
         });
         clearPendingAuth();
-        return ok({ status: "authorized", workspace: poll.workspace || pending.workspace });
+        return ok({ status: "authorized", server: poll.server || pending.server });
       } catch (error) {
         return fail(error);
       }
@@ -428,7 +443,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
     "edgespec_auth_status",
     {
       title: "Show stored authorization",
-      description: "Reports the workspace the server last logged into and what it stores.",
+      description: "Reports the server the client last logged into and what it stores.",
       inputSchema: {},
     },
     async () => {
@@ -436,7 +451,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
       if (!stored) return ok({ status: "signed-out" });
       return ok({
         status: "authorized",
-        workspace: stored.workspace,
+        server: stored.server,
         authorizedAt: stored.authorizedAt,
         stores: Object.keys(stored.profile ?? {}),
       });
@@ -485,6 +500,11 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
             "The approval is missing or expired. Call edgespec_prepare_pull_request again and ask the user to approve.",
           );
         }
+        const digest = args.approvalId.split(".")[1];
+        if (!digest || digest !== approvalDigest(pending)) {
+          approvals.delete(args.approvalId);
+          return fail("The approval token does not match the prepared request.");
+        }
         approvals.delete(args.approvalId);
         return ok(
           await clientFor().openPullRequest({
@@ -509,9 +529,48 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
     ],
   });
 
+  /** Repos come from the deployment; an unavailable API lists nothing. */
+  const repoResources = async (scheme: string, label: string) => {
+    try {
+      const { repos } = await clientFor().repos();
+      return {
+        resources: repos.flatMap((repo) => {
+          const [owner, name] = repo.split("/");
+          if (!owner || !name) return [];
+          return [
+            {
+              uri: `edgespec://${scheme}/${owner}/${name}`,
+              name: `${label}: ${repo}`,
+              mimeType: "application/json",
+            },
+          ];
+        }),
+      };
+    } catch {
+      return { resources: [] };
+    }
+  };
+
+  const runResources = async () => {
+    try {
+      const { runs } = await clientFor().recentRuns();
+      return {
+        resources: runs.map((run) => ({
+          uri: `edgespec://runs/${run.id}`,
+          name: `Run ${run.id} · ${run.repo}`,
+          mimeType: "application/json",
+        })),
+      };
+    } catch {
+      return { resources: [] };
+    }
+  };
+
   server.registerResource(
     "edgespec_gaps",
-    new ResourceTemplate("edgespec://gaps/{owner}/{name}", { list: undefined }),
+    new ResourceTemplate("edgespec://gaps/{owner}/{name}", {
+      list: () => repoResources("gaps", "Gaps"),
+    }),
     {
       title: "Repository gaps",
       description: "Missing tests and contract gaps for a GitHub repository.",
@@ -535,7 +594,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
   server.registerResource(
     "edgespec_specs",
     new ResourceTemplate("edgespec://specs/{owner}/{name}", {
-      list: undefined,
+      list: () => repoResources("specs", "Specs"),
     }),
     {
       title: "OpenAPI specs",
@@ -558,7 +617,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
   server.registerResource(
     "edgespec_coverage",
     new ResourceTemplate("edgespec://coverage/{owner}/{name}", {
-      list: undefined,
+      list: () => repoResources("coverage", "Coverage"),
     }),
     {
       title: "Coverage status",
@@ -581,7 +640,7 @@ export function createServer(env: Env, options: { fetchImpl?: typeof fetch } = {
 
   server.registerResource(
     "edgespec_run_status",
-    new ResourceTemplate("edgespec://runs/{id}", { list: undefined }),
+    new ResourceTemplate("edgespec://runs/{id}", { list: runResources }),
     {
       title: "Workflow run status",
       description: "Durable workflow status for a webhook run id.",

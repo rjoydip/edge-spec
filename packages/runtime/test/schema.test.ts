@@ -56,10 +56,16 @@ const d1 = schema(
     .map((file) => read(file))
     .join("\n"),
 );
-const postgres = schema(read("postgres.sql"));
+// Postgres starts from the base schema, then applies the same portable forward
+// migrations as `packages/runtime/scripts/migrate.ts`.
+const postgres = schema(
+  ["postgres.sql", "0010_better_auth.sql", "0011_drop_pricing_plan.sql", "0012_drop_workspace.sql"]
+    .map(read)
+    .join("\n"),
+);
 
 describe("postgres schema", () => {
-  it("has the same tables as the D1 migrations", () => {
+  it("has the same tables as the D1 migrations after forward migrations", () => {
     expect([...postgres.keys()].sort()).toEqual([...d1.keys()].sort());
   });
 

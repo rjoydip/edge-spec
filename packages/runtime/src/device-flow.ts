@@ -33,14 +33,14 @@ export interface DeviceRecord {
   expiresAt: number;
   /** Encrypted profile; the payload key never reaches the server. */
   profile?: string;
-  /** The workspace origin that approved, so the CLI remembers where it logged in. */
-  workspace?: string;
+  /** The server origin that approved, so the CLI remembers where it logged in. */
+  server?: string;
 }
 
 export type DevicePoll =
   | { status: "pending" }
   | { status: "expired" }
-  | { status: "approved"; token: string; profile: string; workspace: string };
+  | { status: "approved"; token: string; profile: string; server: string };
 
 export type DeviceDecision = { ok: true; token: string } | { ok: false; reason: "unknown-code" };
 
@@ -102,7 +102,7 @@ export const startDeviceFlow = async (store: CacheStore): Promise<DeviceRecord> 
 /** The browser side approves: it adds the ciphertext, the server adds the token. */
 export const approveDevice = async (
   store: CacheStore,
-  input: { userCode: string; profile: string; workspace: string },
+  input: { userCode: string; profile: string; server: string },
 ): Promise<DeviceDecision> => {
   const deviceCode = await store.get<string>(`${CODE_KEY}${input.userCode}`);
   if (!deviceCode) return { ok: false, reason: "unknown-code" };
@@ -112,7 +112,7 @@ export const approveDevice = async (
   const approved: DeviceRecord = {
     ...record,
     profile: input.profile,
-    workspace: input.workspace,
+    server: input.server,
   };
   await store.set(`${DEVICE_KEY}${deviceCode}`, approved, Math.max(ttlFor(record, true), 1));
   return { ok: true, token: record.token };
@@ -128,6 +128,6 @@ export const pollDevice = async (store: CacheStore, deviceCode: string): Promise
     status: "approved",
     token: record.token,
     profile: record.profile,
-    workspace: record.workspace ?? "",
+    server: record.server ?? "",
   };
 };

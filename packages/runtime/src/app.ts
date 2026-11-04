@@ -79,22 +79,21 @@ import {
   getMemory,
   getPolicy,
   getRun,
-  getWorkspace,
   listAudit,
+  listRecentRuns,
+  listRepos,
   listBacklog,
   listRuns,
   listScheduledRepos,
   putMemory,
   putPolicy,
   putScheduledRepo,
-  putWorkspace,
   recordAudit,
   runsDb,
   scheduledRepoView,
   setBacklogState,
   setRunDecisions,
   syncBacklog,
-  workspaceView,
 } from "./db";
 import type { BacklogState } from "@edge-spec/core/backlog";
 import { impactForChanges } from "./impact";
@@ -368,6 +367,28 @@ export async function cached<T>(
 }
 
 /**
+ * Opt-in cache for GitHub reads during a scan. KV is only worthwhile when
+ * `EDGESPEC_SCAN_CACHE_TTL` is set; keys carry a token hash so a private scan
+ * is never served to another token.
+ */
+async function scanGithub(c: AppContext): Promise<GitHub> {
+  const github = githubFor(c);
+  const ttl = Number(c.env.EDGESPEC_SCAN_CACHE_TTL);
+  if (!Number.isFinite(ttl) || ttl <= 0) return github;
+  const seconds = Math.min(3600, Math.max(1, Math.round(ttl)));
+  const fingerprint = await tokenFingerprint(
+    c.req.header(TOKEN_HEADER)?.trim() || c.env.GH_TOKEN || "",
+  );
+  const key = (part: string) => `scan:${fingerprint}:${part}`;
+  return {
+    tree: (repo: string, ref: string) =>
+      cached(c, key(`tree:${repo}@${ref}`), seconds, () => github.tree(repo, ref)),
+    file: (repo: string, path: string, ref?: string) =>
+      cached(c, key(`file:${repo}@${ref}:${path}`), seconds, () => github.file(repo, path, ref)),
+  } as unknown as GitHub;
+}
+
+/**
  * Request telemetry: one `http.request` event per finished response, and
  * `http.error` for the ones the routes could not handle. The observer is
  * chosen by `EDGESPEC_OBSERVABILITY`; the event promise is handed to the host's
@@ -536,7 +557,7 @@ app.post("/api/scan", async (c) => {
     const body = await readJson(c);
     const repo = repoOf(body);
     const ref = parseRef(str(body.ref));
-    const github = githubFor(c);
+    const github = await scanGithub(c);
     const tree = await github.tree(repo, ref);
     const blobs = tree.filter((entry) => entry.type === "blob").map((entry) => entry.path);
     const classification = classifyTree(blobs);
@@ -686,6 +707,33 @@ app.post("/api/scan", async (c) => {
         undefined,
         ["missing", "api"],
       ).catch(() => undefined);
+
+      // History and audit are scan-based: a scan that never generates tests is
+      // still a record. Both writes are conveniences and never fail the scan.
+      const at = Date.now();
+      await createRun(history, {
+        id: crypto.randomUUID(),
+        repo,
+        ref,
+        status: "scanned",
+        provider: "scan",
+        model: "none",
+        startedAt: at,
+        finishedAt: at,
+        totals,
+      }).catch(() => undefined);
+      await recordAudit(history, {
+        repo,
+        actor: "dashboard",
+        action: "scan",
+        detail: {
+          ref,
+          scanned: blobs.length,
+          missing: totals.missing,
+          api: totals.api,
+          unsupported: totals.unsupported,
+        },
+      }).catch(() => undefined);
     }
 
     return c.json({
@@ -969,6 +1017,7 @@ app.post("/api/run", async (c) => {
       data: JSON.stringify({ type: "run", id: runId, persisted: stored }),
     });
     const files = new Map<string, RunFile>();
+    const reports = new Map<string, { junit?: string; lcov?: string }>();
     let status: RunSummary["status"] = "failed";
     let scannedGaps: Gap[] | undefined;
     try {
@@ -995,6 +1044,7 @@ app.post("/api/run", async (c) => {
           });
         }
         if (event.type === "validation" && event.sourcePath) {
+          if (event.validation.reports) reports.set(event.sourcePath, event.validation.reports);
           const current = files.get(event.sourcePath);
           files.set(event.sourcePath, {
             sourcePath: event.sourcePath,
@@ -1006,9 +1056,14 @@ app.post("/api/run", async (c) => {
           });
         }
         if (event.type === "result") status = event.ok ? "ready" : "failed";
+        // Raw reports are for the R2 bundle only; never stream or persist them.
+        const payload =
+          event.type === "validation" && event.validation.reports
+            ? { ...event, validation: { ...event.validation, reports: undefined } }
+            : event;
         await stream.writeSSE({
           event: event.type,
-          data: JSON.stringify(event),
+          data: JSON.stringify(payload),
         });
       }
     } catch (err) {
@@ -1037,6 +1092,7 @@ app.post("/api/run", async (c) => {
           verified: file.verified,
           checks: file.checks,
           ...(file.coverage ? { coverage: file.coverage } : {}),
+          ...(reports.get(file.sourcePath) ? { reports: reports.get(file.sourcePath)! } : {}),
         })),
       }).catch(() => false);
       if (history && scannedGaps) {
@@ -1480,17 +1536,17 @@ app.post("/api/cli/device/approve", async (c) => {
     return c.json({ error: "Not enabled: this deployment has no cache store." }, 501);
   }
   const rawBody: unknown = await c.req.json().catch(() => ({}));
-  const body = (rawBody ?? {}) as { userCode?: unknown; profile?: unknown; workspace?: unknown };
+  const body = (rawBody ?? {}) as { userCode?: unknown; profile?: unknown; server?: unknown };
   const userCode = typeof body.userCode === "string" ? body.userCode.trim().toUpperCase() : "";
   const profile = typeof body.profile === "string" ? body.profile : "";
-  const workspace = typeof body.workspace === "string" ? body.workspace.trim() : "";
-  if (!userCode || !profile || !workspace) {
-    return c.json({ error: "userCode, profile and workspace are required." }, 400);
+  const server = typeof body.server === "string" ? body.server.trim() : "";
+  if (!userCode || !profile || !server) {
+    return c.json({ error: "userCode, profile and server are required." }, 400);
   }
   if (profile.length > PROFILE_LIMIT) {
     return c.json({ error: `profile is too large (limit ${PROFILE_LIMIT} bytes).` }, 413);
   }
-  const decision = await approveDevice(store, { userCode, profile, workspace });
+  const decision = await approveDevice(store, { userCode, profile, server });
   if (!decision.ok) {
     return c.json({ error: "Code is unknown or already used." }, 404);
   }
@@ -1742,61 +1798,69 @@ app.delete("/api/schedules", async (c) => {
   }
 });
 
-app.get("/api/workspace", async (c) => {
-  try {
-    const db = runsDb(c.env);
-    if (!db) return c.json({ enabled: false });
-    return c.json({
-      enabled: true,
-      workspace: workspaceView(await getWorkspace(db)),
-    });
-  } catch (err) {
-    return fail(err, c);
-  }
-});
-
-app.put("/api/workspace", async (c) => {
-  try {
-    const db = runsDb(c.env);
-    if (!db) throw new HttpError(501, "Workspace settings need the RUNS_DB binding.");
-    const body = await readJson(c);
-    const workspace = await putWorkspace(db, {
-      ...(typeof body.name === "string" ? { name: body.name } : {}),
-      ...(body.retentionDays !== undefined ? { retentionDays: Number(body.retentionDays) } : {}),
-      ...(typeof body.driftWebhookUrl === "string"
-        ? { driftWebhookUrl: body.driftWebhookUrl }
-        : {}),
-      ...(typeof body.driftWebhookSecret === "string"
-        ? { driftWebhookSecret: body.driftWebhookSecret }
-        : {}),
-    });
-    await recordAudit(db, {
-      actor: "dashboard",
-      action: "workspace_updated",
-      detail: {
-        retentionDays: workspace.retentionDays,
-        name: workspace.name,
-        driftWebhookConfigured: Boolean(workspace.driftWebhookUrl),
-      },
-    }).catch(() => undefined);
-    return c.json({ enabled: true, workspace: workspaceView(workspace) });
-  } catch (err) {
-    return fail(err, c);
-  }
-});
-
 app.get("/api/audit", async (c) => {
   try {
     const db = runsDb(c.env);
     if (!db) return c.json({ enabled: false, events: [] });
     const parsed = parseRepo(c.req.query("repo"));
     const limit = Number(c.req.query("limit") ?? 100);
+    const before = Number(c.req.query("before"));
     return c.json({
       enabled: true,
       events: await listAudit(db, {
         ...(parsed ? { repo: `${parsed.owner}/${parsed.name}` } : {}),
+        ...(Number.isFinite(before) ? { before } : {}),
         limit,
       }),
+    });
+  } catch (err) {
+    return fail(err, c);
+  }
+});
+
+const csvCell = (value: string): string =>
+  /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+
+app.get("/api/repos", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, repos: [] });
+    return c.json({ enabled: true, repos: await listRepos(db) });
+  } catch (err) {
+    return fail(err, c);
+  }
+});
+
+app.get("/api/audit/export", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) throw new HttpError(501, "Audit export needs the RUNS_DB binding.");
+    const parsed = parseRepo(c.req.query("repo"));
+    const events = await listAudit(db, {
+      ...(parsed ? { repo: `${parsed.owner}/${parsed.name}` } : {}),
+      limit: 10_000,
+    });
+    const date = new Date().toISOString().slice(0, 10);
+    if (c.req.query("format") === "csv") {
+      const rows = events.map((event) =>
+        [
+          new Date(event.createdAt).toISOString(),
+          event.actor,
+          event.action,
+          event.repo ?? "",
+          JSON.stringify(event.detail),
+        ]
+          .map((cell) => csvCell(String(cell)))
+          .join(","),
+      );
+      return c.body(["createdAt,actor,action,repo,detail", ...rows].join("\n"), 200, {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="edgespec-audit-${date}.csv"`,
+      });
+    }
+    return c.body(JSON.stringify({ exportedAt: Date.now(), events }, null, 2), 200, {
+      "content-type": "application/json",
+      "content-disposition": `attachment; filename="edgespec-audit-${date}.json"`,
     });
   } catch (err) {
     return fail(err, c);
@@ -1917,6 +1981,17 @@ app.get("/api/runs", async (c) => {
     const limit = Number(c.req.query("limit") ?? 20);
     const runs = await listRuns(db, `${repo.owner}/${repo.name}`, limit);
     return c.json({ enabled: true, runs });
+  } catch (err) {
+    return fail(err, c);
+  }
+});
+
+app.get("/api/runs/recent", async (c) => {
+  try {
+    const db = runsDb(c.env);
+    if (!db) return c.json({ enabled: false, runs: [] });
+    const limit = Number(c.req.query("limit") ?? 20);
+    return c.json({ enabled: true, runs: await listRecentRuns(db, limit) });
   } catch (err) {
     return fail(err, c);
   }

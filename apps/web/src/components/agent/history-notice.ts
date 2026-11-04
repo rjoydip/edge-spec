@@ -7,6 +7,6 @@ import type { DeploymentCapabilities } from "@/api";
  */
 export function historyNotice(capabilities?: DeploymentCapabilities): string {
   if (!capabilities) return "Not enabled on this deployment.";
-  if (capabilities.history) return "History is not enabled for this workspace.";
+  if (capabilities.history) return "History is not enabled for this deployment.";
   return "Not enabled on this deployment: no history database is bound. Bind DB or RUNS_DB, or set EDGESPEC_DB_URL and run `bun run migrate`.";
 }

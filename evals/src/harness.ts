@@ -13,6 +13,7 @@ import {
   type GoldenCase,
   type GoldenResult,
 } from "../../packages/core/src/eval";
+import { inferApiSpec } from "../../packages/core/src/api-surface";
 import { classifyTree } from "../../packages/core/src/scanner";
 
 const SKIP = new Set([".git", "node_modules", "dist", "coverage", ".wrangler", ".alchemy"]);
@@ -39,8 +40,37 @@ export function readGolden(path: string): GoldenCase[] {
 /** Runs every golden case against the examples in `root`. */
 export function runGolden(root: string, cases: readonly GoldenCase[]): GoldenResult[] {
   return cases.map((testCase) => {
-    const gaps = classifyTree(filesUnder(join(root, testCase.path))).missing.map((gap) => gap.path);
-    return compareGolden(testCase.id, gaps, testCase.expectedGaps);
+    const directory = join(root, testCase.path);
+    const paths = filesUnder(directory);
+    const gaps = classifyTree(paths).missing.map((gap) => gap.path);
+    let endpoints: string[] = [];
+    if (testCase.expectedEndpoints) {
+      const sources = paths
+        .filter((path) => /\.(ts|tsx|js|jsx|mjs|cjs)$/i.test(path))
+        .map((path) => ({ path, content: readFileSync(join(directory, path), "utf8") }));
+      let packageJson: string | undefined;
+      try {
+        packageJson = readFileSync(join(directory, "package.json"), "utf8");
+      } catch {
+        // Framework detection can use the imports alone.
+      }
+      const inferred = inferApiSpec({
+        title: testCase.id,
+        paths,
+        files: sources,
+        ...(packageJson ? { packageJson } : {}),
+      });
+      endpoints = (inferred?.spec.endpoints ?? []).map(
+        (endpoint) => `${endpoint.method.toUpperCase()} ${endpoint.path}`,
+      );
+    }
+    return compareGolden(
+      testCase.id,
+      gaps,
+      testCase.expectedGaps,
+      endpoints,
+      testCase.expectedEndpoints ?? [],
+    );
   });
 }
 
@@ -57,7 +87,13 @@ export function formatResult(result: GoldenResult, gaps: number): string {
   return (
     `${result.pass ? "pass" : "FAIL"} ${result.caseId}: ${gaps} gap(s)` +
     (result.missing.length ? ` · missing ${result.missing.join(", ")}` : "") +
-    (result.unexpected.length ? ` · unexpected ${result.unexpected.join(", ")}` : "")
+    (result.unexpected.length ? ` · unexpected ${result.unexpected.join(", ")}` : "") +
+    (result.endpointMissing?.length
+      ? ` · missing routes ${result.endpointMissing.join(", ")}`
+      : "") +
+    (result.endpointUnexpected?.length
+      ? ` · unexpected routes ${result.endpointUnexpected.join(", ")}`
+      : "")
   );
 }
 

@@ -1,7 +1,9 @@
 import express from "express";
+import { users } from "./users";
 
 export const app = express();
 app.use(express.json());
+app.use("/api", users);
 
 app.get("/", (_req, res) => {
   res.json({ message: "hello from express" });

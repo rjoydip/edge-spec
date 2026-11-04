@@ -1,7 +1,8 @@
 /** Run history shapes and comparison. No storage, no HTTP, no secrets. */
 import type { CheckResult, CoverageDelta, ScanTotals } from "./types";
 
-export type RunStatus = "running" | "ready" | "failed";
+/** `scanned` is a scan recorded before (or without) test generation. */
+export type RunStatus = "scanned" | "running" | "ready" | "failed";
 export type RunDecision = "pending" | "accepted" | "rejected";
 
 /** One run as the history list and the compare view need it. */

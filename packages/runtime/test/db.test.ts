@@ -4,16 +4,13 @@ import {
   deleteRunHistory,
   getMemory,
   getPolicy,
-  getWorkspace,
   listAudit,
   listRuns,
   purgeExpired,
   putMemory,
   putPolicy,
-  putWorkspace,
   recordAudit,
   scheduledRepoView,
-  workspaceView,
 } from "../src/db";
 import type { D1Database, D1PreparedStatement } from "../src/env";
 
@@ -206,11 +203,10 @@ describe("run history queries", () => {
   });
 });
 
-/** An in-memory stand-in for the workspace and audit tables. */
-function workspaceDb() {
+/** An in-memory stand-in for the audit, run and command tables. */
+function auditDb() {
   const calls: Array<{ sql: string; values: unknown[] }> = [];
   const events: Array<Record<string, unknown>> = [];
-  let row: Record<string, unknown> | undefined;
   const prepare = (sql: string): D1PreparedStatement => {
     let values: unknown[] = [];
     const statement: D1PreparedStatement = {
@@ -220,7 +216,6 @@ function workspaceDb() {
       },
       async first<T>(): Promise<T | null> {
         calls.push({ sql, values });
-        if (sql.includes("FROM workspaces")) return (row ?? null) as T | null;
         if (sql.includes("COUNT(*)")) return { count: 2 } as T;
         return null;
       },
@@ -233,33 +228,14 @@ function workspaceDb() {
       },
       async run() {
         calls.push({ sql, values });
-        if (sql.startsWith("INSERT INTO workspaces")) {
-          row = {
-            id: values[0],
-            name: values[1],
-            retention_days: values[2],
-            drift_webhook_url: null,
-            drift_webhook_secret: null,
-            created_at: values[3],
-            updated_at: values[4],
-          };
-        } else if (sql.startsWith("UPDATE workspaces")) {
-          row = {
-            ...row,
-            name: values[0],
-            retention_days: values[1],
-            drift_webhook_url: values[2],
-            drift_webhook_secret: values[3],
-            updated_at: values[4],
-          };
-        } else if (sql.startsWith("INSERT INTO audit_events")) {
+        if (sql.startsWith("INSERT INTO audit_events")) {
           events.unshift({
             id: events.length + 1,
-            repo: values[1],
-            actor: values[2],
-            action: values[3],
-            detail_json: values[4],
-            created_at: values[5],
+            repo: values[0],
+            actor: values[1],
+            action: values[2],
+            detail_json: values[3],
+            created_at: values[4],
           });
         }
         return {};
@@ -277,53 +253,8 @@ function workspaceDb() {
   return { db, calls };
 }
 
-describe("workspace settings and audit", () => {
-  it("creates the default workspace lazily and clamps updates", async () => {
-    const { db } = workspaceDb();
-    expect(await getWorkspace(db)).toMatchObject({
-      id: "default",
-      name: "Default workspace",
-      retentionDays: 30,
-    });
-
-    const updated = await putWorkspace(db, {
-      name: "  Platform  ",
-      retentionDays: 0,
-    });
-    expect(updated.name).toBe("Platform");
-    expect(updated.retentionDays).toBe(1);
-    expect(await getWorkspace(db)).toMatchObject({
-      name: "Platform",
-      retentionDays: 1,
-    });
-  });
-
-  it("stores workspace drift webhooks and never exposes the secret in public views", async () => {
-    const { db } = workspaceDb();
-    const updated = await putWorkspace(db, {
-      driftWebhookUrl: "https://hooks.example/workspace",
-      driftWebhookSecret: "shared-secret",
-    });
-    expect(updated).toMatchObject({
-      driftWebhookUrl: "https://hooks.example/workspace",
-      driftWebhookSecret: "shared-secret",
-    });
-    expect(workspaceView(updated)).toMatchObject({
-      driftWebhookUrl: "https://hooks.example/workspace",
-      driftWebhookSecretSet: true,
-    });
-    expect("driftWebhookSecret" in workspaceView(updated)).toBe(false);
-
-    const changed = await putWorkspace(db, {
-      driftWebhookUrl: "https://hooks.example/replaced",
-    });
-    expect(changed.driftWebhookUrl).toBe("https://hooks.example/replaced");
-    expect(changed.driftWebhookSecret).toBeUndefined();
-
-    const cleared = await putWorkspace(db, { driftWebhookUrl: "" });
-    expect(cleared.driftWebhookUrl).toBeUndefined();
-    expect(cleared.driftWebhookSecret).toBeUndefined();
-
+describe("audit and retention", () => {
+  it("never exposes a repository webhook secret in public schedule views", () => {
     const schedule = scheduledRepoView({
       repo: "acme/api",
       intervalDays: 7,
@@ -336,7 +267,7 @@ describe("workspace settings and audit", () => {
   });
 
   it("removes secret-looking keys from audit detail", async () => {
-    const { db } = workspaceDb();
+    const { db } = auditDb();
     await recordAudit(db, {
       repo: "acme/api",
       actor: "dashboard",
@@ -351,8 +282,16 @@ describe("workspace settings and audit", () => {
     expect(event?.detail).toEqual({ nested: { files: 2 } });
   });
 
+  it("pages audit events with a before cursor", async () => {
+    const { db, calls } = auditDb();
+    await listAudit(db, { repo: "acme/api", before: 1_700_000_000_000, limit: 10 });
+    const query = calls.at(-1);
+    expect(query?.sql).toContain("repo = ? AND created_at < ?");
+    expect(query?.values).toEqual(["acme/api", 1_700_000_000_000, 10]);
+  });
+
   it("counts and deletes rows past retention", async () => {
-    const { db, calls } = workspaceDb();
+    const { db, calls } = auditDb();
     expect(await purgeExpired(db, 7, 100 * 86_400_000)).toEqual({
       runs: 2,
       audit: 2,

@@ -22,7 +22,7 @@ import {
   scanRepo,
   type PullMeta,
 } from "@/api";
-import { AgentWorkspace } from "@/components/agent/workspace";
+import { Dashboard } from "@/components/agent/dashboard";
 import { DeviceAuthorize } from "@/components/agent/device-authorize";
 import { AuthOverlay, authModeOfPath, type AuthMode } from "@/components/agent/account-overlay";
 import { fetchAccount, type AccountUser } from "@/lib/account";
@@ -542,7 +542,7 @@ export function App() {
     return result.url;
   };
 
-  /** The logo clears the workspace: repository, scan, tests and run. */
+  /** The logo clears the dashboard: repository, scan, tests and run. */
   const resetAll = () => {
     setProject({ repo: "", ref: "", folder: "", localPath: "" });
     setGaps([]);
@@ -760,7 +760,7 @@ export function App() {
   return (
     <>
       {authorizing && <DeviceAuthorize page={authorizing} />}
-      <AgentWorkspace
+      <Dashboard
         project={project}
         settings={settings}
         {...(quota ? { quota } : {})}

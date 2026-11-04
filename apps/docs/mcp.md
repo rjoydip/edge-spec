@@ -52,7 +52,7 @@ For local development, point `EDGESPEC_URL` at `http://127.0.0.1:8787` and start
 | `edgespec_open_pull_request`    | Writes a branch and PR | Commit the approved files                          |
 | `edgespec_auth_login`           | Starts a device login  | Shows a code, opens the dashboard authorize page   |
 | `edgespec_auth_check`           | Grants the profile     | Finishes the login after the user authorizes       |
-| `edgespec_auth_status`          | Read-only              | Workspace, authorized-at date and stored fields    |
+| `edgespec_auth_status`          | Read-only              | Server, authorized-at date and stored fields       |
 | `edgespec_auth_logout`          | Deletes the file       | Removes the stored authorization                   |
 
 `edgespec_generate` and `edgespec_run` return the generated code and validation
@@ -60,8 +60,14 @@ details. `edgespec_run` also returns the ready source paths and logs.
 
 Opening a pull request is two-step. `edgespec_prepare_pull_request` returns an
 `approvalId`, an expiry and a readable summary; show that to the user. The
-client must then call `edgespec_open_pull_request` with only the token. Tokens
-expire after ten minutes and are consumed on first use.
+client must then call `edgespec_open_pull_request` with only the token. The
+token embeds a digest of the repository, files and flags, so a token cannot be
+reused for a different payload. Tokens expire after ten minutes and are consumed
+on first use.
+
+Approvals are deliberately in memory: restarting the stdio server invalidates
+them. Persisting approvals would let one process approve work another process
+opens, so it needs an explicit trust boundary that the server does not have yet.
 
 ## Resources
 
@@ -73,6 +79,10 @@ expire after ten minutes and are consumed on first use.
 | `edgespec://runs/{id}`               | Durable Workflow status for a webhook run |
 
 Resources are read-only and use the same environment credentials as the tools.
+`resources/list` enumerates concrete instances: repository URIs come from
+`GET /api/repos` (repos seen in runs, backlog, policies, memory, drift and
+schedules), and run URIs from `GET /api/runs/recent`. An unavailable deployment
+lists nothing instead of failing the session.
 
 ## Environment
 

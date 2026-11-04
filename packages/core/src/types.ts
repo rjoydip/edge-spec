@@ -132,12 +132,16 @@ export interface OpenApiSpec {
   inferred?: boolean;
 }
 
-/** One endpoint row in the static OpenAPI health matrix. */
+/**
+ * One endpoint row in the OpenAPI health matrix. `probe: "static"` means the
+ * status came from route/test names; executed contract results stay separate.
+ */
 export interface ApiHealthRow {
   method: string;
   path: string;
   specPath: string;
   inferred?: boolean;
+  probe: "static" | "live";
   status: "covered" | "missing-test";
   /** Security scheme names only, never a secret. */
   auth: string[];
@@ -253,6 +257,12 @@ export type MutationResult =
       durationMs: number;
     };
 
+/** Raw runner output kept for the R2 bundle, never the SSE stream or D1. */
+export interface ValidationReports {
+  junit?: string;
+  lcov?: string;
+}
+
 export interface Validation {
   ok: boolean;
   /** True only when a real test runner executed the suite. */
@@ -271,6 +281,8 @@ export interface Validation {
   mutation?: MutationResult;
   /** Set when the sandbox could not prepare or run the suite at all. */
   environmentError?: "setup" | "server" | "unreachable" | "timeout";
+  /** Raw JUnit/LCOV from the runner; uploaded per run, not streamed. */
+  reports?: ValidationReports;
 }
 
 /** What a provider says about the calls it has left. */
